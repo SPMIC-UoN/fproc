@@ -1,0 +1,8 @@
+_version.py
+build
+*.pyc
+.pytest_cache
+dist
+*.egg-info
+.vscode
+.DS_Store
