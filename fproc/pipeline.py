@@ -94,7 +94,10 @@ class Pipeline:
     def timestamp(self):
         return str(datetime.datetime.now())
 
-    def _setup_logging(self):
+    def _setup_logging(self, clear=True):
+        if clear:
+            logging.getLogger().handlers.clear()
+
         if self.options.debug:
             logging.getLogger().setLevel(logging.DEBUG)
         else:
@@ -104,9 +107,9 @@ class Pipeline:
             warnings.filterwarnings('ignore')
 
         handler = logging.StreamHandler(sys.stdout)
-        #handler.setLevel(logging.DEBUG)
         handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
         logging.getLogger().addHandler(handler)
+
 
     def _start_logfile(self):
         logfile = os.path.join(self.options.output, "logfile.txt")
