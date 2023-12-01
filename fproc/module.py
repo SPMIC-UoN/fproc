@@ -95,6 +95,7 @@ class Module:
             img.save_derived(img.data, self.outfile(img.fname))
 
     def runcmd(self, cmd, logfile):
+        LOG.info(cmd)
         with open(os.path.join(self.outdir, logfile), "w") as f:
             retval = subprocess.call(cmd, stdout=f, stderr=f)
         if retval != 0:
@@ -184,6 +185,16 @@ class Module:
             mask = mask[..., np.newaxis]
         while img.ndim < 3:
             img = img[..., np.newaxis]
+        while mask.ndim > 3:
+            if mask.shape[-1] == 1:
+                mask = np.squeeze(mask, -1)
+            else:
+                raise ValueError("Mask is not 3D")
+        while img.ndim > 3:
+            if img.shape[-1] == 1:
+                img = np.squeeze(img, -1)
+            else:
+                raise ValueError("Image is not 3D")
 
         if mask.shape != img.shape:
             LOG.warn(f"Mask and image different shapes: {mask.shape}, {img.shape} - will not generate lightbox image {name}")
