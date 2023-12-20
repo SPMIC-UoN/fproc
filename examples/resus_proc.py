@@ -15,7 +15,6 @@ class LiverSeg(Module):
         Module.__init__(self, "liver_seg")
 
     def process(self):
-
         """nnUNetv2_predict -i /home/myfolder/ -o /home/myoutputfolder/ -d 50 -f all"""
         self.inimg("dixon", "fat.nii.gz").save(self.outfile("liver_0000"))
         self.inimg("dixon", "t2star.nii.gz").save(self.outfile("liver_0001"))
