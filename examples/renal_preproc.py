@@ -123,7 +123,7 @@ class MTR(Module):
             off_on_data = np.stack([offdata.data, ondata.data], axis=-1)
             srcfile = ondata
         else:
-            onoffdata = self.inimg("mtr", "mtr_onoff.nii.gz", check=False)
+            onoffdata = self.inimg("mtr", "mtr_on_off.nii.gz", check=False)
             if onoffdata is None:
                 self.no_data("No MTR on/off data found")
             LOG.info(f" - Using MTR ON/OFF data from {onoffdata.fname}")
