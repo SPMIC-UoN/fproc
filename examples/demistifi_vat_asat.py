@@ -52,6 +52,7 @@ class VAT(Module):
                 organs += arr
         organs = (organs > 0).astype(np.int32)
         no_organs = (abd_cavity.data > 0).astype(np.int32) - organs
+        no_organs[no_organs < 0] = 0
 
         fat = self.inimgs("preproc", "*/analysis/fat.percent.nii.gz")
         if not fat:
@@ -83,19 +84,36 @@ class ASAT(Module):
 
     def process(self):
         """
-        ASAT (external tissue)
+        ASAT (Abdominal subcutaneous adipose tissue = external tissue)
         
-        i. Body cavity mask - abdominal cavity mask 
-        ii. Bounding box =  upper and lower bounds of the abdominal mask in the superior-inferior (z) direction. 
-        iii. Final ASAT mask = ixii
+        i. Invert Body cavity mask
+        ii. Threshold the whole body fat percent image (include >0.9) and fill small holes
+        ii. Bounding box =  upper and lower bounds of the abdominal mask in the superior-inferior (z) direction.
+        iv. Final ASAT mask = 1x2x3
         """
-        abd_cavity = self.inimg("qpdata", "seg_abdominal_cavity_dixon.nii.gz")
-        body_cavity = self.inimg("qpdata", "seg_body_cavity_dixon.nii.gz")
-        asat = (body_cavity.data > 0).astype(np.int32) - (abd_cavity.data > 0).astype(np.int32)
+        body_mask = self.inimgs("preproc", "*/analysis/mask.body.nii.gz")
+        if not body_mask:
+            self.no_data("No body mask image found")
+        elif len(body_mask) > 1:
+            self.bad_data("Multiple body mask images found")
 
+        body_cavity = self.inimg("qpdata", "seg_body_cavity_dixon.nii.gz")
+        asat = (body_mask[0].data > 0).astype(np.int32) - (body_cavity.data > 0).astype(np.int32)
+        asat[asat < 0] = 0
+
+        fat = self.inimgs("preproc", "*/analysis/fat.percent.nii.gz")
+        if not fat:
+            self.no_data("No body fat percent image found")
+        elif len(fat) > 1:
+            self.bad_data("Multiple body fat percent images found")
+        fat = (fat[0].data > 0.9).astype(np.int32)
+        asat = asat * fat
+
+        abd_cavity = self.inimg("qpdata", "seg_abdominal_cavity_dixon.nii.gz")
         nonzero_slices_in_abd_cavity = [z for z in range(abd_cavity.shape[2]) if np.count_nonzero(abd_cavity.data[..., z]) > 0]
         bb_bottom, bb_top = min(nonzero_slices_in_abd_cavity), max(nonzero_slices_in_abd_cavity)
         LOG.info(f"Abdominal cavity bounding box in Z direction: {bb_bottom} to {bb_top}")
+
         asat[..., bb_top+1:] = 0
         asat[..., :bb_bottom] = 0
         abd_cavity.save_derived(asat, self.outfile("asat.nii.gz"))
