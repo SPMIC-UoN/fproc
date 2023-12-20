@@ -33,11 +33,20 @@ def main():
         with open(options.paths) as f:
             paths += [l.strip() for l in f.readlines() if l.strip() != ""]
 
+    csv_paths = options.path_csv
+    if options.paths_csv:
+        with open(options.paths_csv) as f:
+            csv_paths += [l.strip() for l in f.readlines() if l.strip() != ""]
+
     stats = []
     for subjid in subjids:
         LOG.info(f" - Subject ID: {subjid}")
         subjdir = os.path.join(options.input, subjid)
-        add_subj_stats(subjid, os.path.join(options.input, subjid), paths, stats)
+        subj_stats = OrderedDict()
+        subj_stats["subjid"] = subjid
+        add_csv_stats(subjid, os.path.join(options.input, subjid), csv_paths, subj_stats)
+        add_kv_stats(subjid, os.path.join(options.input, subjid), paths, subj_stats)
+        stats.append(subj_stats)
 
     with open(options.output, "w") as f:
         headers = []
@@ -50,32 +59,58 @@ def main():
         for row in stats:
             writer.writerow(row)
 
-def add_stats(fglob, subj_stats):
-    fnames = list(glob.glob(fglob))
-    if not fnames:
-        LOG.warn(f" - Failed to find any file matching {fglob}")
-        return
-    elif len(fnames) > 1:
-        LOG.warn(f" - Multiple files matching {fglob} - will use first which is {fnames[0]}")
-    fname = fnames[0]
-
-    LOG.info(f" - Adding stats from {fname}")
-    with open(fname) as f:
-        for line in f.readlines():
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) != 2:
-                LOG.warn(f" - {fname}: Ignoring line: {line}, did not contain key, value pair")
-            else:
-                try:
-                    subj_stats[parts[0]] = float(parts[1])
-                except ValueError:
-                    LOG.warn(f" - {fname}: Ignoring line: {line}, value was not numeric")
-
-def add_subj_stats(subjid, subjdir, paths, stats):
-    subj_stats = OrderedDict()
-    subj_stats["subjid"] = subjid
+def add_kv_stats(subjid, subjdir, paths, subj_stats):
     for rel_path in paths:
-        fpath = os.path.join(subjdir, rel_path)
-        add_stats(fpath, subj_stats)
+        fglob = os.path.join(subjdir, rel_path)
+        fnames = list(glob.glob(fglob))
+        if not fnames:
+            LOG.warn(f" - Failed to find any file matching {fglob}")
+            return
+        elif len(fnames) > 1:
+            LOG.warn(f" - Multiple files matching {fglob} - will use first which is {fnames[0]}")
+        fname = fnames[0]
 
-    stats.append(subj_stats)
+        LOG.info(f" - Adding stats from {fname}")
+            
+        with open(fname) as f:
+            for line in f.readlines():
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) != 2:
+                    LOG.warn(f" - {fname}: Ignoring line: {line}, did not contain key, value pair")
+                else:
+                    try:
+                        subj_stats[parts[0]] = float(parts[1])
+                    except ValueError:
+                        LOG.warn(f" - {fname}: Ignoring line: {line}, value was not numeric")
+
+def add_csv_stats(subjid, subjdir, paths, subj_stats):
+    for rel_path in paths:
+        fglob = os.path.join(subjdir, rel_path)
+        fnames = list(glob.glob(fglob))
+        if not fnames:
+            LOG.warn(f" - Failed to find any file matching {fglob}")
+            return
+        elif len(fnames) > 1:
+            LOG.warn(f" - Multiple files matching {fglob} - will use first which is {fnames[0]}")
+        fname = fnames[0]
+
+        LOG.info(f" - Adding CSV stats from {fname}")
+        with open(fname) as f:
+            lines = f.readlines()
+            if len(lines) < 2:
+                LOG.warn(f" - {fname}: Ignoring, does not contain keys, values on separate lines")
+                continue
+            elif len(lines) > 2:
+                LOG.warn(f" - {fname}: contains more than 2 lines, ignoring extras")
+
+            keys = [p.strip() for p in lines[0].split(",")]
+            values = [p.strip() for p in lines[1].split(",")]
+            if len(keys) != len(values):
+                LOG.warn(f" - {fname}: Ignoring, keys and values have different lengths")
+                continue
+            
+            for k, v in zip(keys, values):
+                try:
+                    subj_stats[k] = float(v)
+                except ValueError:
+                    LOG.warn(f" - {fname}: Ignoring key: {k}, value {v} was not numeric")
