@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import scipy
 
+from fsort.image_file import ImageFile
 from fproc.options import ArgumentParser
 from fproc.pipeline import Pipeline
 from fproc.module import Module, StatsModule
@@ -27,10 +28,17 @@ class T1Seg(Module):
                 '--t1', t1map.fname,
                 '--model', self.pipeline.options.t1_model,
                 '--noclean',
+                '--nooverlay',
                 '--output', self.outdir,
                 '--outprefix', f'seg_kidney_{map_type}'],
                 logfile=f'seg_kidney_{map_type}.log'
             )
+
+            # Generate overlay images using T1 map
+            seg_img = ImageFile(self.outfile(f"seg_kidney_{map_type}_cortex_t1.nii.gz"))
+            self.lightbox(t1map.data, seg_img, f"seg_kidney_{map_type}_cortex_lightbox")
+            seg_img = ImageFile(self.outfile(f"seg_kidney_{map_type}_medulla_t1.nii.gz"))
+            self.lightbox(t1map.data, seg_img, f"seg_kidney_{map_type}_medulla_lightbox")
 
 class T1Clean(Module):
     def __init__(self):
