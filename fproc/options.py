@@ -31,6 +31,7 @@ class StatsCombineArgumentParser(argparse.ArgumentParser):
         self.add_argument("--paths", help="Path to text file containing output file relative paths")
         self.add_argument("--paths-csv", help="Path to text file containing output file CSV output relative paths")
         self.add_argument("--subjids", help="Optional file containing subject IDs to process - if not specified will use all subdirs of input")
+        self.add_argument("--skip-empty", action="store_true", default=False, help="If specified, columns will be ignored if there are no nonzero values for any subject")
         self.add_argument("--overwrite", help="Overwrite existing output", action="store_true", default=False)
         self.add_argument("--debug", help="Enable debugging output", action="store_true", default=False)
 
