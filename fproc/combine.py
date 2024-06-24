@@ -52,12 +52,19 @@ def main():
         headers = []
         for row in stats:
             for key in row:
-                # Preserve order
-                if key not in headers: headers.append(key)
+                if options.skip_empty and row[key] == 0:
+                    continue
+                else:
+                    # Preserve order
+                    if key not in headers: headers.append(key)
+
         writer = csv.DictWriter(f, fieldnames=headers)
         writer.writeheader()
         for row in stats:
-            writer.writerow(row)
+            row_pruned = {
+                k : v for k, v in row.items() if k in headers
+            }
+            writer.writerow(row_pruned)
 
 def add_kv_stats(subjid, subjdir, paths, subj_stats):
     for rel_path in paths:
