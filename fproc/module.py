@@ -286,13 +286,14 @@ class StatsModule(Module):
     """
     A module which generates stats on parameters within segmentations
     """
-    def __init__(self, name="stats", segs={}, params={}, stats=[], out_name="stats.csv", multi_mode="combine", seg_volumes=False):
+    def __init__(self, name="stats", segs={}, params={}, stats=[], out_name="stats.csv", multi_mode="combine", allow_rotated=True, seg_volumes=False):
         Module.__init__(self, name)
         self.segs = segs
         self.params = params
         self.stats = stats
         self.out_name = out_name
         self.multi_mode = multi_mode
+        self.allow_rotated = allow_rotated
         self.seg_volumes = seg_volumes
         if self.multi_mode not in ("best", "combine"):
             raise RuntimeError(f"Multi mode not recognized: {self.multi_mode}")
@@ -304,10 +305,11 @@ class StatsModule(Module):
         LOG.debug(param_spec)
         LOG.debug(seg_spec)
 
+        voxel_volume = 1.0  # In case there are no parameter images
         for param_img in self._imgs(param_spec):
             voxel_volume = param_img.voxel_volume
             for seg_img in self._imgs(seg_spec):
-                seg_nii_res = self.resample(seg_img, param_img, is_roi=True)
+                seg_nii_res = self.resample(seg_img, param_img, is_roi=True, allow_rotated=self.allow_rotated)
                 res_data = seg_nii_res.get_fdata()
                 orig_count = np.count_nonzero(seg_img.data)
                 res_count = np.count_nonzero(res_data)
@@ -337,7 +339,7 @@ class StatsModule(Module):
         if stats_data:
             stats_data = np.concatenate(stats_data)
 
-        param_stats = stats.run(stats_data, stats=self.stats, data_limits=param_spec.get("limits", (None, None)))
+        param_stats = stats.run(stats_data, stats=self.stats, data_limits=param_spec.get("limits", (None, None)), voxel_volume=voxel_volume)
         if "vol" in self.stats:
             param_stats["vol"] = param_stats["n"] * voxel_volume
         if "iqvol" in self.stats:
