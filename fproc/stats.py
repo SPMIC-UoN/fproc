@@ -34,11 +34,13 @@ def uq(arr):
     return np.nanquantile(_sample(arr), 0.75)
 
 def iqr(arr):
-    uq, lq = np.nanquantile(_sample(arr), [0.75, 0.25])
+    uq, lq = tuple(np.nanquantile(_sample(arr), [0.75, 0.25]))
     return uq-lq
 
 def _get_iqdata(arr):
-    uq, lq = np.nanquantile(_sample(arr), [0.75, 0.25])   
+    if n(arr) == 0:
+        return np.array([])
+    uq, lq = tuple(np.nanquantile(_sample(arr), [0.75, 0.25]))
     arr2 = arr[arr < uq]
     if arr2.size == 0:
         arr2 = arr
@@ -66,12 +68,24 @@ def fwhm(arr):
     _loc, scale = scipy.stats.norm.fit(arr)
     return 2.355*scale
 
+def mean(arr):
+    return np.nanmean(arr)
+
+def std(arr):
+    return np.nanstd(arr)
+
+def max(arr):
+    return np.nanmax(arr)
+
+def min(arr):
+    return np.nanmin(arr)
+
 STAT_IMPLS = {
-    "mean" : np.nanmean,
-    "std" : np.nanstd,
+    "mean" : mean,
+    "std" : std,
     "median" : median,
-    "min" : np.nanmin,
-    "max" : np.nanmax,
+    "min" : min,
+    "max" : max,
     "lq" : lq,
     "uq" : uq,
     "iqr" : iqr,
@@ -82,19 +96,11 @@ STAT_IMPLS = {
     "iqmean" : iqmean,
     "iqstd" : iqstd,
     "n" : n,
+    "vol" : n,
     "ndata" : n,
+    "voldata" : n,
     "iqn" : iqn,
-}
-
-STAT_NAMES = {
-    "lq" : "Lower quartile",
-    "uq" : "Upper quartile",
-    "iqr" : "IQR",
-    "iqmean" : "Interquartile mean",
-    "iqstd" : "Interquartile standard deviation",
-    "iqn" : "Interquartile N",
-    "mode" : "Mode estimate",
-    "fwhm" : "FWHM estimate",
+    "iqvol" : iqn,
 }
 
 DEFAULT_STATS = ["mean", "median", "std", "min", "max"]
@@ -116,9 +122,9 @@ def run(data, **kwargs):
     if not isinstance(data_limits, (list, tuple)) or len(data_limits) != 2:
         LOG.warn("Invalid data limits: %s - ignoring", data_limits)
         data_limits = (None, None)
-    return _get_stats(data, stats, data_limits)
+    return _get_stats(data, stats, data_limits, voxel_volume=kwargs.get("voxel_volume", 1.0))
 
-def _get_stats(data, stats, data_limits=(None, None)):
+def _get_stats(data, stats, data_limits=(None, None), voxel_volume=1.0):
     """
     Get statistics
 
@@ -136,15 +142,17 @@ def _get_stats(data, stats, data_limits=(None, None)):
     if len(data) == 0:
         return data_stats
 
-    stats_data = _restrict_data(data, data_limits)
+    restricted_data = _restrict_data(data, data_limits)
     for s in stats:
-        if stats_data.size == 0:
+        if restricted_data.size == 0:
             value = 0
-        elif s == "n":
-            # Total number of voxels should be independent of data restriction
+        elif s in ("n", "vol"):
+            # Total volume / number of voxels independent of data restriction
             value = STAT_IMPLS[s](data)
         else:
-            value = STAT_IMPLS[s](stats_data)
+            value = STAT_IMPLS[s](restricted_data)
+        if s in ("vol", "voldata", "iqvol"):
+            value *= voxel_volume
         data_stats[s] = value
 
     return data_stats
