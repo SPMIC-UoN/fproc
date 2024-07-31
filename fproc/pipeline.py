@@ -71,18 +71,18 @@ class Pipeline:
 
             skip = [s.lower().strip() for s in self.options.skip.split(",")]
             for module in self.modules:
-                if module.name in skip:
-                    LOG.info(f"SKIPPING module {module.name}")
+                if module.name.lower() in skip:
+                    LOG.info(f"SKIPPING module {module.name.upper()}")
                     continue
 
                 timestamp = self.timestamp()
-                LOG.info(f"RUNNING module {module.name} - start time {timestamp}")
+                LOG.info(f"RUNNING module {module.name.upper()} - start time {timestamp}")
                 try:
                     module.run(self)
                     timestamp = self.timestamp()
-                    LOG.info(f"DONE module {module.name} - end time {timestamp}")
+                    LOG.info(f"DONE module {module.name.upper()} - end time {timestamp}")
                 except ModuleError as exc:
-                    LOG.warn(f"FAILED module {module.name}: {exc}")
+                    LOG.warn(f"FAILED module {module.name.upper()}: {exc}")
 
             timestamp = self.timestamp()
             LOG.info(f"Finish time {timestamp}")
