@@ -91,8 +91,10 @@ class Module:
 
     def copyinput(self, dir, glob):
         imgs = self.inimgs(dir, glob)
+        ret = []
         for img in imgs:
-            img.save_derived(img.data, self.outfile(img.fname))
+            ret.append(img.save_derived(img.data, self.outfile(img.fname)))
+        return ret
 
     def runcmd(self, cmd, logfile):
         LOG.info(cmd)
@@ -286,7 +288,7 @@ class StatsModule(Module):
     """
     A module which generates stats on parameters within segmentations
     """
-    def __init__(self, name="stats", segs={}, params={}, stats=[], out_name="stats.csv", multi_mode="combine", allow_rotated=True, seg_volumes=False):
+    def __init__(self, name="stats", segs={}, params={}, stats=[], out_name="stats.csv", multi_mode="combine", allow_rotated=True, seg_volumes=False, overlays=True):
         Module.__init__(self, name)
         self.segs = segs
         self.params = params
@@ -295,8 +297,31 @@ class StatsModule(Module):
         self.multi_mode = multi_mode
         self.allow_rotated = allow_rotated
         self.seg_volumes = seg_volumes
+        self.overlays = overlays
         if self.multi_mode not in ("best", "combine"):
             raise RuntimeError(f"Multi mode not recognized: {self.multi_mode}")
+
+    def process(self):
+        stat_names, values = [], []
+        for seg, seg_spec in self.segs.items():
+            if seg_spec.get("seg_volumes", self.seg_volumes):
+                self._add_seg_vols(seg, seg_spec, stat_names, values)
+
+        for param, param_spec in self.params.items():
+            params_segs = param_spec.get("segs", None)
+            for seg, seg_spec in self.segs.items():
+                seg_params = seg_spec.get("params", None)
+                if (params_segs is not None and seg not in params_segs) or (seg_params is not None and param not in seg_params):
+                    LOG.debug(f" - Skipping segmentation {seg} for param {param}")
+                    continue
+
+                self._add_param_stats(param, param_spec, seg, seg_spec, stat_names, values)
+
+        stats_path = self.outfile(self.out_name)
+        LOG.info(f" - Saving stats to {stats_path}")
+        with open(stats_path, "w") as stats_file:
+            for name, value in zip(stat_names, values):
+                stats_file.write(f"{name},{str(value)}\n")
 
     def _add_param_stats(self, param, param_spec, seg, seg_spec, stat_names, values):
         stats_data, res_niis, n_found, best_count = [], [], 0, 0
@@ -323,6 +348,8 @@ class StatsModule(Module):
                     if res_count > 0:
                         stats_data.append(param_img.data[res_data > 0])
                         res_niis.append(seg_nii_res)
+                if res_count > 0 and self.overlays:
+                    self.lightbox(param_img, seg_img, name=f"{seg_img.fname_noext}_{param_img.fname_noext}_lightbox")
 
         if n_found == 0:
             LOG.warn(" - No combination found with overlap")
@@ -367,24 +394,3 @@ class StatsModule(Module):
         if not imgs:
             LOG.warn(f" - No images found matching {globexpr} in {src}/{subdir}")
         return imgs
-
-    def process(self):
-        stat_names, values = [], []
-        if self.seg_volumes:
-            for seg, seg_spec in self.segs.items():
-                self._add_seg_vols(seg, seg_spec, stat_names, values)
-
-        for param, param_spec in self.params.items():
-            params_segs = param_spec.get("segs", [])
-            for seg, seg_spec in self.segs.items():
-                if params_segs and seg not in params_segs:
-                    LOG.debug(f" - Skipping segmentation {seg} for param {param}")
-                    continue
-
-                self._add_param_stats(param, param_spec, seg, seg_spec, stat_names, values)
-
-        stats_path = self.outfile(self.out_name)
-        LOG.info(f" - Saving stats to {stats_path}")
-        with open(stats_path, "w") as stats_file:
-            for name, value in zip(stat_names, values):
-                stats_file.write(f"{name},{str(value)}\n")
