@@ -21,7 +21,8 @@ def mode(arr):
     """
     For FWHM, fit a Gaussian and return peak location of that
     """
-    loc, _scale = scipy.stats.norm.fit(arr)
+    arr_no_nan_inf = arr[np.isfinite(arr)]
+    loc, _scale = scipy.stats.norm.fit(arr_no_nan_inf)
     return loc
 
 def n(arr):
@@ -65,7 +66,8 @@ def fwhm(arr):
     """
     For FWHM, fit a Gaussian and return fwhm of that
     """
-    _loc, scale = scipy.stats.norm.fit(arr)
+    arr_no_nan_inf = arr[np.isfinite(arr)]
+    _loc, scale = scipy.stats.norm.fit(arr_no_nan_inf)
     return 2.355*scale
 
 def mean(arr):
