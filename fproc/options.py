@@ -11,6 +11,7 @@ LOG = logging.getLogger(__name__)
 class ArgumentParser(argparse.ArgumentParser):
     def __init__(self, name, version):
         argparse.ArgumentParser.__init__(self, f'{name} v{version} (using fproc v{__version__})', add_help=True)
+        self.add_argument('--pipeline', help='Path to Python pipeline definition file', required=True)
         self.add_argument('--input', help='Path to input folder', required=True)
         self.add_argument('--output', help='Path to output folder', required=True)
         self.add_argument('--input-subfolder', help='Optional subfolder for pipeline input')

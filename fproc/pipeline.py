@@ -13,12 +13,16 @@ LOG = logging.getLogger(__name__)
 
 class Pipeline:
 
-    def __init__(self, name, version, option_parser, modules):
+    def __init__(self, name, version, options, modules):
         self.name = name
         self.version = version
-        self.options = option_parser.parse_args()
+        try:
+            # Compatibility while we migrate to built in main()
+            self.options = options.parse_args()
+            self._setup_logging()
+        except:
+            self.options = options
         self.modules = modules
-        self._setup_logging()
 
     def run(self):
         try:
@@ -60,7 +64,8 @@ class Pipeline:
                 os.makedirs(self.options.output, exist_ok=True)
             self._start_logfile()
 
-            banner = f"{self.name.upper()} v{self.version} (using fproc v{__version__})"
+            banner = f"{self.name.upper()} v{self.version}"
+            LOG.info("=" * len(banner))
             LOG.info(banner)
             LOG.info("=" * len(banner))
             timestamp = self.timestamp()
