@@ -95,6 +95,7 @@ kwargs = {
     },
     'entry_points' : {
         'console_scripts' : [
+            'fproc=fproc.main:main',
             'fproc-combine=fproc.combine:main',
             'fproc-flatten=fproc.flatten:main',
         ],
