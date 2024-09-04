@@ -36,9 +36,9 @@ class T1(Module):
             # FIXME temp until we can extract from DICOM
             inversion_times = [235, 315, 1235, 1315, 2235, 2315, 3235, 4235]
             for img in rawmollis:
-                LOG.info(f" - Reconstructing {img.fname}")
                 slice_timing = img.SliceTiming if img.SliceTiming is not None else 0
-                mapper = T1(img.data, inversion_times, img.affine, slice_timing)
+                LOG.info(f" - Reconstructing {img.fname} using TIs {inversion_times} and slice timing {slice_timing}")
+                mapper = T1(img.data, inversion_times, img.affine, np.array(slice_timing))
                 img.save_derived(mapper.t1_map, self.outfile(img.fname.replace("t1_raw_molli", "t1_map")))
                 img.save_derived(mapper.t1_map, self.outfile(img.fname.replace("t1_raw_molli", "t1_conf")))
         else:
@@ -145,7 +145,7 @@ class T2star(Module):
 
         echos.sort(key=lambda x: x.EchoTime)
         imgdata = [e.data for e in echos]
-        tes = [1000*e.EchoTime for e in echos]
+        tes = np.array([1000*e.EchoTime for e in echos])
         LOG.info(f"TEs: {tes}")
         last_echo = echos[-1]
         affine = last_echo.affine
@@ -434,14 +434,14 @@ class Resample(Module):
         if not t2w_segs:
             LOG.warn(" - No T2w segmentations found - will not resample onto T1 grid")
 
-        t1w_map = self.inimg("t1w", "t1w.nii.gz", check=True)
-
         for t1_map in t1_maps:
             for t2w_seg in t2w_segs:
                 LOG.info(f" - Resampling {t2w_seg.fname} onto T1 map grid {t1_map.fname}")
                 nii_res = self.resample(t2w_seg, t1_map, is_roi=True)
                 t1_map.save_derived(nii_res.get_fdata(), self.outfile(t2w_seg.fname_noext + "_res_" + t1_map.fname_noext + ".nii.gz"))
 
+        t1w_map = self.inimg("t1w", "t1w.nii.gz", check=False, warn=True)
+        if t1w_map is not None:
             LOG.info(f" - Resampling {t1w_map.fname} onto T1 map grid {t1_map.fname}")
             nii_res = self.resample(t1w_map, t1_map, is_roi=False)
             t1_map.save_derived(nii_res.get_fdata(), self.outfile(t1w_map.fname_noext + "_res_" + t1_map.fname_noext + ".nii.gz"))
@@ -818,7 +818,7 @@ class ShapeMetrics(Module):
             'QC - Volume check': "volcheck",
         }
 
-        t2w_all_segs = self.inimgs("t2w", "seg_t2w*_mask_*.nii.gz", is_depfile=True)
+        t2w_all_segs = self.inimgs("t2w", "seg_t2w_mask.nii.gz", is_depfile=True)
         if not t2w_all_segs:
             self.no_data(" - No T2w masks found to for shape metrics")
 
@@ -827,7 +827,10 @@ class ShapeMetrics(Module):
             for side in ("left", "right"):
                 img = self.inimg("t2w", f"seg_t2w_{side}_kidney.nii.gz", is_depfile=True)
                 LOG.info(f" - Calculating T2w shape metrics from {img.fname}")
-                vol_metrics = _volume_features(img.data, affine=img.affine)
+                try:
+                    vol_metrics = _volume_features(img.data, affine=img.affine)
+                except Exception as exc:
+                    LOG.warn(f"Failed to calculate volume features: {exc}")
                 for metric, value in vol_metrics.items():
                     value, units = value
                     col_name = f"tkv_{side}_" + METRICS_MAPPING[metric]
@@ -857,7 +860,7 @@ class RenalPreprocArgumentParser(ArgumentParser):
         self.add_argument("--t2star-method", help="Method to use when doing T2* processing", choices=["loglin", "2p_exp", "all"], default="all")
         self.add_argument("--t2star-resample", help="Planar resolution to resample T2* to (mm)", type=float, default=0)
         self.add_argument("--t2w-model", "--segmentation-weights", help="Filename or URL for T2w segmentation CNN weights", default="whole_kidney_cnn.model")
-        self.add_argument("--t1-model", help="Filename or URL for T1 segmentation model weights", default="/software/imaging/ukbbseg/ukbb-mri-sseg/trained_models/kidney_t1.pt")
+        self.add_argument("--t1-model", help="Filename or URL for T1 segmentation model weights", default="/spmstore/project/RenalMRI/trained_models/kidney_t1_molli_min_max.pt")
         self.add_argument("--t1-no-realign", help="Don't try to realign T1 segmentations to T2*", action="store_true", default=False)
 
 class RenalPreproc(Pipeline):
