@@ -258,16 +258,18 @@ class Module:
         fig.subplots_adjust(wspace=0, hspace=0.05)
         fig.savefig(self.outfile(name + ".png"), bbox_inches='tight')
 
-    def matching_img(self, img, candidates):
+    def matching_img(self, img, candidates, warn_none=False, warn_multiple=True):
         matches = []
         for candidate in candidates:
             if candidate.affine_matches(img):
                 matches.append(candidate)
         if not matches:
-            LOG.warn(f" - Could not find matching image for {img.fname} in {candidates}")
+            if warn_none:
+                LOG.warn(f" - Could not find matching image for {img.fname} in {candidates}")
             return None
         elif len(matches) > 1:
-            LOG.warn(f" - Multiple matching images for {img.fname} in {candidates} - returning first which is {matches[0].fname}")
+            if warn_multiple:
+                LOG.warn(f" - Multiple matching images for {img.fname} in {candidates} - returning first which is {matches[0].fname}")
         return matches[0]
 
 class CopyModule(Module):
@@ -278,7 +280,7 @@ class CopyModule(Module):
         Module.__init__(self, name)
         self.in_dir = in_dir if in_dir is not None else name
         self.in_name = in_name if in_name is not None else name
-        self.out_name = out_name if out_name is not None else name
+        self.out_name = out_name if out_name is not None else self.in_name
 
     def process(self):
         self.img = self.inimg(self.in_dir, f"{self.in_name}.nii.gz")
