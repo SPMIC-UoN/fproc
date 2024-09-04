@@ -1,7 +1,8 @@
+import glob
 import logging
+import os
 
-from fproc.options import ArgumentParser
-from fproc.pipeline import Pipeline
+from fsort import ImageFile
 from fproc.module import Module, StatsModule
 
 import numpy as np
@@ -70,20 +71,129 @@ class T2Stim(Module):
         first_echo.save_derived(mapper.t2_map, self.outfile("t2_map.nii.gz"))
         first_echo.save_derived(mapper.m0_map, self.outfile("m0_map.nii.gz"))
         first_echo.save_derived(mapper.r2_map, self.outfile("r2_map.nii.gz"))
+        first_echo.save_derived(mapper.b1_map, self.outfile("b1_map.nii.gz"))
         LOG.info(f" - Saved data")
+
+
+class T1Segs(Module):
+    def __init__(self):
+        Module.__init__(self, "t1_segs")
+
+    def process(self):
+        seg_origs = self.inimgs("../t1_clean_out", "*.nii.gz")
+        if not seg_origs:
+            LOG.info(" - No automatic kidney segmentations found")
+
+        for part in ("cortex", "medulla"):
+            use_orig = True
+            if not self.pipeline.options.kidney_masks:
+                LOG.info(f" - No kidney masks dir specified - will use originals for {part}")
+            else:
+                globexpr = os.path.join(
+                    self.pipeline.options.kidney_masks,
+                    self.pipeline.options.subjid,
+                    f"*{part}*.nii*"
+                )
+                masks = list(glob.glob(globexpr))
+                if not masks:
+                    LOG.info(f" - No {part} mask for {self.pipeline.options.subjid} in {globexpr} - will use originals")
+                elif len(masks) != 2:
+                    LOG.warn(f" - {len(masks)} {part} masks found for {self.pipeline.options.subjid}: {masks} - expected 2 (left/right) - ignoring")
+                else:
+                    left = [f for f in masks if "left" in f.lower()]
+                    right = [f for f in masks if "right" in f.lower()]
+                    if not left or not right:
+                        LOG.warn(f" Did not find left+right {part} masks in: {masks} - ignoring")
+                    else:
+                        LOG.info(f" - Replacing original {part} masks with new ones: {left}, {right}")
+                        use_orig = False
+
+            if use_orig:
+                left = [i for i in seg_origs if part in i.fname.lower() and "_l_" in i.fname.lower()]
+                right = [i for i in seg_origs if part in i.fname.lower() and "_r_" in i.fname.lower()]
+                if not left or not right:
+                    LOG.warn(f"No original masks found for {part} - have no kidney segmentation")
+                    continue
+                elif len(left) > 1 or len(right) > 1:
+                    LOG.warn(f"Multiple original masks found for {part} - will use first")
+                left = left[0]
+                right = right[0]
+                LOG.info(f" - Using original masks: {left.fname}, {right.fname}")
+            else:
+                left = ImageFile(left[0], warn_json=False)
+                right = ImageFile(right[0], warn_json=False)
+                LOG.info(f" - Using manual masks: {left.fname}, {right.fname}")
+
+            left.save(self.outfile(f"kidney_{part}_l.nii.gz"))
+            right.save(self.outfile(f"kidney_{part}_r.nii.gz"))
+            t1_maps = self.inimgs("molli_kidney", "t1_map.nii.gz")
+            if t1_maps:
+                self.lightbox(t1_maps[0], left, name=f"kidney_{part}_l_lightbox", tight=True)
+                self.lightbox(t1_maps[0], right, name=f"kidney_{part}_r_lightbox", tight=True)
+
+class Stats(StatsModule):
+    def __init__(self):
+        StatsModule.__init__(
+            self, name="stats", 
+            segs={
+                "cortex_r" : {
+                    "dir" : "t1_segs",
+                    "glob" : "*cortex_r*.nii.gz"
+                },
+                "cortex_l" : {
+                    "dir" : "t1_segs",
+                    "glob" : "*cortex_l*.nii.gz"
+                },
+                # "cortex" : {
+                #     "dir" : "t1_segs",
+                #     "glob" : "*cortex_orig*.nii.gz"
+                # },
+                "medulla_r" : {
+                    "dir" : "t1_segs",
+                    "glob" : "*medulla_r*.nii.gz"
+                },
+                "medulla_l" : {
+                    "dir" : "t1_segs",
+                    "glob" : "*medulla_l*.nii.gz"
+                },
+                # "medulla" : {
+                #     "dir" : "t1_segs",
+                #     "glob" : "*medulla_orig*.nii.gz"
+                # },
+                "kidney_l" : {
+                    "dir" : "t1_segs",
+                    "glob" : "*all_l_orig*.nii.gz"
+                },
+                "kidney_r" : {
+                    "dir" : "t1_segs",
+                    "glob" : "*all_r_orig*.nii.gz"
+                },
+            },
+            params={
+                "t2_exp" : {
+                    "dir" : "t2_exp",
+                    "glob" : "t2_map.nii.gz",
+                    "segs" : ["cortex_r", "cortex_l", "medulla_r", "medulla_l"],
+                },
+                "t2_stim" : {
+                    "dir" : "t2_stim",
+                    "glob" : "t2_map.nii.gz",
+                    "segs" : ["cortex_r", "cortex_l", "medulla_r", "medulla_l"],
+                },
+                "b1_stim" : {
+                    "dir" : "t2_stim",
+                    "glob" : "b1_map.nii.gz",
+                }
+            },
+            stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd"],
+            seg_volumes=False,
+        )
+
+NAME="tk21_t2"
 
 MODULES = [
     T2SimpleExp(),
     T2Stim(),
+    T1Segs(),
+    Stats(),
 ]
-
-class Tk21T2ArgumentParser(ArgumentParser):
-    def __init__(self):
-        ArgumentParser.__init__(self, "tk21_t2", __version__)
-        
-class Tk21T2(Pipeline):
-    def __init__(self):
-        Pipeline.__init__(self, "tk21_t2", __version__, Tk21T2ArgumentParser(), MODULES)
-
-if __name__ == "__main__":
-    Tk21T2().run()
