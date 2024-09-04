@@ -1,6 +1,6 @@
 #!/bin/sh
 
-MODELDIR=/spmstore/project/RenalMRI/trained_models/
+MODELDIR=/software/imaging/body_pipelines/trained_models/
 INDIR=/spmstore/project/RenalMRI/tk21/proc
 OUTDIR=/spmstore/project/RenalMRI/tk21/proc
 

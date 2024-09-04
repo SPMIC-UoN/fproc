@@ -23,7 +23,7 @@ source activate renal_preproc
 SLURM_ARRAY_TASK_ID=0
 echo "Processing subject ${SLURM_ARRAY_TASK_ID}"
 
-MODELDIR=/spmstore/project/RenalMRI/trained_models/
+MODELDIR=/software/imaging/body_pipelines/trained_models/
 INDIR=/spmstore/project/RenalMRI/recover/afirmsubj
 OUTDIR=/spmstore/project/RenalMRI/recover/afirmsubj/
 

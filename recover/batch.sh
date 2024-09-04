@@ -19,7 +19,7 @@ module load fsl-img/6.0.6.3
 module load conda-img
 source activate renal_preproc
 
-MODELDIR=/spmstore/project/RenalMRI/trained_models/
+MODELDIR=/software/imaging/body_pipelines/trained_models/
 OUTDIR=/spmstore/project/RenalMRI/recover/proc
 SLURM_ARRAY_TASK_ID=16
 

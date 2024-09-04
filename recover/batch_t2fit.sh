@@ -24,7 +24,7 @@ source activate renal_preproc
 for SLURM_ARRAY_TASK_ID in {0..30}; do
 echo "Processing subject ${SLURM_ARRAY_TASK_ID}"
 
-MODELDIR=/spmstore/project/RenalMRI/trained_models/
+MODELDIR=/software/imaging/body_pipelines/trained_models/
 INDIR=/spmstore/project/RenalMRI/recover/output_20240311
 OUTDIR=/spmstore/project/RenalMRI/recover/output_20240311/
 
