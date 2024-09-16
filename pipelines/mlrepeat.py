@@ -12,13 +12,14 @@ class PancreasSegRestricted(Module):
         Module.__init__(self, "seg_pancreas_ethrive_restricted")
 
     def process(self):
-        seg_orig = self.inimg("seg_pancreas_ethrive_fix", "pancreas.nii.gz", is_depfile=True)
+        seg_orig = self.inimg("seg_pancreas_ethrive_fix_largestblob", "pancreas.nii.gz", is_depfile=True)
         ff = self.inimg("fat_fraction", "fat_fraction.nii.gz", is_depfile=True)
         ff_resamp = self.resample(ff, seg_orig, is_roi=False).get_fdata().squeeze()
         ff_30 = ff_resamp < 0.3
         ff_50 = ff_resamp < 0.5
         seg_30 = np.logical_and(seg_orig.data > 0, ff_30)
         seg_50 = np.logical_and(seg_orig.data > 0, ff_50)
+        LOG.info(" - Saving pancreas masks restricted by fat fraction")
         seg_orig.save_derived(ff_resamp, self.outfile("fat_fraction.nii.gz"))
         seg_orig.save_derived(ff_30, self.outfile("fat_fraction_lt_30.nii.gz"))
         seg_orig.save_derived(ff_50, self.outfile("fat_fraction_lt_50.nii.gz"))
@@ -151,7 +152,7 @@ class SegStats(statistics.SegStats):
                     "glob" : "t1_map.nii.gz",
                 },
             },
-            stats=["iqmean", "median", "iqstd", "mode", "fwhm"],
+            stats=["n", "iqn", "iqmean", "median", "iqstd", "mode", "fwhm"],
             seg_volumes=True,
         )
 
@@ -176,8 +177,9 @@ MODULES = [
     T1Kidney(),
     # Post-processing of segmentations
     seg_postprocess.KidneyT1Clean(),
-    seg_postprocess.SegFix("seg_pancreas_ethrive", "pancreas.nii.gz", "dixon", "water.nii.gz", "pancreas_masks"),
-    seg_postprocess.SegFix("seg_liver_dixon", "liver.nii.gz", "dixon", "water.nii.gz", "liver_masks"),
+    seg_postprocess.SegFix("seg_pancreas_ethrive", "pancreas.nii.gz", "pancreas_masks", "dixon", "water.nii.gz"),
+    seg_postprocess.SegFix("seg_liver_dixon", "liver.nii.gz", "liver_masks", "dixon", "water.nii.gz"),
+    seg_postprocess.LargestBlob("seg_pancreas_ethrive_fix", "pancreas.nii.gz"),
     PancreasSegRestricted(),
     # Statistics
     Radiomics(),
