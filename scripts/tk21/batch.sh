@@ -1,8 +1,8 @@
 #!/bin/sh
 
 MODELDIR=/software/imaging/body_pipelines/trained_models/
-INDIR=/spmstore/project/RenalMRI/tk21/proc
-OUTDIR=/spmstore/project/RenalMRI/tk21/proc
+INDIR=/spmstore/project/RenalMRI/tk21/proc_20240904
+OUTDIR=/spmstore/project/RenalMRI/tk21/proc_20240904
 
 for SUBJDIR in ${INDIR}/*; do
     SUBJID=`basename $SUBJDIR`
