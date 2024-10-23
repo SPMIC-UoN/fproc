@@ -13,6 +13,8 @@ from fsort.image_file import ImageFile
 import numpy as np
 import scipy
 import nibabel as nib
+import skimage
+
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 
@@ -31,9 +33,10 @@ class Module:
     INPUT = "INPUT"
     OUTPUT = "OUTPUT"
 
-    def __init__(self, name):
+    def __init__(self, name, **kwargs):
         self.name = name
         self.pipeline = None
+        self.kwargs = kwargs
 
     def run(self, pipeline):
         self.pipeline = pipeline
@@ -83,6 +86,16 @@ class Module:
         else:
             return ImageFile(fpath, warn_json=False)
 
+    def single_inimg(self, dir, globexpr, src=None, is_depfile=False, warn=True):
+        imgs = self.inimgs(dir, globexpr, src, is_depfile)
+        if warn and not imgs:
+            LOG.warn(f" - No images found matching {dir}/{globexpr}")
+            return None
+        elif warn and len(imgs) > 1:
+            LOG.warn(f" - Multiple reference images found matching {dir}/{globexpr}")
+            LOG.warn(f" - using first: {imgs[0].fname}")
+        return imgs[0]
+
     def inimgs(self, dir, globexpr, src=None, is_depfile=False):
         return [ImageFile(f, warn_json=False) for f in self.infiles(dir, globexpr, src=src, is_depfile=is_depfile)]
 
@@ -110,7 +123,7 @@ class Module:
     def no_data(self, reason):
         raise ModuleError(f"Can't generate output - no input data: {reason}")
 
-    def resample(self, src, tgt, is_roi, allow_rotated=False):
+    def resample(self, src, tgt, is_roi=False, allow_rotated=False):
         """
         Resample an image onto the grid from a target image
         """
@@ -272,6 +285,25 @@ class Module:
                 LOG.warn(f" - Multiple matching images for {img.fname} in {candidates} - returning first which is {matches[0].fname}")
         return matches[0]
 
+    def blobs_by_size(self, seg_data, min_size=0):
+        """
+        :return blobs in a segmentation sorted by size, largest first
+        """
+        labelled = skimage.measure.label(seg_data)
+        def _blob_size(blob):
+            return np.sum(seg_data[labelled == blob.label])
+        blobs = list(skimage.measure.regionprops(labelled))
+        blobs = sorted(blobs, key=_blob_size, reverse=True)
+        blob_masks = []
+        for blob in blobs:
+            blob_mask = np.copy(seg_data)
+            blob_mask[labelled != blob.label] = 0
+            size = np.count_nonzero(blob_mask)
+            if size > min_size:
+                blob_masks.append(blob_mask)
+
+        return blob_masks
+
 class CopyModule(Module):
     """
     A module which just copies an input file
@@ -284,6 +316,7 @@ class CopyModule(Module):
 
     def process(self):
         self.img = self.inimg(self.in_dir, f"{self.in_name}.nii.gz")
+        LOG.info(f" - Copying {self.img.fname} - > {self.out_name}")
         self.img.save_derived(self.img.nii.get_fdata(), self.outfile(f"{self.out_name}.nii.gz"))
 
 class StatsModule(Module):
@@ -351,7 +384,7 @@ class StatsModule(Module):
                         stats_data.append(param_img.data[res_data > 0])
                         res_niis.append(seg_nii_res)
                 if res_count > 0 and self.overlays:
-                    self.lightbox(param_img, seg_img, name=f"{seg_img.fname_noext}_{param_img.fname_noext}_lightbox")
+                    self.lightbox(param_img, seg_img, name=f"stats_{seg_img.fname_noext}_{param_img.fname_noext}_lightbox")
 
         if n_found == 0:
             LOG.warn(" - No combination found with overlap")
