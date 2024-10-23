@@ -2,9 +2,11 @@
 FPROC: Modules for extracting statistics measures
 """
 import logging
+import os
 
 import numpy as np
 import radiomics
+from dbdicom.wrappers.skimage import _volume_features
 
 from fproc.module import Module
 from fproc import stats
@@ -76,7 +78,7 @@ class SegStats(Module):
                         stats_data.append(param_img.data[res_data > 0])
                         res_niis.append(seg_nii_res)
                 if res_count > 0 and self.overlays:
-                    self.lightbox(param_img, seg_img, name=f"{seg_img.fname_noext}_{param_img.fname_noext}_lightbox")
+                    self.lightbox(param_img, seg_img, name=f"stats_{seg_img.fname_noext}_{param_img.fname_noext}_lightbox")
 
         if n_found == 0:
             LOG.warn(" - No combination found with overlap")
@@ -174,3 +176,86 @@ class Radiomics(Module):
                         if k.startswith("diagnostics"):
                             continue
                         f.write(f"{param_name}_{seg_name}_{k},{v}\n")
+
+
+class CMD(Module):
+    def __init__(self, stats_file="stats/stats.csv"):
+        Module.__init__(self, "cmd")
+        self._stats_file = stats_file
+        
+    def process(self):
+        stats_file = os.path.join(self.pipeline.options.output, self._stats_file)
+        cmd_dict = {}
+        with open(stats_file) as f:
+            for line in f:
+                try:
+                    key, value = line.split(",")
+                    value = float(value)
+                    if "iqmean" not in key and "median" not in key:
+                        # Only calculate CMD for IQ mean and median
+                        continue
+                    for struc in ("cortex", "medulla"):
+                        if struc in key:
+                            generic_key = key.replace(struc, "cmd")
+                            if generic_key not in cmd_dict:
+                                cmd_dict[generic_key] = {}
+                            cmd_dict[generic_key][struc] = value
+                except Exception as exc:
+                    LOG.warn(f"Error parsing stats file {stats_file} line {line}: {exc}")
+
+        stats_path = self.outfile("cmd.csv")
+        LOG.info(f" - Saving CMD stats to {stats_path}")
+        with open(stats_path, "w") as stats_file:
+            for key, values in cmd_dict.items():
+                if "cortex" not in values or "medulla" not in values:
+                    LOG.warn(f"Failed to find both cortex and medulla data for key: {key}")
+                    continue
+                cmd = values["medulla"] - values["cortex"]
+                stats_file.write(f"{key},{str(cmd)}\n")
+
+
+class ShapeMetrics(Module):
+    def __init__(self, seg_dir, seg_glob):
+        Module.__init__(self, "shape_metrics")
+        self._dir = seg_dir
+        self._glob = seg_glob
+
+    def process(self):
+        METRICS_MAPPING = {
+            'Surface area': "surf_area",
+            'Volume': "vol",
+            'Bounding box volume': "vol_bb",
+            'Convex hull volume': "vol_ch",
+            'Volume of holes': "vol_holes",
+            'Extent': "extent",
+            'Solidity': "solidity",
+            'Compactness': "compactness",
+            'Long axis length': "long_axis",
+            'Short axis length': "short_axis",
+            'Equivalent diameter': "equiv_diam",
+            'Longest caliper diameter': "longest_diam",
+            'Maximum depth': "max_depth",
+            'Primary moment of inertia': "mi1",
+            'Second moment of inertia': "mi2",
+            'Third moment of inertia': "mi3",
+            'Mean moment of inertia': "mi_mean",
+            'Fractional anisotropy of inertia': "fa",
+            'QC - Volume check': "volcheck",
+        }
+
+        all_segs = self.inimgs(self._dir, self._glob, src=self.OUTPUT)
+        if not all_segs:
+            self.no_data(f" - No segmentations found in {self._dir}/{self._glob} for shape metrics")
+
+        LOG.info(f" - Saving shape metrics to {self._dir}_shape_metrics.csv")
+        with open(self.outfile(f"{self._dir}_shape_metrics.csv"), "w") as f:
+            for seg_img in all_segs:
+                LOG.info(f" - Calculating T2w shape metrics from {seg_img.fname}")
+                try:
+                    vol_metrics = _volume_features(seg_img.data, affine=seg_img.affine)
+                except Exception as exc:
+                    LOG.warn(f"Failed to calculate shape metrics: {exc}")
+                for metric, value in vol_metrics.items():
+                    value, units = value
+                    col_name = f"{seg_img.fname}_" + METRICS_MAPPING[metric]
+                    f.write(f"{col_name},{value}\n")
