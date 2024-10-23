@@ -5,6 +5,7 @@ import numpy as np
 import skimage
 from dbdicom.wrappers.skimage import _volume_features
 
+from fsort.image_file import ImageFile
 from fproc.options import ArgumentParser
 from fproc.pipeline import Pipeline
 from fproc.module import Module, StatsModule
@@ -42,7 +43,14 @@ class VAT(Module):
             pancreas = self.resample(pancreas, abd_cavity, is_roi=False, allow_rotated=True)
 
         organs = None
-        for arr in (spleen.data, kidney_right.data, kidney_left.data, lungs.data, liver.data, pancreas.get_fdata()):
+        for arr in (spleen, kidney_right, kidney_left, lungs, liver, pancreas):
+            if arr is None:
+                continue
+            elif isinstance(arr, ImageFile):
+                arr = arr.data
+            else:
+                arr = arr.get_fdata()
+
             if arr is None:
                 LOG.warn("Could not remove organ data")
                 continue
@@ -142,7 +150,10 @@ class MolliHr(Module):
         LOG.info(f" - Saving HR timings to hr_timings.csv")
         with open(self.outfile("hr_timings.csv"), "w") as f:
             for organ in ("kidney", "liver", "pancreas"):
-                molli = self.inimg("fsort/molli", f"molli_{organ}.nii.gz")
+                molli = self.inimg("fsort/molli", f"molli_{organ}.nii.gz", check=False)
+                if molli is None:
+                    LOG.warn(f"No MOLLI data found for {organ}")
+                    continue
                 timings = molli.metadata.get("FrameTimesStart", [])
                 mean, max = "", ""
                 if not timings:
@@ -150,7 +161,7 @@ class MolliHr(Module):
                 elif len(timings) != 7:
                     LOG.warn(f"Timings should have length 7, was {len(timings)} for {molli.fname}")
                 else:
-                    LOG.warn(f" - Found HR timings in metadata: {timings}")
+                    LOG.info(f" - Found HR timings in metadata: {timings}")
                     timings = np.array(timings)
                     dt = timings[1:] - timings[:-1]
                     #  Last two images were across two heart beats
@@ -203,10 +214,16 @@ class ShapeMetrics(Module):
                 LOG.warn(f" - Multiple segmentations matching {seg} found - using first")
             segimg = segimgs[0]
             LOG.info(f" - Calculating shape metrics from {segimg.fname}")
-            vol_metrics = _volume_features(segimg.data, affine=segimg.affine)
-            for metric, value in vol_metrics.items():
-                value, _units = value
-                col_name = f"{seg}_" + METRICS_MAPPING[metric]
+            try:
+                vol_metrics = _volume_features(segimg.data, affine=segimg.affine)
+            except:
+                LOG.exception(f"Error getting volume features for {seg}")
+                vol_metrics = {}
+
+            print(vol_metrics)
+            for name, metric in METRICS_MAPPING.items():
+                col_name = f"{seg}_{metric}"
+                value, _units = vol_metrics.get(name, ("", ""))
                 stats[col_name] = value
 
         LOG.info(f" - Saving shape metrics to shape_metrics.csv")
@@ -303,7 +320,7 @@ MODULES = [
     VAT(),
     ASAT(),
     ShapeMetrics(),
-    MolliHr(),
+    MolliHr()
 ]
 
 class DemistifiPostprocArgumentParser(ArgumentParser):
