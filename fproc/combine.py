@@ -72,7 +72,7 @@ def add_kv_stats(subjid, subjdir, paths, subj_stats):
         fnames = list(glob.glob(fglob))
         if not fnames:
             LOG.warn(f" - Failed to find any file matching {fglob}")
-            return
+            continue
         elif len(fnames) > 1:
             LOG.warn(f" - Multiple files matching {fglob} - will use first which is {fnames[0]}")
         fname = fnames[0]
