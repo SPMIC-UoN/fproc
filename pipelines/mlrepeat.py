@@ -119,6 +119,20 @@ class SegStats(statistics.SegStats):
                     "dir" : "seg_kidney_t2w",
                     "glob" : "kidney_right_kidney.nii.gz"
                 },
+                "sat" : {
+                    "dir" : "seg_sat_dixon",
+                    "glob" : "sat.nii.gz",
+                    "params" : [],
+                },
+                "vat" : {
+                    "dir" : "seg_vat_dixon",
+                    "glob" : "vat.nii.gz",
+                    "params" : [],
+                },
+                "kidney_dixon" : {
+                    "dir" : "seg_kidney_dixon",
+                    "glob" : "kidney.nii.gz"
+                },
             },
             params={
                 "t2star" : {
@@ -162,8 +176,11 @@ NAME = "ML_repeat"
 
 MODULES = [
     # Segmentations
+    segmentations.BodyDixon(),
+    segmentations.SatDixon(),
     segmentations.LiverDixon(),
     segmentations.SpleenDixon(),
+    segmentations.KidneyDixon(),
     segmentations.PancreasEthrive(),
     segmentations.KidneyT2w(),
     segmentations.KidneyT1(),
@@ -181,13 +198,22 @@ MODULES = [
     seg_postprocess.SegFix("seg_liver_dixon", "liver.nii.gz", "liver_masks", "dixon", "water.nii.gz"),
     seg_postprocess.LargestBlob("seg_pancreas_ethrive_fix", "pancreas.nii.gz"),
     PancreasSegRestricted(),
+    segmentations.VatDixon(
+        organs={
+            "seg_liver_dixon_fix" : "liver.nii.gz",
+            "seg_spleen_dixon" : "spleen.nii.gz",
+            "seg_pancreas_ethrive_fix_largestblob" : "pancreas.nii.gz",
+            "seg_kidney_t2w" : "kidney_mask.nii.gz"
+        }
+    ),
     # Statistics
     Radiomics(),
     SegStats(),
 ]
 
 def add_options(parser):
-    parser.add_argument("--kidney-t1-model", help="Filename or URL for T1 segmentation model weights", default="/spmstore/project/RenalMRI/trained_models/kidney_t1_molli_min_max.pt")
+    parser.add_argument("--knee-to-neck-dixon-model", help="Filename or URL for full Dixon segmentation model weights")
+    parser.add_argument("--kidney-t1-model", help="Filename or URL for T1 segmentation model weights")
     parser.add_argument("--kidney-t2w-model", help="Filename or URL for T2w segmentation model weights")
     parser.add_argument("--pancreas-masks", help="Directory containing manual pancreas masks")
     parser.add_argument("--liver-masks", help="Directory containing manual liver masks")
