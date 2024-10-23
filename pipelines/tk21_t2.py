@@ -137,35 +137,35 @@ class Stats(StatsModule):
             self, name="stats", 
             segs={
                 "cortex_r" : {
-                    "dir" : "t1_segs",
+                    "dir" : "../t1_clean_out",
                     "glob" : "*cortex_r*.nii.gz"
                 },
                 "cortex_l" : {
-                    "dir" : "t1_segs",
+                    "dir" : "../t1_clean_out",
                     "glob" : "*cortex_l*.nii.gz"
                 },
                 # "cortex" : {
-                #     "dir" : "t1_segs",
+                #     "dir" : "../t1_clean_out",
                 #     "glob" : "*cortex_orig*.nii.gz"
                 # },
                 "medulla_r" : {
-                    "dir" : "t1_segs",
+                    "dir" : "../t1_clean_out",
                     "glob" : "*medulla_r*.nii.gz"
                 },
                 "medulla_l" : {
-                    "dir" : "t1_segs",
+                    "dir" : "../t1_clean_out",
                     "glob" : "*medulla_l*.nii.gz"
                 },
                 # "medulla" : {
-                #     "dir" : "t1_segs",
+                #     "dir" : "../t1_clean_out",
                 #     "glob" : "*medulla_orig*.nii.gz"
                 # },
                 "kidney_l" : {
-                    "dir" : "t1_segs",
+                    "dir" : "../t1_clean_out",
                     "glob" : "*all_l_orig*.nii.gz"
                 },
                 "kidney_r" : {
-                    "dir" : "t1_segs",
+                    "dir" : "../t1_clean_out",
                     "glob" : "*all_r_orig*.nii.gz"
                 },
             },
@@ -194,6 +194,9 @@ NAME="tk21_t2"
 MODULES = [
     T2SimpleExp(),
     T2Stim(),
-    T1Segs(),
+    #T1Segs(),
     Stats(),
 ]
+
+def add_options(parser):
+    parser.add_argument("--kidney-masks", help="Directory containing manual kidney cortex/medulla masks")
