@@ -180,7 +180,7 @@ MODULES = [
     segmentations.SatDixon(),
     segmentations.LiverDixon(),
     segmentations.SpleenDixon(),
-    segmentations.KidneyDixon(),
+    segmentations.KidneyDixon(model_id="422"),
     segmentations.PancreasEthrive(),
     segmentations.KidneyT2w(),
     segmentations.KidneyT1(),
@@ -194,8 +194,24 @@ MODULES = [
     T1Kidney(),
     # Post-processing of segmentations
     seg_postprocess.KidneyT1Clean(),
-    seg_postprocess.SegFix("seg_pancreas_ethrive", "pancreas.nii.gz", "pancreas_masks", "dixon", "water.nii.gz"),
-    seg_postprocess.SegFix("seg_liver_dixon", "liver.nii.gz", "liver_masks", "dixon", "water.nii.gz"),
+    seg_postprocess.SegFix(
+        "seg_pancreas_ethrive",
+        fix_dir_option="pancreas_masks",
+        segs={
+            "pancreas.nii.gz" : "%s_*.nii.gz",
+        },
+        map_dir="dixon",
+        map_fname="water.nii.gz"
+    ),
+    seg_postprocess.SegFix(
+        "seg_liver_dixon",
+        fix_dir_option="liver_masks",
+        segs={
+            "liver.nii.gz" : "%s_*.nii.gz",
+        },
+        map_dir="dixon",
+        map_fname="water.nii.gz"
+    ),
     seg_postprocess.LargestBlob("seg_pancreas_ethrive_fix", "pancreas.nii.gz"),
     PancreasSegRestricted(),
     segmentations.VatDixon(
