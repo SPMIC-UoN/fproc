@@ -17,12 +17,55 @@ class SegStats(Module):
     """
     A module which generates stats on parameters within segmentations
     """
-    def __init__(self, name="stats", segs={}, params={}, stats=[], out_name="stats.csv", multi_mode="combine", allow_rotated=True, seg_volumes=False, overlays=True):
+
+    DEFAULT_LIMITS = {
+        "3t" : {
+            "t1" : {
+                ("liver",) : (500, 1300),
+                ("spleen",) : (900, 1660),
+                ("pancreas",) : (400, 1300),
+                ("kidney", "cortex", "medulla") : (1000, 2500),
+            },
+            "t2star" : {
+                ("liver",) : (2, 70),
+                ("spleen",) : (2, 150),
+                ("pancreas",) : (2, 100),
+                ("kidney", "cortex", "medulla") : (2, 100),
+            },
+            "r2star" : {
+                ("liver",) : (14, 500),
+                ("spleen",) : (6, 500),
+                ("pancreas",) : (10, 500),
+                ("kidney", "cortex", "medulla") : (10, 500),
+            },
+        },
+        "1_5t" : {
+            "t1" : {
+                ("liver",) : (400, 1350),
+                ("spleen",) : (800, 1350),
+                ("pancreas",) : (400, 1350),
+                ("kidney", "cortex", "medulla") : (900, 2400),
+            },
+            "t2star" : {
+                ("liver",) : (2, 70),
+                ("spleen",) : (2, 150),
+                ("pancreas",) : (2, 100),
+            },
+            "r2star" : {
+                ("liver",) : (14, 500),
+                ("spleen",) : (6, 500),
+                ("pancreas",) : (10, 500),
+            },
+        },
+    }
+
+    def __init__(self, name="stats", segs={}, params={}, stats=[], out_name="stats.csv", default_limits=None, multi_mode="combine", allow_rotated=True, seg_volumes=False, overlays=True):
         Module.__init__(self, name)
         self.segs = segs
         self.params = params
         self.stats = stats
         self.out_name = out_name
+        self.default_limits = default_limits
         self.multi_mode = multi_mode
         self.allow_rotated = allow_rotated
         self.seg_volumes = seg_volumes
@@ -54,6 +97,11 @@ class SegStats(Module):
 
     def _add_param_stats(self, param, param_spec, seg, seg_spec, stat_names, values):
         stats_data, res_niis, n_found, best_count = [], [], 0, 0
+
+        # Segmentation spec can be overridden, e.g. change glob or dir
+        seg_overrides = param_spec.get("seg_overrides", {}).get(seg, {})
+        seg_spec = seg_spec.copy()
+        seg_spec.update(seg_overrides)
 
         LOG.info(f" - Generating stats for param {param}, segmentation {seg}")
         LOG.debug(param_spec)
@@ -95,7 +143,28 @@ class SegStats(Module):
         if stats_data:
             stats_data = np.concatenate(stats_data)
 
-        param_stats = stats.run(stats_data, stats=self.stats, data_limits=param_spec.get("limits", (None, None)), voxel_volume=voxel_volume)
+        # Data limits can be set as generic limits or specific to particular seg
+        # There are also defaults for specific organs/params keyed by field strength
+        # specified using limits="default_3t" for example
+        data_limits = param_spec.get("limits", (None, None))
+        if isinstance(data_limits, dict):
+            data_limits = data_limits.get(seg, data_limits.get("", (None, None)))
+
+        if data_limits == (None, None) and self.default_limits:
+            default_limits = self.DEFAULT_LIMITS.get(self.default_limits, {})
+            for param_substr, param_limits in default_limits.items():
+                if param_substr in param:
+                    for seg_substrs, seg_limits in param_limits.items():
+                        for seg_substr in seg_substrs:
+                            if seg_substr in seg:
+                                data_limits = seg_limits
+                                LOG.info(f" - Using default limits: {data_limits}")
+                                break
+
+        if len(data_limits) != 2:
+            raise RuntimeError(f"Invalid data limits: {data_limits}")
+
+        param_stats = stats.run(stats_data, stats=self.stats, data_limits=data_limits, voxel_volume=voxel_volume)
         if "vol" in self.stats:
             param_stats["vol"] = param_stats["n"] * voxel_volume
         if "iqvol" in self.stats:
@@ -179,22 +248,30 @@ class Radiomics(Module):
 
 
 class CMD(Module):
-    def __init__(self, stats_file="stats/stats.csv"):
-        Module.__init__(self, "cmd")
-        self._stats_file = stats_file
+    def __init__(self, name="cmd", **kwargs):
+        Module.__init__(self, name, **kwargs)
         
     def process(self):
-        stats_file = os.path.join(self.pipeline.options.output, self._stats_file)
+        stats_file = os.path.join(self.pipeline.options.output, self.kwargs.get("stats_file", "stats/stats.csv"))
+        cortex_id = self.kwargs.get("cortex_id", "kidney_cortex")
+        medulla_id = self.kwargs.get("medulla_id", "kidney_medulla")
+
+        params = self.kwargs.get("cmd_params", None)
         cmd_dict = {}
         with open(stats_file) as f:
             for line in f:
                 try:
                     key, value = line.split(",")
                     value = float(value)
+                    if params:
+                        found = [param in key for param in params]
+                        if not any(found):
+                            LOG.info(f" - Ignoring {key} - not in {params}")
+                            continue
                     if "iqmean" not in key and "median" not in key:
                         # Only calculate CMD for IQ mean and median
                         continue
-                    for struc in ("cortex", "medulla"):
+                    for struc in (cortex_id, medulla_id):
                         if struc in key:
                             generic_key = key.replace(struc, "cmd")
                             if generic_key not in cmd_dict:
@@ -203,22 +280,20 @@ class CMD(Module):
                 except Exception as exc:
                     LOG.warn(f"Error parsing stats file {stats_file} line {line}: {exc}")
 
-        stats_path = self.outfile("cmd.csv")
+        stats_path = self.outfile(self.kwargs.get("csv_file", "cmd.csv"))
         LOG.info(f" - Saving CMD stats to {stats_path}")
         with open(stats_path, "w") as stats_file:
             for key, values in cmd_dict.items():
-                if "cortex" not in values or "medulla" not in values:
+                if medulla_id not in values or cortex_id not in values:
                     LOG.warn(f"Failed to find both cortex and medulla data for key: {key}")
                     continue
-                cmd = values["medulla"] - values["cortex"]
+                cmd = values[medulla_id] - values[cortex_id]
                 stats_file.write(f"{key},{str(cmd)}\n")
 
 
 class ShapeMetrics(Module):
-    def __init__(self, seg_dir, seg_glob):
-        Module.__init__(self, "shape_metrics")
-        self._dir = seg_dir
-        self._glob = seg_glob
+    def __init__(self, name="shape_metrics", **kwargs):
+        Module.__init__(self, name, **kwargs)
 
     def process(self):
         METRICS_MAPPING = {
@@ -243,12 +318,24 @@ class ShapeMetrics(Module):
             'QC - Volume check': "volcheck",
         }
 
-        all_segs = self.inimgs(self._dir, self._glob, src=self.OUTPUT)
-        if not all_segs:
-            self.no_data(f" - No segmentations found in {self._dir}/{self._glob} for shape metrics")
+        seg_dir = self.kwargs.get("seg_dir", None)
+        if seg_dir is None:
+            raise RuntimeError("Must provide seg_dir for shape metrics")
 
-        LOG.info(f" - Saving shape metrics to {self._dir}_shape_metrics.csv")
-        with open(self.outfile(f"{self._dir}_shape_metrics.csv"), "w") as f:
+        seg_globs = self.kwargs.get("seg_globs", "seg*.nii.gz")
+        if not seg_globs:
+            seg_globs = [self.kwargs.get("seg_glob", "seg*.nii.gz")]
+
+        all_segs = []
+        for seg_glob in seg_globs:
+            all_segs.extend(self.inimgs(seg_dir, seg_glob, src=self.OUTPUT))
+
+        if not all_segs:
+            self.no_data(f" - No segmentations found in {seg_dir} matching {seg_globs}")
+
+        csv_fname = self.kwargs.get("csv_fname", f"{seg_dir}_shape_metrics.csv")
+        LOG.info(f" - Saving shape metrics to {csv_fname}")
+        with open(self.outfile(csv_fname), "w") as f:
             for seg_img in all_segs:
                 LOG.info(f" - Calculating T2w shape metrics from {seg_img.fname}")
                 try:
@@ -257,5 +344,5 @@ class ShapeMetrics(Module):
                     LOG.warn(f"Failed to calculate shape metrics: {exc}")
                 for metric, value in vol_metrics.items():
                     value, units = value
-                    col_name = f"{seg_img.fname}_" + METRICS_MAPPING[metric]
+                    col_name = f"{seg_img.fname_noext}_" + METRICS_MAPPING[metric]
                     f.write(f"{col_name},{value}\n")
