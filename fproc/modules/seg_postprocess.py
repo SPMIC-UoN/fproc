@@ -18,60 +18,59 @@ class SegFix(Module):
     """
     Module that can replace automatic segmentations with a manually drawn one
     """
-    def __init__(self, srcdir, src_fname, seg_srcdir, seg_src_fname, fix_dir_option, fix_glob=None):
-        Module.__init__(self, f"{srcdir}_fix")
-        self.srcdir = srcdir
-        self.src_fname = src_fname
-        self.seg_srcdir = seg_srcdir
-        self.seg_src_fname = seg_src_fname
-        self.fix_dir_option = fix_dir_option
-        self.fix_glob = fix_glob
-        if fix_glob:
-            self.fix_glob = fix_glob
-        else:
-            self.fix_glob = "%s_*.nii.gz"
+    def __init__(self, seg_dir, name=None, **kwargs):
+        if name is None:
+            name = seg_dir + "_fix"
+        Module.__init__(self, name, **kwargs)
+        self._seg_dir = seg_dir
 
     def process(self):
-        origs = self.inimgs(self.srcdir, self.src_fname, is_depfile=True)
-        if not origs:
-            orig = None
-        else:
-            if len(origs) > 1:
-                LOG.warn(f" - Multiple files found matching {self.src_fname}- using first")
-            orig = origs[0]
-
-        fix_dir = getattr(self.pipeline.options, self.fix_dir_option, None)
+        fix_dir_option = self.kwargs.get("fix_dir_option", self.name + "_fixed_dir")
+        fixed_segs = None
+        fix_dir = getattr(self.pipeline.options, fix_dir_option, None)
+        try_to_fix = False
         if not fix_dir:
-            LOG.info(" - No fixed files dir specified")
-            new = None
+            LOG.info(" - No fixed segmentations dir specified")
+        elif not os.path.exists(fix_dir):
+            LOG.info(f" - Fixed seg dir {fix_dir} does not exist")
         else:
-            globexpr = os.path.join(fix_dir, self.fix_glob % self.pipeline.options.subjid)
-            news = glob.glob(globexpr)
-            if not news:
-                LOG.info(f" - No fixed file for {self.pipeline.options.subjid} in {globexpr}")
-                new = None
-            else:
-                if len(news) > 1:
-                    LOG.warn(f" - Multiple fixed files found for {self.pipeline.options.subjid}: {news} - using first")
-                new = ImageFile(news[0])
+            try_to_fix = True
 
-        if new is not None:
-            LOG.info(f" - Saving fixed file from {new.fname}")
-        elif orig is not None:
-            LOG.info(f" - Using original file from {orig.fname}")
-            new = orig
+        map_dir = self.kwargs.get("map_dir", None)
+        map_fname = self.kwargs.get("map_fname", None)
+        if map_dir and map_fname:
+            map_img = self.single_inimg(map_dir, map_fname)
         else:
-            LOG.warn(f" - No original or fixed file found")
+            map_img = None
 
-        if new is not None:        
-            new.save(self.outfile(self.src_fname))
+        segs = self.kwargs.get("segs", {})
+        for seg_glob, fix_glob in segs.items():
+            seg_img = self.single_inimg(self._seg_dir, seg_glob, src=self.kwargs.get("seg_src", self.OUTPUT))
+            if seg_img is None:
+                LOG.warn(f"No segmentation found matching {self._seg_dir}/{seg_glob} - ignoring")
+                continue
 
-            # Overlay onto source img
-            seg_src_map = self.inimgs(self.seg_srcdir, self.seg_src_fname)
-            if not seg_src_map:
-                LOG.warn(f" - Could not find source map for for overlay: {self.seg_srcdir}, {self.seg_src_fname}")
-            else:
-                self.lightbox(seg_src_map[0], new, name=f"{self.srcdir}_lightbox", tight=True)
+            fixed = False
+            if try_to_fix:
+                LOG.info(f" - Checking {seg_img.fname}")
+                globexpr = os.path.join(fix_dir, fix_glob % self.pipeline.options.subjid)
+                fixed_segs = glob.glob(globexpr)
+                if not fixed_segs:
+                    LOG.info(f" - No fixed segmentation found")
+                    break
+                if len(fixed_segs) > 1:
+                    LOG.warn(f" - Multiple matching 'fixed' segmentations found: {fixed_segs} - using first")
+                fixed_img = ImageFile(fixed_segs[0])
+                LOG.info(f" - Saving fixed segmentation from {fixed_img.fname}")
+                fixed = True
+
+            if not fixed:
+                LOG.info(f" - Saving original segmentation from {seg_img.fname}")
+                fixed_img = seg_img
+
+            fixed_img.save(self.outfile(seg_img.fname))
+            if map_img:
+                self.lightbox(map_img, fixed_img, name=f"{fixed_img.fname}_lightbox", tight=True)
 
 class KidneyT1Clean(Module):
     def __init__(self, srcdir="seg_kidney_t1", seg_t2w_srcdir="seg_kidney_t2w", t1_map_srcdir="t1_kidney", generic=True, t2w=True):
@@ -95,12 +94,6 @@ class KidneyT1Clean(Module):
         t2w_mask = t2w_masks[0]
 
         for t1_seg in t1_segs:
-            # Find matching T1 map and resample T2w mask for this segmentation
-            t1_map = self.matching_img(t1_seg, t1_maps)
-            if t1_map is None:
-                LOG.warn(f" - Could not find matching T1 map for {t1_seg.fname} - ignoring this mask")
-                continue
-
             if self._t2w:
                 if t2w_mask is not None:
                     LOG.info(f" - Cleaning {t1_seg.fname} using T2w mask {t2w_mask.fname}")
@@ -120,7 +113,13 @@ class KidneyT1Clean(Module):
                 cleaned_data_t1_seg = t1_seg
 
             t1_seg.save_derived(cleaned_data_t1_seg, self.outfile(t1_seg.fname))
-            self.lightbox(t1_map.data, cleaned_data_t1_seg, f"{t1_seg.fname_noext}_t1_cleaned_lightbox")
+
+            # Find matching T1 map and resample T2w mask for this segmentation
+            t1_map = self.matching_img(t1_seg, t1_maps)
+            if t1_map is None:
+                LOG.warn(f" - Could not find matching T1 map for {t1_seg.fname} - no overlay will be generated")
+            else:
+                self.lightbox(t1_map.data, cleaned_data_t1_seg, f"{t1_seg.fname_noext}_t1_cleaned_lightbox")
 
     def _clean_generic(self, t1_seg, t1_segs, remove_small=True):
         # How close to the edge (as a fraction of total pixels) a blob centroid needs to be
@@ -191,3 +190,102 @@ class KidneyT1Clean(Module):
         cleaned_data = (t1_seg * mask_data_dil).astype(np.uint8)
         LOG.debug(f" - Voxel counts: orig {np.count_nonzero(t1_seg)}, mask {np.count_nonzero(t2w_mask)}, dil mask {np.count_nonzero(mask_data_dil)}, out {np.count_nonzero(cleaned_data)},")
         return cleaned_data
+
+class LargestBlob(Module):
+    def __init__(self, srcdir, seg_glob, overlay_srcdir=None, overlay_glob=None):
+        Module.__init__(self, f"{srcdir}_largestblob")
+        self._srcdir = srcdir
+        self._seg_glob = seg_glob
+        self._overlay_srcdir = overlay_srcdir
+        self._overlay_glob = overlay_glob
+
+    def process(self):
+        segs = self.inimgs(self._srcdir, self._seg_glob, src=self.OUTPUT)
+        for seg in segs:
+            out_fname = self.outfile(seg.fname)
+            blobs = self.blobs_by_size(seg.data)
+            if not blobs:
+                LOG.warn(f"No mask for {seg.fname}")
+                seg.save(out_fname)
+                continue
+
+            largest = blobs[0]
+            LOG.info(f" - Largest blob for {seg.fname} has {np.count_nonzero(largest)} voxels")
+            LOG.info(f" - Also found {len(blobs) - 1} other blobs")
+
+            seg.save_derived(largest, out_fname)
+            LOG.info(f" - Saving to {out_fname}")
+
+class SegVolumes(Module):
+    def __init__(self, name="seg_volumes", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        seg_dir = self.kwargs.get("seg_dir", "seg_kidney_t2w")
+        segs = self.kwargs.get("segs", {})
+        vol_fname = self.kwargs.get("vol_fname", "volumes.csv")
+
+        LOG.info(f" - Saving volumes from {seg_dir} to {vol_fname}")
+        with open(self.outfile(vol_fname), "w") as f:
+            for name, seg in segs.items():
+                seg_img = self.single_inimg(seg_dir, seg, src=self.OUTPUT)
+                if seg_img is None:
+                    LOG.warn(f"Segmentation not found: {seg}")
+                else:
+                    f.write("%s,%.2f\n" % (name, seg_img.voxel_volume * np.count_nonzero(seg_img.data)))
+
+class KidneyCystClean(Module):
+    def __init__(self, name="seg_kidney_cyst_t2w_clean", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        t2w_glob = self.kwargs.get("seg_t2w_glob", "*mask*.nii.gz")
+        t2w_dir = self.kwargs.get("seg_t2w_dir", "seg_kidney_t2w")
+        t2w_src = self.kwargs.get("seg_t2w_src", self.OUTPUT)
+        t2w_mask = self.single_inimg(t2w_dir, t2w_glob, src=t2w_src)
+
+        cyst_glob = self.kwargs.get("cyst_glob", "kidney_cyst_mask.nii.gz")
+        cyst_dir = self.kwargs.get("cyst_dir", "seg_kidney_cyst_t2w")
+        cyst_src = self.kwargs.get("cyst_src", self.OUTPUT)
+        cyst_seg = self.single_inimg(cyst_dir, cyst_glob, src=cyst_src)
+        if cyst_seg is None:
+            self.no_data("No T2w kidney cyst segmentation found to clean")
+
+        if t2w_mask is not None:
+            LOG.info(f" - Cleaning {cyst_seg.fname} using T2w mask {t2w_mask.fname}")
+            t2w_mask_res_nii = self.resample(t2w_mask, cyst_seg, is_roi=True, allow_rotated=True)
+            t2w_mask_res = (t2w_mask_res_nii.get_fdata() > 0).astype(np.int8)
+            cyst_seg.save_derived(t2w_mask_res, self.outfile("t2w_mask_res.nii.gz"))
+            combined_mask = (t2w_mask_res + cyst_seg.data > 0).astype(np.int8)
+            cyst_seg.save_derived(combined_mask, self.outfile("combined_mask.nii.gz"))
+            blobs = self.blobs_by_size(combined_mask)
+            if len(blobs) < 2:
+                LOG.warn(f"Only {len(blobs)} blobs found - expected 2 (one for each kidney)")
+            else:
+                kidney_blobs = blobs[:2]
+            kidney_blobs = (sum(kidney_blobs) > 0).astype(np.int8)
+            cyst_seg.save_derived(kidney_blobs, self.outfile("kidney_blobs.nii.gz"))
+            cleaned_data = kidney_blobs
+            cleaned_data[t2w_mask_res > 0] = 0
+        else:
+            LOG.warn("No T2w kidney segmentation found - will not clean kidney cyst segmentation")
+            cleaned_data = cyst_seg.data
+
+        cyst_seg.save_derived(cleaned_data, self.outfile("kidney_cyst_mask.nii.gz"))
+        cleaned_mask = self.inimg(self.name, "kidney_cyst_mask.nii.gz", src=self.OUTPUT)
+
+        t2w_map = self.single_inimg(cyst_dir, "kidney_cyst_0000.nii.gz", src=cyst_src)
+        if t2w_map is not None:
+            self.lightbox(t2w_map, cleaned_mask, name="kidney_cyst_t2w_lightbox", tight=True) 
+        else:
+            LOG.warn("No T2w map found - will not create lightbox image")
+
+        # Count number of cysts and volume
+        total_volume = np.count_nonzero(cleaned_mask.data) * cleaned_mask.voxel_volume
+        labelled = skimage.measure.label(cleaned_mask.data)
+        props = skimage.measure.regionprops(labelled)
+        num_cysts = len(props)
+        with open(self.outfile("kidney_cyst.csv"), "w") as f:
+            f.write(f"vol_kidney_cyst,{total_volume}\n")
+            f.write(f"count_kidney_cysts,{num_cysts}\n")
+
