@@ -228,31 +228,47 @@ class T1Molli(Module):
     def process(self):
         molli_dir = self.kwargs.get("molli_dir", "molli_raw")
         molli_glob = self.kwargs.get("molli_glob", "molli_raw*.nii.gz")
-        tis = self.kwargs.get("tis", [])
-        tss = self.kwargs.get("tss", 0.0)
+        molli_src = self.kwargs.get("molli_src", self.INPUT)
+        tis = self.kwargs.get("tis", None)
         if not tis:
-            self.no_data("TIs not specified - cannot do T1 MOLLI fit")
-        if any([ti for ti in tis if ti < 10]):
-            tis = [ti * 1000 for ti in tis]
-            LOG.warn(f"Looks like TIs were specified in seconds - converting to ms")
-        LOG.info(f" - Found {len(tis)} TIs (ms): {tis}")
+            LOG.info(" - TIs not specified - will try to read from metadata")
+        else:
+            if any([ti for ti in tis if ti < 10]):
+                tis = [ti * 1000 for ti in tis]
+                LOG.warn(f"Looks like TIs were specified in seconds - converting to ms")
+            LOG.info(f" - Found {len(tis)} TIs (ms): {tis}")
+        tss = self.kwargs.get("tss", 0.0)
         LOG.info(f" - Using temporal slice spaceing: {tss}")
 
-        imgs = self.inimgs(molli_dir, molli_glob)
-        if not imgs:
-            self.no_data("No raw MOLLI data sets found")
+        imgs = self.inimgs(molli_dir, molli_glob, src=molli_src)
+        if imgs:
+            for img in imgs:
+                LOG.info(f" - Processing MOLLI data from {img.fname}")
+                if not tis:
+                    img_tis = [float(t) for t in img.inversiontimedelay if float(t) > 0]
+                    LOG.info(f" - Found {len(img_tis)} TIs (ms): {img_tis} in metadata")
+                else:
+                    img_tis = tis
 
-        for img in imgs:
-            LOG.info(f" - Processing MOLLI data from {img.fname}")
-            if img.nvols < len(tis):
-                LOG.warn(f"Not enough volumes in raw MOLLI data for provided TIs ({img.nvols} vs {len(tis)}) - ignoring")
-                continue
-            elif img.nvols != len(tis):
-                LOG.warn(f"{img.nvols} volumes in raw MOLLI data, only using first {len(tis)} volumes")
-
-            from ukat.mapping.t1 import T1, magnitude_correct
-            mapper = T1(img.data[..., :len(tis)], np.array(tis), img.affine, parameters=2, tss=tss)
-            mapper.to_nifti(self.outdir, base_file_name=img.fname_noext)
+                if img.nvols < len(img_tis):
+                    LOG.warn(f"Not enough volumes in raw MOLLI data for provided TIs ({img.nvols} vs {len(img_tis)}) - ignoring")
+                    continue
+                elif img.nvols != len(img_tis):
+                    LOG.warn(f"{img.nvols} volumes in raw MOLLI data, only using first {len(img_tis)} volumes")
+                from ukat.mapping.t1 import T1, magnitude_correct
+                mapper = T1(img.data[..., :len(img_tis)], np.array(img_tis), img.affine, parameters=2, tss=tss, molli=True)
+                mapper.to_nifti(self.outdir, base_file_name=img.fname_noext)
+                #img.save_derived(mapper.t1_map, self.outfile(img.fname.replace("t1_raw_molli", "t1_map")))
+                #img.save_derived(mapper.t1_map, self.outfile(img.fname.replace("t1_raw_molli", "t1_conf")))
+        else:
+            map_glob = self.kwargs.get("map_glob", "t1_map*.nii.gz")
+            conf_glob = self.kwargs.get("conf_glob", "t1_conf*.nii.gz")
+            if self.inimgs(molli_dir, map_glob):
+                LOG.info(f" - Copying T1 map/confidence images")
+                self.copyinput(molli_dir, map_glob)
+                self.copyinput(molli_dir, conf_glob)
+            else:
+                self.no_data("No raw MOLLI found and no scanner computer T1 maps either")
 
 class FatFractionDixon(Module):
     def __init__(self, name="fat_fraction", **kwargs):
