@@ -110,22 +110,31 @@ class Module:
     def no_data(self, reason):
         raise ModuleError(f"Can't generate output - no input data: {reason}")
 
-    def resample(self, src, tgt, is_roi, allow_rotated=False):
+    def resample(self, src, tgt=None, is_roi=False, allow_rotated=False, tgt_affine=None, tgt_shape=None, cval=0.0):
         """
-        Resample an image onto the grid from a target image
+        Resample an image onto the grid from a target image or a specified grid affine/shape
+
+        :return: nib.Nifti1Image
         """
         data_src = src.nii.get_fdata()
-        data_tgt = tgt.nii.get_fdata()
-        while data_tgt.ndim < 3:
-            data_tgt = data_tgt[..., np.newaxis]
         while data_src.ndim < 3:
             data_src = data_src[..., np.newaxis]
         
-        tmatrix = np.dot(np.linalg.inv(tgt.affine), src.affine)
+        if tgt is not None:
+            tgt_affine = tgt.affine
+            data_tgt = tgt.nii.get_fdata()
+            tgt_shape = data_tgt.shape
+            tgt_header = tgt.nii.header
+        elif tgt_affine is None or tgt_shape is None:
+            raise ValueError("Need target image or affine/shape")
+        else:
+            tgt_header = None
+
+        tmatrix = np.dot(np.linalg.inv(tgt_affine), src.affine)
         tmatrix = np.linalg.inv(tmatrix)
         affine = tmatrix[:3, :3]
         offset = list(tmatrix[:3, 3])
-        output_shape = list(data_tgt.shape[:3])
+        output_shape = list(tgt_shape[:3])
 
         if data_src.ndim == 4:
             # Make 4D affine with identity transform in 4th dimension
@@ -135,9 +144,9 @@ class Module:
             output_shape.append(data_src.shape[3])
 
         LOG.debug(f"Resampling from\n{src.affine}\n{data_src.shape}")
-        LOG.debug(f"To\n{tgt.affine}\n{data_tgt.shape}")
+        LOG.debug(f"To\n{tgt_affine}\n{tgt_shape}")
         LOG.debug(f"Net\n{affine}\n{offset}")
-        same = np.allclose(src.affine, tgt.affine) and list(data_src.shape[:3]) == output_shape[:3]
+        same = np.allclose(src.affine, tgt_affine) and list(data_src.shape[:3]) == output_shape[:3]
         LOG.debug(f"Same: {same}")
         if same:
             return src.nii
@@ -150,7 +159,9 @@ class Module:
             LOG.debug(np.min(data_src))
             LOG.debug(np.max(data_src))
             res_data = scipy.ndimage.affine_transform(data_src, affine, offset=offset,
-                                                    output_shape=output_shape, order=0 if is_roi else 1, mode='grid-constant')
+                                                    output_shape=output_shape, 
+                                                    order=0 if is_roi else 1, 
+                                                    cval=cval, mode='grid-constant')
         elif not allow_rotated:
             LOG.warn(f"Data is rotated relative to segmentation - will not use this segmentation")
             res_data = np.zeros(output_shape)
@@ -159,11 +170,13 @@ class Module:
             LOG.debug(output_shape)
             LOG.debug(np.min(data_src), np.max(data_src))
             res_data = scipy.ndimage.affine_transform(data_src, affine, offset=offset,
-                                                    output_shape=output_shape, order=0 if is_roi else 1, mode='grid-constant')
+                                                    output_shape=output_shape, 
+                                                    order=0 if is_roi else 1, 
+                                                    cval=cval, mode='grid-constant')
 
         if is_roi:
             res_data = res_data.astype(np.uint8)
-        return nib.Nifti1Image(res_data, tgt.affine, tgt.nii.header)
+        return nib.Nifti1Image(res_data, tgt_affine, tgt_header)
 
     def is_diagonal(self, mat):
         """
