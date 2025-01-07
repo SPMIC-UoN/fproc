@@ -122,6 +122,22 @@ class SegStats(statistics.SegStats):
                     "dir" : "seg_kidney_t1_clean",
                     "glob" : f"kidney_t1_map_{idx}_medulla_r_t1.nii.gz"
                 },
+                f"kidney_cortex_l_{idx}_molli_5" : {
+                    "dir" : "seg_kidney_t1_molli_5_clean",
+                    "glob" : f"kidney_molli_raw_{idx}_5_t1_map_cortex_l_t1.nii.gz"
+                },
+                f"kidney_cortex_r_{idx}_molli_5" : {
+                    "dir" : "seg_kidney_t1_molli_5_clean",
+                    "glob" : f"kidney_t1_map_{idx}_5_t1_map_cortex_r_t1.nii.gz"
+                },
+                f"kidney_medulla_l_{idx}_molli_5" : {
+                    "dir" : "seg_kidney_t1_molli_5_clean",
+                    "glob" : f"kidney_molli_raw_{idx}_5_t1_map_medulla_l_t1.nii.gz"
+                },
+                f"kidney_medulla_r_{idx}_molli_5" : {
+                    "dir" : "seg_kidney_t1_molli_5_clean",
+                    "glob" : f"kidney_t1_map_{idx}_5_t1_map_medulla_r_t1.nii.gz"
+                },
             })
 
             params[f"t1_{idx}"] = {
@@ -132,6 +148,10 @@ class SegStats(statistics.SegStats):
                     f"kidney_cortex_r_{idx}",
                     f"kidney_medulla_l_{idx}",
                     f"kidney_medulla_r_{idx}",
+                    f"kidney_cortex_l_{idx}_molli_5",
+                    f"kidney_cortex_r_{idx}_molli_5",
+                    f"kidney_medulla_l_{idx}_molli_5",
+                    f"kidney_medulla_r_{idx}_molli_5",
                     "spleen",
                     "liver",
                 ]
@@ -146,6 +166,10 @@ class SegStats(statistics.SegStats):
                     f"kidney_cortex_r_{idx}",
                     f"kidney_medulla_l_{idx}",
                     f"kidney_medulla_r_{idx}",
+                    f"kidney_cortex_l_{idx}_molli_5",
+                    f"kidney_cortex_r_{idx}_molli_5",
+                    f"kidney_medulla_l_{idx}_molli_5",
+                    f"kidney_medulla_r_{idx}_molli_5",
                     "spleen",
                     "liver",
                 ]
@@ -156,10 +180,14 @@ class SegStats(statistics.SegStats):
                 "dir" : "t1_molli_7",
                 "glob" : f"molli_raw_{idx}_t1_map.nii.gz",
                 "segs" : [
-                    f"kidney_cortex_l_{idx}",
+                    f"kidney_cortex_l_{idx}",i
                     f"kidney_cortex_r_{idx}",
                     f"kidney_medulla_l_{idx}",
                     f"kidney_medulla_r_{idx}",
+                    f"kidney_cortex_l_{idx}_molli_5",
+                    f"kidney_cortex_r_{idx}_molli_5",
+                    f"kidney_medulla_l_{idx}_molli_5",
+                    f"kidney_medulla_r_{idx}_molli_5",
                     "spleen",
                     "liver",
                 ]
@@ -178,11 +206,6 @@ __version__ = "0.0.1"
 NAME = "mollihr"
 
 MODULES = [
-    # Segmentations
-    segmentations.LiverDixon(),
-    segmentations.SpleenDixon(),
-    segmentations.KidneyDixon(),
-    segmentations.KidneyT1(map_dir="../fsort/molli"),
     # Parameter maps
     maps.B0(),
     maps.FatFractionDixon(),
@@ -190,10 +213,17 @@ MODULES = [
     maps.T2starDixon(),
     T1(),
     MolliRaw5(),
-    maps.T1Molli(name="t1_molli_5", molli_dir="molli_raw_5", molli_src=Module.OUTPUT),
+    maps.T1Molli(name="t1_molli_5", molli_dir="molli_raw_5", molli_src=Module.OUTPUT), # Use this as source for T1 seg
     maps.T1Molli(name="t1_molli_7"),
+    # Segmentations
+    segmentations.LiverDixon(),
+    segmentations.SpleenDixon(),
+    segmentations.KidneyDixon(),
+    segmentations.KidneyT1(map_dir="../fsort/molli"),
+    segmentations.KidneyT1(name="seg_kidney_t1_molli_5", map_dir="t1_molli_5", map_glob="molli_raw_*_5_t1_map.nii.gz"),
     # Segmentation cleaning
     seg_postprocess.KidneyT1Clean(t2w=False),
+    seg_postprocess.KidneyT1Clean(name="seg_kidney_t1_molli_5_clean", srcdir="seg_kidney_t1_molli_5", t1_map_srcdir="t1_molli_5", t2w=False),
     # Statistics
     SegStats(),
 ]
