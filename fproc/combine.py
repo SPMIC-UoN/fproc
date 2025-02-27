@@ -24,7 +24,8 @@ def main():
 
     if options.subjids:
         with open(options.subjids) as f:
-            subjids = [l.strip() for l in f.readlines() if os.path.isdir(os.path.join(options.input, l.strip()))]
+            reader = csv.reader(f)
+            subjids = sorted([row[options.subjids_col].strip() for row in reader])
     else:
         subjids = sorted([d for d in os.listdir(options.input) if os.path.isdir(os.path.join(options.input, d))])
 
@@ -42,10 +43,13 @@ def main():
     for subjid in subjids:
         LOG.info(f" - Subject ID: {subjid}")
         subjdir = os.path.join(options.input, subjid)
+        if not os.path.isdir(subjdir):
+            LOG.warn(f" - Subject directory {subjdir} does not exist")
+            continue
         subj_stats = OrderedDict()
         subj_stats["subjid"] = subjid
-        add_csv_stats(subjid, os.path.join(options.input, subjid), csv_paths, subj_stats)
-        add_kv_stats(subjid, os.path.join(options.input, subjid), paths, subj_stats)
+        add_csv_stats(subjid, subjdir, csv_paths, subj_stats)
+        add_kv_stats(subjid, subjdir, paths, subj_stats)
         stats.append(subj_stats)
 
     with open(options.output, "w") as f:
@@ -77,7 +81,7 @@ def add_kv_stats(subjid, subjdir, paths, subj_stats):
             LOG.warn(f" - Multiple files matching {fglob} - will use first which is {fnames[0]}")
         fname = fnames[0]
 
-        LOG.info(f" - Adding stats from {fname}")
+        LOG.debug(f" - Adding stats from {fname}")
             
         with open(fname) as f:
             for line in f.readlines():
@@ -88,7 +92,8 @@ def add_kv_stats(subjid, subjdir, paths, subj_stats):
                     try:
                         subj_stats[parts[0]] = float(parts[1])
                     except ValueError:
-                        LOG.warn(f" - {fname}: Ignoring line: {line}, value was not numeric")
+                        if parts[1].strip() != "" and parts[0].strip().lower() != "subjid":
+                           LOG.warn(f" - {fname}: Ignoring line: {line}, value was not numeric")
 
 def add_csv_stats(subjid, subjdir, paths, subj_stats):
     for rel_path in paths:
@@ -101,7 +106,7 @@ def add_csv_stats(subjid, subjdir, paths, subj_stats):
             LOG.warn(f" - Multiple files matching {fglob} - will use first which is {fnames[0]}")
         fname = fnames[0]
 
-        LOG.info(f" - Adding CSV stats from {fname}")
+        LOG.debug(f" - Adding CSV stats from {fname}")
         with open(fname) as f:
             lines = f.readlines()
             if len(lines) < 2:
@@ -120,4 +125,5 @@ def add_csv_stats(subjid, subjdir, paths, subj_stats):
                 try:
                     subj_stats[k] = float(v)
                 except ValueError:
-                    LOG.warn(f" - {fname}: Ignoring key: {k}, value {v} was not numeric")
+                    if k.strip().lower() != "subjid":
+                        LOG.warn(f" - {fname}: Ignoring key: {k}, value {v} was not numeric")
