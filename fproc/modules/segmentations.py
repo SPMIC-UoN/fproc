@@ -54,25 +54,10 @@ class LiverDixon(Module):
     def process(self):
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         src = self.kwargs.get("dixon_src", self.INPUT)
-        self.inimg(dixon_dir, "fat.nii.gz", src=src).save(self.outfile("liver_0000"))
-        self.inimg(dixon_dir, "t2star.nii.gz", src=src).save(self.outfile("liver_0001"))
-        self.inimg(dixon_dir, "water.nii.gz", src=src).save(self.outfile("liver_0002"))
-
-        LOG.info(f" - Segmenting LIVER using mDIXON data in: {self.outdir}")
-        self.runcmd([
-                'nnUNetv2_predict',
-                '-i', self.outdir,
-                '-o', self.outdir,
-                '-d', '14',
-                '-f', 'all',
-                '-c', '3d_fullres',
-            ],
-            logfile=f'seg.log'
-        )
-
-        seg = self.inimg(self.name, "liver.nii.gz", src=self.OUTPUT)
-        water = self.inimg(dixon_dir, "water.nii.gz")
-        self.lightbox(water, seg, name="liver_water_lightbox", tight=True)
+        fat = self.inimg(dixon_dir, "fat.nii.gz", src=src)
+        t2star = self.inimg(dixon_dir, "t2star.nii.gz", src=src)
+        water = self.inimg(dixon_dir, "water.nii.gz", src=src)
+        self.run_nnunetv2("14", [fat, t2star, water], "liver", "DIXON", water, "water")
 
 class SpleenDixon(Module):
     def __init__(self, name="seg_spleen_dixon", **kwargs):
@@ -81,25 +66,10 @@ class SpleenDixon(Module):
     def process(self):
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         src = self.kwargs.get("dixon_src", self.INPUT)
-        self.inimg(dixon_dir, "fat.nii.gz", src=src).save(self.outfile("spleen_0000"))
-        self.inimg(dixon_dir, "t2star.nii.gz", src=src).save(self.outfile("spleen_0001"))
-        self.inimg(dixon_dir, "water.nii.gz", src=src).save(self.outfile("spleen_0002"))
-
-        LOG.info(f" - Segmenting SPLEEN using mDIXON data in: {self.outdir}")
-        self.runcmd([
-                'nnUNetv2_predict',
-                '-i', self.outdir,
-                '-o', self.outdir,
-                '-d', '102',
-                '-f', 'all',
-                '-c', '3d_fullres',
-            ],
-            logfile=f'seg.log'
-        )
-
-        seg = self.inimg(self.name, "spleen.nii.gz", src=self.OUTPUT)
-        water = self.inimg(dixon_dir, "water.nii.gz")
-        self.lightbox(water, seg, name="spleen_water_lightbox", tight=True)
+        fat = self.inimg(dixon_dir, "fat.nii.gz", src=src)
+        t2star = self.inimg(dixon_dir, "t2star.nii.gz", src=src)
+        water = self.inimg(dixon_dir, "water.nii.gz", src=src)
+        self.run_nnunetv2("102", [fat, t2star, water], "spleen", "DIXON", water, "water")
 
 class PancreasEthrive(Module):
     def __init__(self):
@@ -107,22 +77,7 @@ class PancreasEthrive(Module):
 
     def process(self):
         ethrive = self.inimg("ethrive", "ethrive.nii.gz")
-        ethrive.save(self.outfile("pancreas_0000"))
-
-        LOG.info(f" - Segmenting PANCREAS using eTHRIVE data in: {self.outdir}")
-        self.runcmd([
-                'nnUNetv2_predict',
-                '-i', self.outdir,
-                '-o', self.outdir,
-                '-d', '234',
-                '-f', 'all',
-                '-c', '3d_fullres',
-            ],
-            logfile=f'seg.log'
-        )
-
-        seg = self.inimg(self.name, "pancreas.nii.gz", src=self.OUTPUT)
-        self.lightbox(ethrive, seg, name="pancreas_ethrive_lightbox", tight=True)
+        self.run_nnunetv2("234", [ethrive], "pancreas", "eTHRIVE", ethrive, "ethrive")
 
 class KidneyCystT2w(Module):
     def __init__(self, name="seg_kidney_cyst_t2w", **kwargs):
@@ -133,22 +88,7 @@ class KidneyCystT2w(Module):
         t2w_glob = self.kwargs.get("t2w_glob", "t2w.nii.gz")
         t2w_src = self.kwargs.get("t2w_src", self.INPUT)
         t2w_map = self.single_inimg(t2w_dir, t2w_glob, src=t2w_src)
-
-        if t2w_map is None:
-            self.no_data("No T2w map found")
-        
-        LOG.info(f" - Segmenting KIDNEY CYSTS using T2w data: {t2w_map.fname}")
-        t2w_map.save(self.outfile("kidney_cyst_0000.nii.gz"))
-        self.runcmd([
-                'nnUNetv2_predict',
-                '-i', self.outdir,
-                '-o', self.outdir,
-                '-d', '244',
-                '-f', 'all',
-                '-c', '3d_fullres',
-            ],
-            logfile=f'seg.log'
-        )
+        self.run_nnunetv2("244", [t2w_map], "kidney_cyst", "T2w")
 
         # Remove normal kidney from mask
         seg = self.inimg(self.name, "kidney_cyst.nii.gz", src=self.OUTPUT)
@@ -172,23 +112,25 @@ class KidneyCystT2w(Module):
 
 
 class KidneyT1(Module):
-    def __init__(self, map_dir="t1_kidney", map_glob="t1_map*.nii.gz"):
-        Module.__init__(self, "seg_kidney_t1")
+    def __init__(self, name="seg_kidney_t1", map_dir="t1_kidney", map_glob="t1_map*.nii.gz"):
+        Module.__init__(self, name)
         self._dir = map_dir
         self._glob = map_glob
 
     def process(self):
         t1_maps = self.inimgs(self._dir, self._glob, is_depfile=True)
         if not t1_maps:
-            self.no_data("No T1 maps found to segment")
+            self.no_data(f"No T1 maps found to segment in {self._dir}/{self._glob}")
 
         single_map = len(t1_maps) == 1
         for t1_map in t1_maps:
             LOG.info(f" - Segmenting KIDNEY using T1 data: {t1_map.fname}")
             if single_map:
                 out_prefix = "kidney"
+                t1_map.save(self.outfile("t1_map.nii.gz"))
             else:
                 out_prefix = f'kidney_{t1_map.fname_noext}'
+                t1_map.save(self.outfile(t1_map.fname))
             self.runcmd([
                 'kidney_t1_seg',
                 '--input', t1_map.dirname,
@@ -206,8 +148,8 @@ class KidneyT1(Module):
             self.lightbox(t1_map, seg, name=f"{out_prefix}_t1_lightbox", tight=True)
 
 class KidneyT2w(Module):
-    def __init__(self, t2w_srcdir="t2w"):
-        Module.__init__(self, "seg_kidney_t2w")
+    def __init__(self, t2w_srcdir="t2w", **kwargs):
+        Module.__init__(self, "seg_kidney_t2w", **kwargs)
         self.t2w_srcdir = t2w_srcdir
 
     def process(self):
@@ -234,6 +176,17 @@ class KidneyT2w(Module):
         mask_img = ImageFile(self.outfile("kidney_mask.nii.gz"), warn_json=False)
         self.lightbox(t2w_map, mask_img, "kidney_t2w_lightbox")
 
+        vols_fname = self.kwargs.get("vols_fname", "tkv.csv")
+        if vols_fname:
+            LOG.info(f" - Saving volumes to {vols_fname}")
+            with open(self.outfile(vols_fname), "w") as f:
+                for roi in ["left", "right", "mask"]:
+                    img = self.single_inimg(self.outdir, f"*{roi}*.nii.gz")
+                    name = roi if roi != "mask" else "total"
+                    voxel_vol = img.voxel_volume
+                    vol = voxel_vol * np.count_nonzero(img.data)
+                    f.write(f"kv_{name},{vol}\n")
+
 class SatDixon(Module):
     def __init__(self, name="seg_sat_dixon", **kwargs):
         Module.__init__(self, name, **kwargs)
@@ -241,23 +194,9 @@ class SatDixon(Module):
     def process(self):
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         src = self.kwargs.get("dixon_src", self.INPUT)
-        self.inimg(dixon_dir, "fat.nii.gz", src=src).save(self.outfile("sat_0000"))
-
-        LOG.info(f" - Segmenting SAT using mDIXON data in: {self.outdir}")
-        self.runcmd([
-                'nnUNetv2_predict',
-                '-i', self.outdir,
-                '-o', self.outdir,
-                '-d', '141',
-                '-f', 'all',
-                '-c', '3d_fullres',
-            ],
-            logfile=f'seg_dixon_sat_uunet.log'
-        )
-
-        seg = self.inimg(self.name, "sat.nii.gz", src=self.OUTPUT)
-        water = self.inimg(dixon_dir, "water.nii.gz")
-        self.lightbox(water, seg, name="sat_water_lightbox", tight=True)
+        fat = self.inimg(dixon_dir, "fat.nii.gz", src=src)
+        water = self.inimg(dixon_dir, "water.nii.gz", src=src)
+        self.run_nnunetv2("141", [fat], "sat", "DIXON", water, "water")
 
 class BodyDixon(Module):
     def __init__(self, name="seg_body_dixon", **kwargs):
@@ -269,8 +208,9 @@ class BodyDixon(Module):
         """
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         src = self.kwargs.get("dixon_src", self.INPUT)
-        water_thresh = self.kwargs.get(water_thresh, 20)
+        water_thresh = self.kwargs.get("water_thresh", 20)
         water = self.inimg(dixon_dir, "water.nii.gz", src=src)
+        LOG.info(f" - Segmenting body by thresholding water map {water.fname} at level {water_thresh}")
 
         # Work slicewise and try to segment the body by thresholding, filling holes and
         # selecting the largest contiguous region (blob)
@@ -298,37 +238,50 @@ class VatDixon(Module):
         """
         Get VAT from all fat - (SAT + organ masks)
         """
-        dixon_dir = self.kwargs.get("dixon_dir", "dixon")
-        src = self.kwargs.get("dixon_src", self.INPUT)
-        fat = self.inimg(dixon_dir, "fat_fraction.nii.gz", src=src)
+        ff_dir = self.kwargs.get("ff_dir", "fat_fraction")
+        ff_src = self.kwargs.get("ff_src", self.OUTPUT)
+        ff_thresh = self.kwargs.get("ff_thresh", 85)
+        ff_glob = self.kwargs.get("ff_glob", "fat_fraction.nii.gz")
+        ff = self.inimg(ff_dir, ff_glob, src=ff_src)
         organs = self.kwargs.get("organs", {})
-        vat_data = (fat.data > 85).astype(np.int8)
+        vat_data = (ff.data > ff_thresh).astype(np.int8)
         while vat_data.ndim > 3:
             vat_data = vat_data.squeeze(-1)
 
         body = self.inimg("seg_body_dixon", "body.nii.gz", src=self.OUTPUT)
         vat_data[body.data == 0] = 0
+        ff.save_derived(vat_data, self.outfile("fat.nii.gz"))
 
         sat = self.inimg("seg_sat_dixon", "sat.nii.gz", src=self.OUTPUT)
-        fat.save_derived(vat_data, self.outfile("fat.nii.gz"))
         vat_data[sat.data > 0] = 0
-        for organ_dir, fname in self._organs.items():
+        for organ_dir, fname in organs.items():
             organ_seg = self.inimg(organ_dir, fname, src=self.OUTPUT, check=False)
             if organ_seg is None:
-                LOG.warn(f"Could not find segmentation: {organ_dir}/{fname}")
+                msg = f"Could not find segmentation: {organ_dir}/{fname}"
+                if self.kwargs.get("fail_on_missing", True):
+                    self.bad_data(msg)
+                else:
+                    LOG.warn(msg)
             else:
-                res_data = self.resample(organ_seg, fat, is_roi=True, allow_rotated=True).get_fdata().astype(np.int8)
+                LOG.info(f" - Removing organ {organ_dir}/{fname} from VAT")
+                res_data = self.resample(organ_seg, ff, is_roi=True, allow_rotated=True).get_fdata().astype(np.int8)
                 vat_data[res_data > 0] = 0
-                fat.save_derived(res_data, self.outfile(fname.replace(".nii.gz", "_res.nii.gz")))
+                ff.save_derived(res_data, self.outfile(fname.replace(".nii.gz", "_res.nii.gz")))
 
         # FIXME temporary remove top/bottom slices to avoid problem with SAT segmentor
         vat_data[..., 0] = 0
         vat_data[..., -1] = 0
 
-        fat.save_derived(vat_data, self.outfile("vat.nii.gz"))
+        ff.save_derived(vat_data, self.outfile("vat.nii.gz"))
         seg = self.inimg(self.name, "vat.nii.gz", src=self.OUTPUT)
-        water = self.inimg(dixon_dir, "water.nii.gz")
-        self.lightbox(water, seg, name="vat_water_lightbox", tight=True)
+        
+        dixon_dir = self.kwargs.get("dixon_dir", "dixon")
+        dixon_src = self.kwargs.get("dixon_src", self.INPUT)
+        water = self.inimg(dixon_dir, "water.nii.gz", src=dixon_src)
+        if water is not None:
+            self.lightbox(water, seg, name="vat_water_lightbox", tight=True)
+        else:
+            LOG.warn(" - No water map found to overlay with VAT")
 
 class LegDixon(Module):
     def __init__(self, name="seg_leg_dixon", **kwargs):
@@ -359,23 +312,9 @@ class KidneyDixon(Module):
     def process(self):
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         src = self.kwargs.get("dixon_src", self.INPUT)
-        self.inimg(dixon_dir, "fat.nii.gz", src=src).save(self.outfile("kidney_0000"))
-        self.inimg(dixon_dir, "fat_fraction.nii.gz", src=src).save(self.outfile("kidney_0001"))
-        self.inimg(dixon_dir, "t2star.nii.gz", src=src).save(self.outfile("kidney_0002"))
-        self.inimg(dixon_dir, "water.nii.gz", src=src).save(self.outfile("kidney_0003"))
+        fat = self.inimg(dixon_dir, "fat.nii.gz", src=src)
+        ff =self.inimg(dixon_dir, "fat_fraction.nii.gz", src=src)
+        t2star = self.inimg(dixon_dir, "t2star.nii.gz", src=src)
+        water = self.inimg(dixon_dir, "water.nii.gz", src=src)
+        self.run_nnunetv2("326", [fat, ff, t2star, water], "kidney", "DIXON", water, "water")
 
-        LOG.info(f" - Segmenting KIDNEY using mDIXON data in: {self.outdir}")
-        self.runcmd([
-                'nnUNetv2_predict',
-                '-i', self.outdir,
-                '-o', self.outdir,
-                '-d', self.kwargs.get("model_id", '326'),
-                '-f', 'all',
-                '-c', '3d_fullres',
-            ],
-            logfile=f'seg_dixon_kidney_uunet.log'
-        )
-
-        seg = self.inimg(self.name, "kidney.nii.gz", src=self.OUTPUT)
-        water = self.inimg(dixon_dir, "water.nii.gz")
-        self.lightbox(water, seg, name="kidney_water_lightbox", tight=True)
