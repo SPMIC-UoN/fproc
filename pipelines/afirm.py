@@ -465,7 +465,6 @@ class T1RadiomicsRight(statistics.Radiomics):
 
 MODULES = [
     # Derived maps
-    maps.T1Molli(name="t1_molli_nocorr", molli_dir="t1_molli", molli_glob="t1_raw_molli*.nii.gz", molli=False, parameters=2),
     maps.T1Molli(name="t1_molli", molli_dir="t1_molli", molli_glob="t1_raw_molli*.nii.gz", t1_thresh=(0, 5000)),
     maps.T1Molli(name="t1_molli_mdr", molli_dir="t1_molli_raw", molli_glob="t1_molli_raw*.nii.gz", mdr=True, use_scanner_maps=False),
     maps.T1Molli(name="t1_molli_nomdr", molli_dir="t1_molli_raw", molli_glob="t1_molli_raw*.nii.gz", mdr=False, use_scanner_maps=False),
@@ -474,17 +473,6 @@ MODULES = [
     regrid.StitchSlices(
         "t1_stitch_molli",
         img_dir="t1_molli",
-        imgs={
-            "*map_t1*.nii.gz" : "map_t1.nii.gz",
-            "*t1_map*.nii.gz" : "map_t1.nii.gz",
-            "*conf_*.nii.gz" : "map_t1_conf.nii.gz",
-            "*_t1_map*.nii.gz" : "map_t1_conf.nii.gz",
-            "*t1_conf*.nii.gz" : "map_t1_conf.nii.gz",
-        }
-    ), 
-    regrid.StitchSlices(
-        "t1_stitch_molli_nocorr",
-        img_dir="t1_molli_nocorr",
         imgs={
             "*map_t1*.nii.gz" : "map_t1.nii.gz",
             "*t1_map*.nii.gz" : "map_t1.nii.gz",
@@ -532,7 +520,6 @@ MODULES = [
     # Segmentations
     segmentations.KidneyCystT2w(t2w_dir="t2w", t2w_glob="t2w.nii.gz", t2w_src=Module.INPUT),
     segmentations.KidneyT1(map_dir="t1_stitch_molli", map_glob="map_t1_conf.nii.gz"),
-    segmentations.KidneyT1(name="seg_kidney_t1_nocorr", map_dir="t1_stitch_molli_nocorr", map_glob="map_t1_conf.nii.gz"),
     segmentations.KidneyT1(name="seg_kidney_t1_mdr", map_dir="t1_stitch_molli_mdr", map_glob="map_t1.nii.gz"),
     segmentations.KidneyT2w(),
     #segmentations.BodyDixon(),
