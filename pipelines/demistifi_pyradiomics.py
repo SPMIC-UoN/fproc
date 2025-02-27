@@ -1,3 +1,4 @@
+import glob
 import logging
 import os
 
@@ -5,8 +6,6 @@ import nibabel as nib
 import numpy as np
 import radiomics
 
-from fproc.options import ArgumentParser
-from fproc.pipeline import Pipeline
 from fproc.module import Module
 
 __version__ = "0.0.1"
@@ -19,15 +18,24 @@ class Nifti(Module):
 
     def process(self):
         datadir = self.pipeline.options.input
-        t1 = os.path.join(datadir, "T1_asc3p2p_t1ad.img")
-        if not os.path.exists(t1):
-            t1 = os.path.join(datadir, "T1_asc_d3p2p_t1ad.img")
+        imgs = list(glob.glob(os.path.join(datadir, "*.img")))
+        t1s = [img for img in imgs if "t1" in img.lower() and "mask" not in img.lower()]
+        if not t1s:
+            self.no_data(f"No T1 data found in {datadir}")
+        elif len(t1s) > 1:
+            LOG.warn(f"Multiple T1 data files found in {datadir}: {t1s}: choosing first")
+        t1 = t1s[0]
         nii_t1 = nib.load(t1)
         LOG.info(f" - T1 data from {t1}: {nii_t1.shape}")
         nii_t1 = nib.Nifti1Image(nii_t1.get_fdata(), nii_t1.header.get_best_affine(), nii_t1.header)
         nii_t1.to_filename(self.outfile("t1.nii.gz"))
 
-        mask = os.path.join(datadir, "T1_asc_mask.img")
+        masks = [img for img in imgs if "mask" in img.lower()]
+        if not masks:
+            self.no_data(f"No mask data found in {datadir}")
+        elif len(masks) > 1:
+            LOG.warn(f"Multiple mask data files found in {datadir}: {masks}: choosing first")
+        mask = masks[0]
         nii_mask = nib.load(mask)
         LOG.info(f" - mask data from {mask}: {nii_mask.shape}")
         # Sometimes the mask is not in the right image space so force it to the same as the T1
@@ -43,7 +51,7 @@ class PyRadiomics(Module):
         mask = self.inimg("nifti", "mask.nii.gz", is_depfile=True)
         mask_restricted = np.copy(mask.data)
         mask_restricted[t1.data < 200] = 0
-        mask_restricted[t1.data > 1200] = 0
+        mask_restricted[t1.data > 1000] = 0
         mask.save_derived(mask_restricted, self.outfile("mask_restricted.nii.gz"))
 
         extractor = radiomics.featureextractor.RadiomicsFeatureExtractor()
@@ -57,18 +65,11 @@ class PyRadiomics(Module):
                     continue
                 f.write(f"{k},{v}\n")
 
+__version__ = "0.0.1"
+
+NAME = "demistifi_pyradiomics"
+
 MODULES = [
     Nifti(),
     PyRadiomics()
 ]
-
-class DemistifiPyradiomicsArgumentParser(ArgumentParser):
-    def __init__(self):
-        ArgumentParser.__init__(self, "demistifi_pyradiomics", __version__)
-        
-class DemistifiPyradiomics(Pipeline):
-    def __init__(self):
-        Pipeline.__init__(self, "demistifi_pyradiomics", __version__, DemistifiPyradiomicsArgumentParser(), MODULES)
-
-if __name__ == "__main__":
-    DemistifiPyradiomics().run()

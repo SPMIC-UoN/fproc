@@ -139,10 +139,15 @@ class SegStats(statistics.SegStats):
                 },
             },
             params={
-                "ff" : {
+                "ff_scanner" : {
                     "dir" : "fat_fraction",
-                    "glob" : "ff_orig.nii.gz",
-                    "limits" : (0, 1),
+                    "glob" : "ff_scanner.nii.gz",
+                    "limits" : (0, 100),
+                },
+                "ff_calc" : {
+                    "dir" : "fat_fraction",
+                    "glob" : "ff_calc.nii.gz",
+                    "limits" : (0, 100),
                 },
                 "t2star" : {
                     "dir" : "t2star_dixon",
@@ -167,6 +172,3 @@ MODULES = [
     # Statistics
     SegStats(),
 ]
-
-def add_options(parser):
-    parser.add_argument("--leg-dixon-model", help="Filename or URL for segmentation model weights")

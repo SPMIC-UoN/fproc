@@ -20,7 +20,7 @@ class PancreasSegEro(Module):
     def process(self):
         seg_origs = self.inimgs("seg_pancreas_ethrive_fix", "pancreas.nii.gz", is_depfile=True)
         if not seg_origs:
-            self.no_data()
+            self.no_data("No pancreas segementations found")
         else:
             if len(seg_origs) > 1:
                 LOG.warn(" - Multiple pancreas segmentations found - using first")
@@ -43,8 +43,8 @@ class PancreasSegRestricted(Module):
         seg_orig = self.inimg("seg_pancreas_ethrive_fix", "pancreas.nii.gz", is_depfile=True)
         ff = self.inimg("fat_fraction", "fat_fraction.nii.gz", is_depfile=True)
         ff_resamp = self.resample(ff, seg_orig, is_roi=False).get_fdata().squeeze()
-        ff_30 = ff_resamp < 0.3
-        ff_50 = ff_resamp < 0.5
+        ff_30 = ff_resamp < 30
+        ff_50 = ff_resamp < 50
         seg_30 = np.logical_and(seg_orig.data > 0, ff_30)
         seg_50 = np.logical_and(seg_orig.data > 0, ff_50)
         seg_orig.save_derived(ff_resamp, self.outfile("fat_fraction.nii.gz"))
@@ -52,30 +52,6 @@ class PancreasSegRestricted(Module):
         seg_orig.save_derived(ff_50, self.outfile("fat_fraction_lt_50.nii.gz"))
         seg_orig.save_derived(seg_30, self.outfile("pancreas_ff_lt_30.nii.gz"))
         seg_orig.save_derived(seg_50, self.outfile("pancreas_ff_lt_50.nii.gz"))
-
-class FatFraction(Module):
-    def __init__(self):
-        Module.__init__(self, "fat_fraction")
-
-    def process(self):
-        fat = self.inimg("dixon", "fat.nii.gz")
-        water = self.inimg("dixon", "water.nii.gz")
-
-        ff = fat.data.astype(np.float32) / (fat.data + water.data)
-        fat.save_derived(ff, self.outfile("fat_fraction.nii.gz"))
-
-class T2Star(Module):
-    def __init__(self):
-        Module.__init__(self, "t2star")
-
-    def process(self):
-        imgs = self.copyinput("dixon", "t2star.nii.gz")
-        if imgs:
-            # 100 is a fill value - replace with something easier to exclude in stats
-            LOG.info(" - Saving T2* map with excluded fill value")
-            exclude_fill = np.copy(imgs[0].data)
-            exclude_fill[np.isclose(exclude_fill, 100)] = -9999
-            imgs[0].save_derived(exclude_fill, self.outfile("t2star_exclude_fill.nii.gz"))
 
 class T2(CopyModule):
     def __init__(self):
@@ -147,7 +123,7 @@ class SegStats(statistics.SegStats):
             self, name="stats", 
             segs={
                 "liver" : {
-                    "dir" : "liver_seg_fix",
+                    "dir" : "seg_liver_dixon_fix",
                     "glob" : "liver.nii.gz"
                 },
                 "spleen" : {
@@ -155,10 +131,9 @@ class SegStats(statistics.SegStats):
                     "glob" : "spleen.nii.gz"
                 },
                 "pancreas_nonero" : {
-                    # Non-eroded pancreas seg for volumes only
                     "dir" : "seg_pancreas_ethrive_fix",
                     "glob" : "pancreas.nii.gz",
-                    "params" : []
+                    "params" : []  # Volumes only
                 },
                 "pancreas" : {
                     # Eroded pancreas seg for params
@@ -174,9 +149,14 @@ class SegStats(statistics.SegStats):
                     "glob" : "pancreas_ff_lt_50.nii.gz",
                 },
                 "sat" : {
-                    "dir" : "sat_seg_fix",
+                    "dir" : "seg_sat_dixon_fix",
                     "glob" : "sat.nii.gz",
-                    "params" : ["dummy"]  # Don't apply to any parameter maps
+                    "params" : []  # Volumes only
+                },
+                "vat" : {
+                    "dir" : "seg_vat_dixon",
+                    "glob" : "vat.nii.gz",
+                    "params" : []  # Volumes only
                 },
                 "kidney_cortex_l" : {
                     "dir" : "seg_kidney_t1",
@@ -194,6 +174,11 @@ class SegStats(statistics.SegStats):
                     "dir" : "seg_kidney_t1",
                     "glob" : "kidney_medulla_r_t1.nii.gz"
                 },
+                "kidney_dixon" : {
+                    "dir" : "seg_kidney_dixon",
+                    "glob" : "kidney.nii.gz",
+                    "params" : []  # Volumes only
+                },
             },
             params={
                 "t2star" : {
@@ -203,8 +188,8 @@ class SegStats(statistics.SegStats):
                 },
                 "ff" : {
                     "dir" : "fat_fraction",
-                    "glob" : "fat_fraction.nii.gz",
-                    "limits" : (0, 1),
+                    "glob" : "fat_fraction_scanner.nii.gz",
+                    "limits" : (0, 100),
                 },
                 "t1_liver" : {
                     "dir" : "t1_liver",
@@ -242,31 +227,68 @@ class SegStats(statistics.SegStats):
 NAME="bariatric"
 
 MODULES = [
-    FatFraction(),
+    maps.FatFractionDixon(),
     maps.B0(),
     CopyModule("b1"),
     T2(),
-    T2Star(),
+    maps.T2starDixon(),
     T1Liver(),
     T1Kidney(),
     SeT1Map(),
     AdcMap(),
+    segmentations.KidneyDixon(model_id="422"),
     segmentations.LiverDixon(),
     segmentations.SpleenDixon(),
+    segmentations.SatDixon(),
+    segmentations.BodyDixon(),
     segmentations.KidneyT1(),
     segmentations.PancreasEthrive(),
-    segmentations.SatDixon(),
     seg_postprocess.KidneyT1Clean(t2w=False),
-    seg_postprocess.SegFix("seg_pancreas_ethrive", "pancreas.nii.gz", "dixon", "water.nii.gz", "pancreas_masks"),
-    seg_postprocess.SegFix("seg_liver_dixon", "liver.nii.gz", "dixon", "water.nii.gz", "liver_masks"),
-    seg_postprocess.SegFix("seg_sat_dixon", "sat.nii.gz", "dixon", "water.nii.gz", "sat_masks"),
+    seg_postprocess.SegFix(
+        "seg_pancreas_ethrive",
+        fix_dir_option="pancreas_masks",
+        segs={
+            "pancreas.nii.gz" : "%s_*.nii.gz",
+        },
+        map_dir="dixon",
+        map_fname="water.nii.gz",
+        map_src=Module.INPUT,
+    ),
+    seg_postprocess.SegFix(
+        "seg_liver_dixon",
+        fix_dir_option="liver_masks",
+        segs={
+            "liver.nii.gz" : "%s_*.nii.gz",
+        },
+        map_dir="dixon",
+        map_fname="water.nii.gz",
+        map_src=Module.INPUT,
+    ),
+    seg_postprocess.SegFix(
+        "seg_sat_dixon",
+        fix_dir_option="sat_masks",
+        segs={
+            "sat.nii.gz" : "%s_*.nii.gz",
+        },
+        map_dir="dixon",
+        map_fname="water.nii.gz",
+        map_src=Module.INPUT,
+    ),
+    seg_postprocess.LargestBlob("seg_pancreas_ethrive_fix", "pancreas.nii.gz"),
     PancreasSegEro(),
     PancreasSegRestricted(),
+    segmentations.VatDixon(
+        organs={
+            "seg_liver_dixon_fix" : "liver.nii.gz",
+            "seg_spleen_dixon" : "spleen.nii.gz",
+            "seg_pancreas_ethrive_fix_largestblob" : "pancreas.nii.gz",
+            "seg_kidney_dixon" : "kidney.nii.gz"
+        }
+    ),
     SegStats(),
 ]
 
 def add_options(parser):
-    parser.add_argument("--kidney-t1-model", help="Filename or URL for T1 segmentation model weights")
     parser.add_argument("--pancreas-masks", help="Directory containing manual pancreas masks")
     parser.add_argument("--liver-masks", help="Directory containing manual liver masks")
     parser.add_argument("--sat-masks", help="Directory containing manual SAT masks")

@@ -118,7 +118,7 @@ class Stats(statistics.SegStats):
                     "glob" : "*r2star_loglin*.nii.gz",
                 },
                 "t1" : {
-                    "dir" : "t1_stitched",
+                    "dir" : "t1_stitched_fix",
                     "glob" : "t1_conf.nii.gz",
                     "seg_overrides" : {
                         "kidney_cortex_l" : {"dir" : "seg_t1_clean_native"},
@@ -130,7 +130,7 @@ class Stats(statistics.SegStats):
                     }
                 },
                 "t1_noclean" : {
-                    "dir" : "t1_stitched",
+                    "dir" : "t1_stitched_fix",
                     "glob" : "t1_conf.nii.gz",
                     "seg_overrides" : {
                         "kidney_cortex_l" : {"dir" : "seg_t1_clean_native_generic"},
@@ -180,7 +180,7 @@ class Stats(statistics.SegStats):
             seg_volumes=False,
         )
 
-NAME="tk21"
+NAME="normative"
 
 MODULES = [
     maps.T1Molli(name="t1_map", molli_dir="t1", molli_glob="t1_raw_molli*.nii.gz"),
@@ -200,6 +200,18 @@ MODULES = [
     T1MolliMetadata(),
     segmentations.KidneyT1(map_dir="t1_stitched"),
     segmentations.KidneyT2w(),
+    maps.MapFix(
+        "t1_stitched",
+        fix_dir_option="seg_kidney_t1_fix",
+        maps={
+            "t1_map.nii.gz" : {
+                "glob" : "%s/t1_map.nii.gz",
+            },
+            "t1_conf.nii.gz" : {
+                "glob" : "%s/t1_map.nii.gz",
+            },
+        },
+    ),
     seg_postprocess.SegFix(
         "seg_kidney_t1",
         fix_dir_option="seg_kidney_t1_fix",
@@ -225,12 +237,12 @@ MODULES = [
                 "fname" : "seg_kidney_medulla_r.nii.gz",
             },
         },
-        map_dir="t1_stitched",
+        map_dir="t1_stitched_fix",
         map_fname="t1_map.nii.gz"
     ),
     align.FlirtAlignOnly(
         name="seg_kidney_t1_align_t2star",
-        in_dir="t1_stitched",
+        in_dir="t1_stitched_fix",
         in_glob="t1_map.nii.gz",
         ref_dir="t2star",
         ref_glob="last_echo.nii.gz",
@@ -253,7 +265,7 @@ MODULES = [
         name="seg_t1_clean_native",
         srcdir="seg_kidney_t1_fix",
         seg_t1_glob="seg_kidney*.nii.gz",
-        t1_map_srcdir="t1_stitched",
+        t1_map_srcdir="t1_stitched_fix",
         t1_map_glob="t1_map.nii.gz",
         t2w=True
     ),
@@ -261,7 +273,7 @@ MODULES = [
         name="seg_t1_clean_native_generic",
         srcdir="seg_kidney_t1_fix",
         seg_t1_glob="seg_kidney*.nii.gz",
-        t1_map_srcdir="t1_stitched",
+        t1_map_srcdir="t1_stitched_fix",
         t1_map_glob="t1_map.nii.gz",
         t2w=False
     ),

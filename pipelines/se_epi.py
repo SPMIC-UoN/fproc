@@ -78,6 +78,7 @@ class Nifti(Module):
 
         for name, fname, subdir, matcher_glob in [
             ("T1", "t1", "T1_maps", f"{subjid}_t1*.nii*"),
+            ("T1 3-param", "t1_3p", "T1_maps_3param", f"{subjid}_3p_t1*.nii*"),
             ("pCASL", "asl_pcasl", "ASL", f"{subjid}_*pCASL*perc_change*.nii*"),
             ("FAIR", "asl_fair", "ASL", f"{subjid}_*FAIR*perc_change*.nii*"),
             ("ADC", "adc", "DWI", f"{subjid}_ADCmap.nii*"),
@@ -122,6 +123,10 @@ class SegStats(statistics.SegStats):
                 "t1" : {
                     "dir" : "nifti",
                     "glob" : "t1.nii.gz",
+                },
+                "t1_3p" : {
+                    "dir" : "nifti",
+                    "glob" : "t1_3p.nii.gz",
                 },
                 "asl_pcasl" : {
                     "dir" : "nifti",
