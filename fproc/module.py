@@ -88,11 +88,12 @@ class Module:
 
     def single_inimg(self, dir, globexpr, src=None, is_depfile=False, warn=True):
         imgs = self.inimgs(dir, globexpr, src, is_depfile)
-        if warn and not imgs:
-            LOG.warn(f" - No images found matching {dir}/{globexpr}")
+        if not imgs:
+            if warn:
+                LOG.warn(f" - No images found matching {dir}/{globexpr} in {src}")
             return None
         elif warn and len(imgs) > 1:
-            LOG.warn(f" - Multiple reference images found matching {dir}/{globexpr}")
+            LOG.warn(f" - Multiple reference images found matching {dir}/{globexpr} in {src}")
             LOG.warn(f" - using first: {imgs[0].fname}")
         return imgs[0]
 
@@ -143,6 +144,9 @@ class Module:
         else:
             tgt_header = None
 
+        tgt_shape = list(tgt_shape)
+        while len(tgt_shape) < 3:
+            tgt_shape.append(1)
         tmatrix = np.dot(np.linalg.inv(tgt_affine), src.affine)
         tmatrix = np.linalg.inv(tmatrix)
         affine = tmatrix[:3, :3]
@@ -164,24 +168,25 @@ class Module:
         if same:
             return src.nii
         
-        if self.is_diagonal(affine):
-            # Use faster sequence mode
-            affine = np.diagonal(affine)
-            LOG.debug(affine)
-            LOG.debug(output_shape)
-            LOG.debug(np.min(data_src))
-            LOG.debug(np.max(data_src))
-            res_data = scipy.ndimage.affine_transform(data_src, affine, offset=offset,
-                                                    output_shape=output_shape, 
-                                                    order=0 if is_roi else 1, 
-                                                    cval=cval, mode='grid-constant')
-        elif not allow_rotated:
+        #if self.is_diagonal(affine):
+        #    # Use faster sequence mode
+        #    affine = np.diagonal(affine)
+        #    LOG.debug(str(affine))
+        #    LOG.debug(str(output_shape))
+        #    LOG.debug(str(np.min(data_src)))
+        #    LOG.debug(str(np.max(data_src)))
+        #    res_data = scipy.ndimage.affine_transform(data_src, affine, offset=offset,
+        #                                            output_shape=output_shape, 
+        #                                            order=0 if is_roi else 1, 
+        #                                            cval=cval, mode='grid-constant')
+        if not allow_rotated and not self.is_diagonal(affine):
             LOG.warn(f"Data is rotated relative to segmentation - will not use this segmentation")
             res_data = np.zeros(output_shape)
         else:
-            LOG.debug(affine)
-            LOG.debug(output_shape)
-            LOG.debug(np.min(data_src), np.max(data_src))
+            LOG.debug(str(affine))
+            LOG.debug(str(output_shape))
+            LOG.debug(str(np.min(data_src)))
+            LOG.debug(str(np.max(data_src)))
             res_data = scipy.ndimage.affine_transform(data_src, affine, offset=offset,
                                                     output_shape=output_shape, 
                                                     order=0 if is_roi else 1, 
@@ -316,6 +321,32 @@ class Module:
                 blob_masks.append(blob_mask)
 
         return blob_masks
+
+    def run_nnunetv2(self, dataset_id, input_imgs, organ, data_name="", overlay_img=None, overlay_name=None):
+        LOG.info(f" - Segmenting {organ.upper()} using {data_name} data in: {self.outdir}")
+        if any([img is None for img in input_imgs]):
+            self.no_data(f"Missing input images for {organ} segmentation")
+
+        for idx, img in enumerate(input_imgs):
+            img.reorient2std().save(self.outfile(f"{organ}_000{idx}.nii.gz"))
+        self.runcmd([
+                'nnUNetv2_predict',
+                '-i', self.outdir,
+                '-o', self.outdir,
+                '-d', str(dataset_id),
+                '-f', 'all',
+                '-c', '3d_fullres',
+                '-device', 'cpu',
+            ],
+            logfile=f'seg.log'
+        )
+
+        if overlay_img:
+            seg = self.inimg(self.name, f"{organ}.nii.gz", src=self.OUTPUT)
+            if not overlay_name:
+                overlay_name = overlay_img.fname_noext
+            LOG.info(f" - Generating overlay image of {organ.upper()} onto {overlay_name.upper()}")
+            self.lightbox(overlay_img, seg, name=f"{organ}_{overlay_name}_lightbox", tight=True)
 
 class CopyModule(Module):
     """
