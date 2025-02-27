@@ -24,27 +24,27 @@ class SegStats(Module):
                 ("liver",) : (500, 1300),
                 ("spleen",) : (900, 1660),
                 ("pancreas",) : (400, 1300),
-                ("kidney", "cortex", "medulla") : (1000, 2500),
+                ("kidney", "cortex", "medulla", "tkv") : (1000, 2500),
             },
             "t2star" : {
                 ("liver",) : (2, 70),
                 ("spleen",) : (2, 150),
                 ("pancreas",) : (2, 100),
-                ("kidney", "cortex", "medulla") : (2, 100),
+                ("kidney", "cortex", "medulla", "tkv") : (2, 100),
             },
             "r2star" : {
                 ("liver",) : (14, 500),
                 ("spleen",) : (6, 500),
                 ("pancreas",) : (10, 500),
-                ("kidney", "cortex", "medulla") : (10, 500),
+                ("kidney", "cortex", "medulla", "tkv") : (10, 500),
             },
         },
-        "1_5t" : {
+        "1.5t" : {
             "t1" : {
                 ("liver",) : (400, 1350),
                 ("spleen",) : (800, 1350),
                 ("pancreas",) : (400, 1350),
-                ("kidney", "cortex", "medulla") : (900, 2400),
+                ("kidney", "cortex", "medulla", "tkv") : (900, 2400),
             },
             "t2star" : {
                 ("liver",) : (2, 70),
@@ -101,14 +101,17 @@ class SegStats(Module):
         # Segmentation spec can be overridden, e.g. change glob or dir
         seg_overrides = param_spec.get("seg_overrides", {}).get(seg, {})
         seg_spec = seg_spec.copy()
-        seg_spec.update(seg_overrides)
+        if seg_overrides:
+            seg_spec.update(seg_overrides)
+            LOG.debug(f" - Found segmentation overrides: {seg_overrides}: {seg_spec}")
 
-        LOG.info(f" - Generating stats for param {param}, segmentation {seg}")
+        LOG.debug(f" - Adding stats for param {param}, segmentation {seg}")
         LOG.debug(param_spec)
         LOG.debug(seg_spec)
 
         voxel_volume = 1.0  # In case there are no parameter images
-        for param_img in self._imgs(param_spec):
+        param_imgs = self._imgs(param_spec)
+        for param_img in param_imgs:
             voxel_volume = param_img.voxel_volume
             for seg_img in self._imgs(seg_spec):
                 seg_nii_res = self.resample(seg_img, param_img, is_roi=True, allow_rotated=self.allow_rotated)
@@ -128,12 +131,13 @@ class SegStats(Module):
                 if res_count > 0 and self.overlays:
                     self.lightbox(param_img, seg_img, name=f"stats_{seg_img.fname_noext}_{param_img.fname_noext}_lightbox")
 
-        if n_found == 0:
-            LOG.warn(" - No combination found with overlap")
-        elif self.multi_mode == "best" and n_found != 1:
-            LOG.warn(f" - {n_found} combinations found with overlap - choosing best")
-        elif self.multi_mode == "combine":
-            LOG.debug(f" - Combining data from {n_found} overlapping parameter/segmentation maps")
+        if param_imgs:
+            if n_found == 0:
+                LOG.warn(" - No combination found with overlap")
+            elif self.multi_mode == "best" and n_found != 1:
+                LOG.warn(f" - {n_found} combinations found with overlap - choosing best")
+            elif self.multi_mode == "combine":
+                LOG.debug(f" - Combining data from {n_found} overlapping parameter/segmentation maps")
 
         for idx, res_img in enumerate(res_niis):
             res_path = self.outfile(f"{seg}_res_{param}_{idx+1}.nii.gz")
@@ -158,12 +162,13 @@ class SegStats(Module):
                         for seg_substr in seg_substrs:
                             if seg_substr in seg:
                                 data_limits = seg_limits
-                                LOG.info(f" - Using default limits: {data_limits}")
+                                LOG.debug(f" - Using default limits: {data_limits}")
                                 break
 
         if len(data_limits) != 2:
             raise RuntimeError(f"Invalid data limits: {data_limits}")
 
+        LOG.info(f" - Generating stats for param {param}, segmentation {seg} with limits {data_limits}")
         param_stats = stats.run(stats_data, stats=self.stats, data_limits=data_limits, voxel_volume=voxel_volume)
         if "vol" in self.stats:
             param_stats["vol"] = param_stats["n"] * voxel_volume
@@ -194,8 +199,8 @@ class SegStats(Module):
         return imgs
 
 class Radiomics(Module):
-    def __init__(self, name="radiomics", segs={}, params={}, out_name="radiomics.csv"):
-        Module.__init__(self, name)
+    def __init__(self, name="radiomics", segs={}, params={}, out_name="radiomics.csv", **kwargs):
+        Module.__init__(self, name, **kwargs)
         self.segs = segs
         self.params = params
         self.out_name = out_name
@@ -212,8 +217,21 @@ class Radiomics(Module):
         return imgs[0]
 
     def process(self):
-        extractor = radiomics.featureextractor.RadiomicsFeatureExtractor()
-        extractor.enableAllImageTypes()
+        extractor = radiomics.featureextractor.RadiomicsFeatureExtractor(geometryTolerance=1e-3)
+        image_types = self.kwargs.get("image_types", None)
+        if image_types:
+            extractor.disableAllImageTypes()
+            for image_type in image_types:
+                extractor.enableImageTypeByName(image_type)
+        else:
+            extractor.enableAllImageTypes()
+        features = self.kwargs.get("features", None)
+        if features:
+            extractor.disableAllFeatures()
+            for feature in features:
+                extractor.enableFeatureClassByName(feature)
+        else:
+            extractor.enableAllFeatures()
 
         with open(self.outfile(self.out_name), "w") as f:
             for param_name, param_spec in self.params.items():
@@ -234,17 +252,20 @@ class Radiomics(Module):
                     seg_restricted = np.copy(seg_img.data)
                     minval, maxval = param_spec.get("minval", None), param_spec.get("maxval", None)
                     if minval is not None:
-                        seg_restricted[map_data < minval] = minval
+                        seg_restricted[map_data < minval] = 0
                     if maxval is not None:
-                        seg_restricted[map_data > maxval] = maxval
-                    seg_restricted_fpath = self.outfile(f"{seg_name}_restricted.nii.gz")
+                        seg_restricted[map_data > maxval] = 0
+                    seg_restricted_fpath = self.outfile(f"{seg_name}_restricted_{param_name}.nii.gz")
                     seg_img.save_derived(seg_restricted, seg_restricted_fpath)
 
-                    results = extractor.execute(map_res_fpath, seg_restricted_fpath)
-                    for k, v in results.items():
-                        if k.startswith("diagnostics"):
-                            continue
-                        f.write(f"{param_name}_{seg_name}_{k},{v}\n")
+                    try:
+                        results = extractor.execute(map_res_fpath, seg_restricted_fpath)
+                        for k, v in results.items():
+                            if k.startswith("diagnostics"):
+                                continue
+                            f.write(f"{param_name}_{seg_name}_{k},{v}\n")
+                    except Exception as exc:
+                        LOG.warn(f" - Failed to extract features: {exc}")
 
 
 class CMD(Module):
@@ -257,6 +278,7 @@ class CMD(Module):
         medulla_id = self.kwargs.get("medulla_id", "kidney_medulla")
 
         params = self.kwargs.get("cmd_params", None)
+        skip_params = self.kwargs.get("skip_params", None)
         cmd_dict = {}
         with open(stats_file) as f:
             for line in f:
@@ -266,7 +288,12 @@ class CMD(Module):
                     if params:
                         found = [param in key for param in params]
                         if not any(found):
-                            LOG.info(f" - Ignoring {key} - not in {params}")
+                            LOG.debug(f" - Ignoring {key} - not in {params}")
+                            continue
+                    if skip_params:
+                        found = [param in key for param in skip_params]
+                        if any(found):
+                            LOG.debug(f" - Ignoring {key} - in {skip_params}")
                             continue
                     if "iqmean" not in key and "median" not in key:
                         # Only calculate CMD for IQ mean and median
@@ -346,3 +373,25 @@ class ShapeMetrics(Module):
                     value, units = value
                     col_name = f"{seg_img.fname_noext}_" + METRICS_MAPPING[metric]
                     f.write(f"{col_name},{value}\n")
+
+class ISNR(Module):
+    def __init__(self, name="isnr", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        src = self.kwargs.get("src", self.OUTPUT)
+        fname = self.kwargs.get("fname", "isnr.csv")
+        img_globs = self.kwargs.get("imgs", {})
+        if not img_globs:
+            self.no_data("No images specified for ISNR calculation")
+        
+        with open(self.outfile(fname), "w") as f:
+            for dir, glob in img_globs.items():
+                imgs = self.inimgs(dir, glob, src=src)
+                if not imgs:
+                    LOG.warn(f" - No images found matching {glob} in {src}/{dir}")
+                    continue
+                for img in imgs:
+                    from ukat.qa import snr
+                    isnr = snr.Isnr(img.data, img.affine).isnr
+                    f.write(f"{img.fname_noext}_isnr,{isnr}\n")
