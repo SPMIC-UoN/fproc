@@ -277,6 +277,10 @@ class T1Molli(Module):
                 from ukat.mapping.t1 import T1
                 mapper = T1(img.data[..., :len(img_tis)], np.array(img_tis), img.affine, parameters=parameters, tss=tss, molli=molli, mdr=mdr)
                 mapper.to_nifti(self.outdir, base_file_name=img.fname_noext)
+                if mdr:
+                    # Save out registered data
+                    reg_data = mapper.pixel_array
+                    img.save_derived(reg_data, self.outfile(img.fname.replace(".nii.gz", "_reg.nii.gz")))
 
                 t1_map_data = np.copy(mapper.t1_map)
                 r2_thresh = self.kwargs.get("r2_thresh", 0.0)
@@ -334,6 +338,8 @@ class T1SE(Module):
         se_mag_glob = self.kwargs.get("se_mag_glob", "t1_se_mag*.nii.gz")
         se_ph_glob = self.kwargs.get("se_ph_glob", "t1_se_ph*.nii.gz")
         se_src = self.kwargs.get("se_src", self.INPUT)
+        parameters = self.kwargs.get("parameters", 2)
+        mag_only = self.kwargs.get("mag_only", True)
         mdr = self.kwargs.get("mdr", False)
         tis = self.kwargs.get("tis", None)
         if tis is None or len(tis) == 0:
@@ -342,17 +348,24 @@ class T1SE(Module):
             if any([ti for ti in tis if ti < 10]):
                 tis = [ti * 1000 for ti in tis]
                 LOG.warn(f"Looks like TIs were specified in seconds - converting to ms")
-            LOG.info(f" - Found {len(tis)} TIs (ms): {tis}")
+            LOG.info(f" - Supplied {len(tis)} TIs (ms): {tis}")
         tss = self.kwargs.get("tss", 0.0)
         LOG.info(f" - Using temporal slice spaceing: {tss}")
+        LOG.info(f" - Using {parameters}-parameter fit")
 
         mag_imgs = self.inimgs(se_dir, se_mag_glob, src=se_src)
-        ph_imgs = self.inimgs(se_dir, se_ph_glob, src=se_src)
-        if len(mag_imgs) != len(ph_imgs):
-            self.bad_data(f"Different number of magnitude and phase images: {len(mag_imgs)} vs {len(ph_imgs)}")
+        if not mag_only:
+            ph_imgs = self.inimgs(se_dir, se_ph_glob, src=se_src)
+            if len(mag_imgs) != len(ph_imgs):
+                self.bad_data(f"Different number of magnitude and phase images: {len(mag_imgs)} vs {len(ph_imgs)}")
+        else:
+            ph_imgs = [None] * len(mag_imgs)
+
+        if not mag_imgs:
+            self.no_data("No T1 SE data found")
 
         for mag, ph in zip(mag_imgs, ph_imgs):
-            LOG.info(f" - Processing SE data from {mag.fname} / {ph.fname}")
+            LOG.info(f" - Processing SE data from {mag.fname}")
             if tis is None or len(tis) == 0:
                 img_tis = [float(t) for t in mag.inversiontimedelay if float(t) > 0]
                 if len(img_tis) == 0:
@@ -368,21 +381,30 @@ class T1SE(Module):
                 continue
             elif mag.nvols != len(img_tis):
                 LOG.warn(f"{mag.nvols} volumes in magnitude data, only using first {len(img_tis)} volumes")
-            if ph.nvols < len(img_tis):
-                LOG.warn(f"Not enough volumes in phase data for provided TIs ({ph.nvols} vs {len(img_tis)}) - ignoring")
-                continue
-            elif ph.nvols != len(img_tis):
-                LOG.warn(f"{ph.nvols} volumes in phase data, only using first {len(img_tis)} volumes")
 
             from ukat.mapping.t1 import T1, magnitude_correct
             from ukat.utils.tools import convert_to_pi_range
-            phase_data = convert_to_pi_range(ph.data)
-            complex_data = mag.data * (np.cos(phase_data) + 1j * np.sin(phase_data))
-            magnitude_corrected = np.nan_to_num(magnitude_correct(complex_data))
+            if ph is not None:
+                LOG.info(f" - Found phase data {ph.fname} - correcting magnitude data")
+                if ph.nvols < len(img_tis):
+                    LOG.warn(f"Not enough volumes in phase data for provided TIs ({ph.nvols} vs {len(img_tis)}) - ignoring")
+                    continue
+                elif ph.nvols != len(img_tis):
+                    LOG.warn(f"{ph.nvols} volumes in phase data, only using first {len(img_tis)} volumes")
+
+                phase_data = convert_to_pi_range(ph.data)
+                complex_data = mag.data * (np.cos(phase_data) + 1j * np.sin(phase_data))
+                magnitude_corrected = np.nan_to_num(magnitude_correct(complex_data))
+            else:
+                magnitude_corrected = mag.data
+
             acq_order = "centric" if mag.manufacturer.lower() == "siemens" else "ascend"
             LOG.info(f" - Using acquisition order: {acq_order} for vendor {mag.manufacturer}")
-            mapper = T1(magnitude_corrected[..., :len(img_tis)], np.array(img_tis), mag.affine, tss=tss, mag_corr=True, parameters=2, mdr=mdr, acq_order=acq_order)
+            mapper = T1(magnitude_corrected[..., :len(img_tis)], np.array(img_tis), mag.affine, tss=tss, mag_corr=not mag_only, parameters=parameters, mdr=mdr, acq_order=acq_order)
             mapper.to_nifti(self.outdir, base_file_name=mag.fname_noext.replace("_mag", ""))
+            if mdr:
+                # Save out registered data
+                mag.save_derived(mapper.pixel_array, self.outfile(mag.fname.replace(".nii.gz", "_reg.nii.gz")))
 
             #r2_thresh = self.kwargs.get("r2_thresh", 0.0)
             #if r2_thresh > 0:
@@ -542,3 +564,23 @@ class MapFix(Module):
                 fixed_map.save(self.outfile(fname))
             elif fixed_map is None:
                 LOG.warn(f" - No fixed map found - will not save")
+
+class AdditionalMap(Module):
+    def __init__(self, name, **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        srcdir_option = self.kwargs.get("srcdir_option", self.name + "_dir")
+        srcdir = getattr(self.pipeline.options, srcdir_option, None)
+        if srcdir is None:
+            LOG.info(" - No source directory specified - not checking for additional maps")
+            return
+
+        maps = self.kwargs.get("maps", {})
+        for fname, glob in maps.items():
+            if "%s" in glob:
+                glob = glob % self.pipeline.options.subjid
+            img = self.single_inimg(srcdir, glob, warn=True)
+            if img is not None:
+                LOG.info(f" - Saving additional map from {img.fpath} to {fname}")
+                img.save(self.outfile(fname))
