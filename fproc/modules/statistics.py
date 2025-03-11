@@ -98,55 +98,6 @@ class SegStats(Module):
     def _add_param_stats(self, param, param_spec, seg, seg_spec, stat_names, values):
         stats_data, res_niis, n_found, best_count = [], [], 0, 0
 
-        # Segmentation spec can be overridden, e.g. change glob or dir
-        seg_overrides = param_spec.get("seg_overrides", {}).get(seg, {})
-        seg_spec = seg_spec.copy()
-        if seg_overrides:
-            seg_spec.update(seg_overrides)
-            LOG.debug(f" - Found segmentation overrides: {seg_overrides}: {seg_spec}")
-
-        LOG.debug(f" - Adding stats for param {param}, segmentation {seg}")
-        LOG.debug(param_spec)
-        LOG.debug(seg_spec)
-
-        voxel_volume = 1.0  # In case there are no parameter images
-        param_imgs = self._imgs(param_spec)
-        for param_img in param_imgs:
-            voxel_volume = param_img.voxel_volume
-            for seg_img in self._imgs(seg_spec):
-                seg_nii_res = self.resample(seg_img, param_img, is_roi=True, allow_rotated=self.allow_rotated)
-                res_data = seg_nii_res.get_fdata()
-                orig_count = np.count_nonzero(seg_img.data)
-                res_count = np.count_nonzero(res_data)
-                n_found += 1 if res_count > 0 else 0
-                LOG.debug(f" - Param {param_img.fname}, Seg {seg_img.fname} count {res_count} orig {orig_count}")
-                if self.multi_mode == "best":
-                    if res_count > best_count:
-                        stats_data = [param_img.data[res_data > 0]]
-                        res_niis = [seg_nii_res]
-                elif self.multi_mode == "combine":
-                    if res_count > 0:
-                        stats_data.append(param_img.data[res_data > 0])
-                        res_niis.append(seg_nii_res)
-                if res_count > 0 and self.overlays:
-                    self.lightbox(param_img, seg_img, name=f"stats_{seg_img.fname_noext}_{param_img.fname_noext}_lightbox")
-
-        if param_imgs:
-            if n_found == 0:
-                LOG.warn(" - No combination found with overlap")
-            elif self.multi_mode == "best" and n_found != 1:
-                LOG.warn(f" - {n_found} combinations found with overlap - choosing best")
-            elif self.multi_mode == "combine":
-                LOG.debug(f" - Combining data from {n_found} overlapping parameter/segmentation maps")
-
-        for idx, res_img in enumerate(res_niis):
-            res_path = self.outfile(f"{seg}_res_{param}_{idx+1}.nii.gz")
-            LOG.debug(f" - Saving resampled segmentation to {res_path}")
-            res_img.to_filename(res_path)
-
-        if stats_data:
-            stats_data = np.concatenate(stats_data)
-
         # Data limits can be set as generic limits or specific to particular seg
         # There are also defaults for specific organs/params keyed by field strength
         # specified using limits="default_3t" for example
@@ -169,6 +120,58 @@ class SegStats(Module):
             raise RuntimeError(f"Invalid data limits: {data_limits}")
 
         LOG.info(f" - Generating stats for param {param}, segmentation {seg} with limits {data_limits}")
+        LOG.debug(param_spec)
+        LOG.debug(seg_spec)
+
+        # Segmentation spec can be overridden, e.g. change glob or dir
+        seg_overrides = param_spec.get("seg_overrides", {}).get(seg, {})
+        seg_spec = seg_spec.copy()
+        if seg_overrides:
+            seg_spec.update(seg_overrides)
+            LOG.debug(f" - Found segmentation overrides: {seg_overrides}: {seg_spec}")
+
+        voxel_volume = 1.0  # In case there are no parameter images
+        param_imgs = self._imgs(param_spec)
+        for param_img in param_imgs:
+            voxel_volume = param_img.voxel_volume
+            for seg_img in self._imgs(seg_spec):
+                seg_nii_res = self.resample(seg_img, param_img, is_roi=True, allow_rotated=self.allow_rotated)
+                res_data = seg_nii_res.get_fdata()
+                orig_count = np.count_nonzero(seg_img.data)
+                res_count = np.count_nonzero(res_data)
+                n_found += 1 if res_count > 0 else 0
+                LOG.debug(f" - Param {param_img.fname}, Seg {seg_img.fname} count {res_count} orig {orig_count}")
+                if orig_count == 0:
+                    LOG.warn(f"Segmentation {seg_img.fname} was empty")
+                elif res_count == 0:
+                    LOG.warn(f"Segmentation {seg_img.fname} is empty after resampling to {param_img.fname}")
+                if self.multi_mode == "best":
+                    if res_count > best_count:
+                        stats_data = [param_img.data[res_data > 0]]
+                        res_niis = [seg_nii_res]
+                elif self.multi_mode == "combine":
+                    if res_count > 0:
+                        stats_data.append(param_img.data[res_data > 0])
+                        res_niis.append(seg_nii_res)
+                if res_count > 0 and self.overlays:
+                    self.lightbox(param_img, seg_img, name=f"stats_{seg_img.fname_noext}_{param_img.fname_noext}_lightbox")
+
+        if param_imgs:
+            if n_found == 0:
+                LOG.debug(" - No combination found with overlap")
+            elif self.multi_mode == "best" and n_found != 1:
+                LOG.warn(f" - {n_found} combinations found with overlap - choosing best")
+            elif self.multi_mode == "combine":
+                LOG.debug(f" - Combining data from {n_found} overlapping parameter/segmentation maps")
+
+        for idx, res_img in enumerate(res_niis):
+            res_path = self.outfile(f"{seg}_res_{param}_{idx+1}.nii.gz")
+            LOG.debug(f" - Saving resampled segmentation to {res_path}")
+            res_img.to_filename(res_path)
+
+        if stats_data:
+            stats_data = np.concatenate(stats_data)
+
         param_stats = stats.run(stats_data, stats=self.stats, data_limits=data_limits, voxel_volume=voxel_volume)
         if "vol" in self.stats:
             param_stats["vol"] = param_stats["n"] * voxel_volume
@@ -349,30 +352,27 @@ class ShapeMetrics(Module):
         if seg_dir is None:
             raise RuntimeError("Must provide seg_dir for shape metrics")
 
-        seg_globs = self.kwargs.get("seg_globs", "seg*.nii.gz")
-        if not seg_globs:
-            seg_globs = [self.kwargs.get("seg_glob", "seg*.nii.gz")]
+        segs = self.kwargs.get("segs", {})
+        if not segs:
+            self.no_data(f" - No segmentations provided to generate shape metrics")
 
-        all_segs = []
-        for seg_glob in seg_globs:
-            all_segs.extend(self.inimgs(seg_dir, seg_glob, src=self.OUTPUT))
-
-        if not all_segs:
-            self.no_data(f" - No segmentations found in {seg_dir} matching {seg_globs}")
-
-        csv_fname = self.kwargs.get("csv_fname", f"{seg_dir}_shape_metrics.csv")
+        csv_fname = self.kwargs.get("csv_fname", "shape_metrics.csv")
         LOG.info(f" - Saving shape metrics to {csv_fname}")
         with open(self.outfile(csv_fname), "w") as f:
-            for seg_img in all_segs:
-                LOG.info(f" - Calculating T2w shape metrics from {seg_img.fname}")
+            for name, glob in segs.items():
+                img = self.single_inimg(seg_dir, glob, src=self.OUTPUT)
+                if img is None:
+                    LOG.warn(f" - No segmentation found for {name} matching {seg_dir}/{glob}")
+                    continue
+                LOG.info(f" - Calculating shape metrics from {img.fname}")
                 try:
-                    vol_metrics = _volume_features(seg_img.data, affine=seg_img.affine)
+                    vol_metrics = _volume_features(img.data, affine=img.affine)
+                    for metric, value in vol_metrics.items():
+                        value, units = value
+                        col_name = f"{name}_" + METRICS_MAPPING[metric]
+                        f.write(f"{col_name},{value}\n")
                 except Exception as exc:
                     LOG.warn(f"Failed to calculate shape metrics: {exc}")
-                for metric, value in vol_metrics.items():
-                    value, units = value
-                    col_name = f"{seg_img.fname_noext}_" + METRICS_MAPPING[metric]
-                    f.write(f"{col_name},{value}\n")
 
 class ISNR(Module):
     def __init__(self, name="isnr", **kwargs):
@@ -395,3 +395,80 @@ class ISNR(Module):
                     from ukat.qa import snr
                     isnr = snr.Isnr(img.data, img.affine).isnr
                     f.write(f"{img.fname_noext}_isnr,{isnr}\n")
+
+
+# class NumericListMetadata(Module):
+#     def __init__(self, name, **kwargs):
+#         Module.__init__(self, name, **kwargs)
+
+#     def process(self):
+#         srcdir = self.kwargs.get("srcdir", None)
+#         glob = self.kwargs.get("glob", None)
+#         if srcdir is None or glob is None:
+#             self.no_data("Must provide srcdir and glob for metadata extraction")
+
+#         imgs = self.inimgs(srcdir, glob)
+#         if not imgs:
+#             self.no_data(f"No images found in {srcdir} matching {glob}")
+
+#         metadata = self.kwargs.get("metadata", {})
+#         if not metadata:
+#             self.no_data("No metadata fields specified")
+        
+#         md_values = {}
+#         for name, spec in metadata.items():
+#             field = spec.get("field", None)
+#             md_type = spec.get("type", float)
+#             md_proc = spec.get("proc", "none")
+#             if not field:
+#                 LOG.warn(f"No field specified for metadata {name} - ignoring")
+#                 continue
+#             values = []
+#             for img in imgs:
+#                 value = getattr(img, field, None)
+#                 if value is None:
+#                     LOG.warn(f"Metadata field {field} not found in {img.fname}")
+#                     continue
+
+#                 try:
+#                     value = md_type(value)
+#                     if md_type in (list, tuple):
+#                         values.extend(list(value))
+#                     else:
+#                         values.append(value)
+#                 except:
+#                     LOG.warn(f"Could not interpret field {img.fname}.{field} as type{md_type}")
+            
+#             if md_proc == "none":
+#                 md_value = ",".join([str(v) for v in values])
+#             elif md_proc == "first":     
+#                 md_value = values[0]
+#             elif md_proc == "unique":
+
+#                 md_values[name] = values
+    
+
+#         hr = np.unique(hr)
+#         if len(hr) > 1:
+#             LOG.warn(f"Multiple heart rates found: {hr} - using first")
+#             hr = hr[0]
+#         elif len(hr) == 0:
+#             LOG.warn("No heart rate found")
+#             hr = ""            
+#         else:
+#             hr = hr[0]
+#             LOG.info(f" - Found heart rate: {hr}")
+
+#         tis = sorted([float(v) for v in np.unique(tis) if float(v) > 0])
+#         LOG.info(f" - Found TIs: {tis}")
+#         if len(tis) >= 3:
+#             ti1, ti2, spacing = tis[0], tis[1], tis[2] - tis[0]
+#         else:
+#             ti1, ti2, spacing = "", "", ""
+#             LOG.warn(f"Not enough TIs found: {tis}")
+        
+#         with open(self.outfile("t1_molli_md.csv"), "w") as f:
+#             f.write(f"t1_molli_heart_rate,{hr}\n")
+#             f.write(f"t1_molli_ti1,{ti1}\n")
+#             f.write(f"t1_molli_ti2,{ti2}\n")
+#             f.write(f"t1_molli_ti_spacing,{spacing}\n")
