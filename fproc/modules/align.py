@@ -36,7 +36,7 @@ class FlirtAlignOnly(Module):
 
         ref_img = self.single_inimg(self._ref_dir, self._ref_glob, src=self.OUTPUT)
         if ref_img is None:
-            LOG.warn(f" - No alignment will be performed - assuming images already aligned")
+            LOG.warn(f" - No ref image - no alignment will be performed - assuming images already aligned")
             run_flirt = False
         else:
             LOG.info(f" - Reference image: {ref_img.fname}")
@@ -58,7 +58,6 @@ class FlirtAlignOnly(Module):
             if run_flirt:
                 LOG.info(f" - Aligning {img.fname}")
                 ref_img_res = self.resample(ref_img, img, is_roi=False, allow_rotated=True)
-                
                 flirt_opts = {
                     "schedule" : os.path.join(os.environ["FSLDIR"], "etc", "flirtsch", "sch3Dtrans_3dof"),
                     "bins" : 256,
@@ -74,13 +73,17 @@ class FlirtAlignOnly(Module):
                 if weight_mask is not None:
                     weight_fname = self.outfile(f"{img.fname_noext}_weight_mask.nii.gz")
                     weight_mask_res = self.resample(weight_mask, img, is_roi=True, allow_rotated=True)
-                    weight_mask_res.to_filename(weight_fname)
-                    flirt_opts["inweight"] = weight_fname
-                else:
-                    weight_mask_res = None
+                    weight_mask_res_data = weight_mask_res.get_fdata()
+                    vol_frac_before = np.count_nonzero(weight_mask.data) / weight_mask.data.size
+                    vol_frac_after = np.count_nonzero(weight_mask_res_data) / weight_mask_res_data.size
+                    if vol_frac_after / vol_frac_before < 0.2:
+                        LOG.warn(f" - Weight mask volume fraction reduced by more than 80% - not using")
+                    else:
+                        weight_mask_res.to_filename(weight_fname)
+                        flirt_opts["inweight"] = weight_fname
 
-                if True or any([d == 1 for d in img.shape[:3]]) == 1:
-                    LOG.info(" - Aligning single slice data - using 2D registration")
+                if self.kwargs.get("reg_2d", True) or any([d == 1 for d in img.shape[:3]]) == 1:
+                    LOG.info(" - Using 2D registration")
                     flirt_opts["twod"] = True
                     flirt_opts["paddingsize"] = 1       
                     flirt_opts["schedule"] = os.path.join(os.environ["FSLDIR"], "etc", "flirtsch", "sch2D_3dof"),
@@ -95,23 +98,26 @@ class FlirtAlignOnly(Module):
             LOG.info(f" - Saving {align_fname}")
             img_align.to_filename(align_fname)
 
-            for also_dir, also_glob in self.kwargs.get("also_align", {}).items():
-                extra_imgs = self.inimgs(also_dir, also_glob, src=self.OUTPUT)
-                for extra_img in extra_imgs:
-                    if extra_img.affine_matches(img):
-                        align_fname = self.outfile(extra_img.fname)
-                        if mat is not None:
-                            LOG.info(f" - Applying to: {extra_img.fname}")
-                            apply_result = fsl.applyxfm(extra_img.nii, ref_img_res, mat=mat, interp="trilinear", paddingsize=1, out=fsl.LOAD)
-                            img_align = apply_result["out"]
-                            if "kidney" in extra_img.fname or "seg" in extra_img.fname:
-                                # FIXME below is only for segmentations...
-                                img_align = nib.Nifti1Image(img_align.get_fdata() > 0.5, img_align.header.get_best_affine(), img_align.header)
-                        else:
-                            img_align = extra_img.nii
-                        LOG.info(f" - Saving {align_fname}")
-                        img_align.to_filename(align_fname)
-        else:
+            if run_flirt:
+                for also_dir, also_glob in self.kwargs.get("also_align", {}).items():
+                    extra_imgs = self.inimgs(also_dir, also_glob, src=self.OUTPUT)
+                    for extra_img in extra_imgs:
+                        if extra_img.affine_matches(img):
+                            align_fname = self.outfile(extra_img.fname)
+                            if mat is not None:
+                                LOG.info(f" - Applying to: {extra_img.fname}")
+                                apply_result = fsl.applyxfm(extra_img.nii, ref_img_res, mat=mat, interp="trilinear", paddingsize=1, out=fsl.LOAD)
+                                img_align = apply_result["out"]
+                                if "kidney" in extra_img.fname or "seg" in extra_img.fname:
+                                    # FIXME below is only for segmentations...
+                                    img_align = nib.Nifti1Image(img_align.get_fdata() > 0.5, img_align.header.get_best_affine(), img_align.header)
+                            else:
+                                img_align = extra_img.nii
+                            LOG.info(f" - Saving {align_fname}")
+                            img_align.to_filename(align_fname)
+
+        if not imgs_to_align or not run_flirt:
+            LOG.info(f" - No images aligned - saving extras as they are")
             # If no maps just save extra images as they are
             for also_dir, also_glob in self.kwargs.get("also_align", {}).items():
                 extra_imgs = self.inimgs(also_dir, also_glob, src=self.OUTPUT)
