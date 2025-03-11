@@ -99,7 +99,7 @@ class StitchSlices(Module):
                 continue
 
             elif len(imgs) == 1:
-                LOG.info(f" - Only one image found matching {img_glob} - copying to {out_fname} without stitching")
+                LOG.info(f" - One image found matching {img_glob} - copying to {out_fname} without stitching")
                 imgs[0].save(self.outfile(out_fname))
                 continue
 
