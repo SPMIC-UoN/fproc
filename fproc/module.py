@@ -348,6 +348,28 @@ class Module:
             LOG.info(f" - Generating overlay image of {organ.upper()} onto {overlay_name.upper()}")
             self.lightbox(overlay_img, seg, name=f"{organ}_{overlay_name}_lightbox", tight=True)
 
+    def split_lr(self, data, affine, side):
+        LOG.debug(f" - Affine:\n{affine}")
+        LOG.debug(f" - Shape: {data.shape}")
+        axcodes = nib.orientations.aff2axcodes(affine)
+        LOG.debug(f" - Axis codes: {axcodes}")
+        lr_axis = axcodes.index("L") if "L" in axcodes else axcodes.index("R")
+        lr_centre = data.shape[lr_axis] // 2
+        split_data = np.copy(data)
+        lr_slices = [slice(None)] * 3
+        if side.lower() in ("l", "left"):
+            lr_slices[lr_axis] = slice(lr_centre) if "L" in axcodes else slice(lr_centre, data.shape[lr_axis])
+        elif side.lower() in ("r", "right"):
+            lr_slices[lr_axis] = slice(lr_centre) if "R" in axcodes else slice(lr_centre, data.shape[lr_axis])
+        else:
+            raise RuntimeError(f" - Unknown side '{side}'")
+
+        LOG.debug(f" - Slices: {lr_slices}")
+        LOG.debug(f" - before non-zero: {np.count_nonzero(split_data)}")
+        split_data[tuple(lr_slices)] = 0
+        LOG.debug(f" - after non-zero: {np.count_nonzero(split_data)}")
+        return (split_data > 0).astype(np.int32)
+
 class CopyModule(Module):
     """
     A module which just copies an input file
