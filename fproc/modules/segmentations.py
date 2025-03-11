@@ -313,8 +313,146 @@ class KidneyDixon(Module):
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         src = self.kwargs.get("dixon_src", self.INPUT)
         fat = self.inimg(dixon_dir, "fat.nii.gz", src=src)
-        ff =self.inimg(dixon_dir, "fat_fraction.nii.gz", src=src)
+        ff = self.inimg(dixon_dir, "fat_fraction.nii.gz", src=src)
         t2star = self.inimg(dixon_dir, "t2star.nii.gz", src=src)
         water = self.inimg(dixon_dir, "water.nii.gz", src=src)
         self.run_nnunetv2("326", [fat, ff, t2star, water], "kidney", "DIXON", water, "water")
+
+        kidney = self.inimg(self.name, "kidney.nii.gz", src=self.OUTPUT)
+        left = self.split_lr(kidney.data, kidney.affine, "l")
+        right = self.split_lr(kidney.data, kidney.affine, "l")
+        kidney.save_derived(left, self.outfile("kidney_left.nii.gz"))
+        kidney.save_derived(right, self.outfile("kidney_right.nii.gz"))
+
+class KidneyCortexMedullaT2w(Module):
+    """
+    Cortex/medulla masking using T2w whole kidney segmentation
+    """
+    def __init__(self, name="seg_kidney_cortex_medulla_t2w", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        import fsl.wrappers as fsl
+
+        t2w_seg_dir = self.kwargs.get("t2w_seg_dir", "seg_kidney_t2w")
+        t2w_seg_fname = self.kwargs.get("t2w_seg_fname", "kidney_mask.nii.gz")
+        t2w_seg = self.single_inimg(t2w_seg_dir, t2w_seg_fname, src=self.OUTPUT)
+        if t2w_seg is None:
+            self.no_data(f"No T2w kidney segmentation found in {t2w_seg_dir}/{t2w_seg_fname}")
+        LOG.info(f" - T2w kidney segmentation shape: {t2w_seg.shape}")
+
+        t2star_dir = self.kwargs.get("t2star_dir", "t2star")
+        last_echo_glob = self.kwargs.get("t2star_last_echo_glob", "last_echo.nii.gz")
+        t2star_last_echo = self.single_inimg(t2star_dir, last_echo_glob, src=self.OUTPUT)
+        if t2star_last_echo is None:
+            self.no_data(f"No T2* last echo found in {t2star_dir}/{t2star_last_echo}")
+        LOG.info(f" - last echo shape: {t2star_last_echo.shape}")
+
+        #flirt -in kidney_mask.nii.gz -ref t2star_e_12.nii.gz -applyxfm -usesqform -out masktot2star;
+        #fslmaths masktot2star.nii.gz -mul t2star_e_12.nii.gz 12thechomasked;
+        #fslstats 12thechomasked -M;
+        flirt_result = fsl.flirt(t2w_seg.nii, t2star_last_echo.nii, out=fsl.LOAD, omat=fsl.LOAD, usesqform=True, applyxfm=True)
+        masktot2star = flirt_result["out"].get_fdata().reshape(t2star_last_echo.shape)
+        LOG.info(f" - masktot2star shape: {masktot2star.shape}")
+        t2star_last_echo.save_derived(masktot2star, self.outfile("masktot2star.nii.gz"))
+        final_echo_masked = np.copy(t2star_last_echo.data)
+        final_echo_masked[masktot2star == 0] = 0
+        final_echo_masked_mean = np.mean(final_echo_masked[masktot2star > 0])
+
+        #fslmaths 12thechomasked -thr 36 12thechomaskedthr; 
+        #fslmaths 12thechomasked -thr 43 12thechomaskedthrplus20perc;
+        final_echo_thr = np.copy(final_echo_masked)
+        final_echo_thr[final_echo_thr < final_echo_masked_mean] = 0
+        final_echo_thr_20 = np.copy(final_echo_masked)
+        final_echo_thr_20[final_echo_thr_20 < final_echo_masked_mean * 1.2] = 0
+
+        #fslmaths 12thechomaskedthrplus20perc -bin cortexmaskstats;
+        #fslmaths 12thechomaskedthr -bin cortexmask;
+        cortex_mask = (final_echo_thr > 0).astype(np.int32)
+        cortex_mask_stats = (final_echo_thr_20 > 0).astype(np.int32)
+
+        #fslmaths masktot2star -ero masktot2starero;
+        #fslmaths masktot2starero -ero masktot2starero2;
+        from scipy.ndimage import binary_erosion, generate_binary_structure
+        struct = generate_binary_structure(3, 1)
+        struct[..., 0] = 0
+        struct[..., -1] = 0
+        masktot2star_bin = (masktot2star > 0).astype(np.int32)
+        t2star_last_echo.save_derived(masktot2star_bin, self.outfile("masktot2star_bin.nii.gz"))
+        #bin = masktot2star_bin.squeeze()
+        #LOG.info(f" - bin shape: {bin.shape}, {np.count_nonzero(bin)}")
+        masktot2star_ero = binary_erosion(masktot2star_bin, iterations=2, structure=struct).reshape(t2star_last_echo.shape)
+        LOG.info(f" - masktot2star_ero shape: {masktot2star_ero.shape}, {np.count_nonzero(masktot2star_ero)}")
+        t2star_last_echo.save_derived(masktot2star_ero, self.outfile("masktot2star_ero.nii.gz"))
+
+        #fslmaths masktot2starero2 -sub cortexmask remaindermask;
+        remainder_mask = masktot2star_ero - cortex_mask
+        LOG.info(f" - remainder mask shape: {remainder_mask.shape}")
+        t2star_last_echo.save_derived(remainder_mask, self.outfile("remainder_mask.nii.gz"))
+
+        #fslmaths 12thechomasked -thr 18 12thechorest;
+        final_echo_rest = np.copy(final_echo_masked)
+        final_echo_rest[final_echo_rest < final_echo_masked_mean * 0.5] = 0
+
+        #fslmaths 12thechorest -bin rest;
+        rest = (final_echo_rest > 0).astype(np.int32)
+        LOG.info(f" - rest shape: {rest.shape}")
+        t2star_last_echo.save_derived(rest, self.outfile("rest.nii.gz"))
+
+        #fslmaths rest.nii.gz -mul remaindermask.nii.gz medullamask;
+        medulla_mask = np.copy(remainder_mask)
+        medulla_mask[rest == 0] = 0
+
+        #fslmaths medullamask.nii.gz -bin medullamaskbin;
+        medulla_mask_bin = (medulla_mask > 0).astype(np.int32)
+
+        t2star_last_echo.save_derived(cortex_mask, self.outfile("cortex_mask.nii.gz"))
+        t2star_last_echo.save_derived(cortex_mask_stats, self.outfile("cortex_mask_stats.nii.gz"))
+        t2star_last_echo.save_derived(medulla_mask_bin, self.outfile("medulla_mask.nii.gz"))
+
+        #fslmaths cortexmask.nii.gz -mul r2star_2p_exp.nii.gz cortexr2star;
+        #fslstats cortexr2star -M;
+
+        #fslmaths cortexmaskstats.nii.gz -mul r2star_2p_exp.nii.gz cortexr2startight;
+        #fslstats cortexr2startight -M;
+
+        #fslmaths medullamaskbin.nii.gz -mul r2star_2p_exp.nii.gz medullar2star;
+        #fslstats medullar2star -M;
+
+class RenalPelvis(Module):
+    def __init__(self, name="seg_renal_pelvis", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        t2w_seg_dir = self.kwargs.get("t2w_seg_dir", "seg_kidney_t2w")
+        t2w_seg_fname = self.kwargs.get("t2w_seg_fname", "kidney_mask.nii.gz")
+        t2w_seg = self.single_inimg(t2w_seg_dir, t2w_seg_fname, src=self.OUTPUT)
+        if t2w_seg is None:
+            self.no_data(f"No T2w kidney segmentation found in {t2w_seg_dir}/{t2w_seg_fname}")
+        LOG.info(f" - T2w kidney segmentation shape: {t2w_seg.shape}")
+
+        t1_seg_dir = self.kwargs.get("t1_seg_dir", "seg_kidney_t1")
+        cortex_glob = self.kwargs.get("t1_seg_cortex", "*cortex*.nii.gz")
+        medulla_glob = self.kwargs.get("t1_seg_medulla", "*medulla*.nii.gz")
+        cortex = self.inimgs(t1_seg_dir, cortex_glob, src=self.OUTPUT)
+        medulla = self.inimgs(t1_seg_dir, medulla_glob, src=self.OUTPUT)
+        if not cortex or not medulla:
+            self.no_data(f"No T1 kidney segmentation found in {t1_seg_dir}")
+        cortex_res = sum([self.resample(c, t2w_seg, is_roi=True, allow_rotated=True).get_fdata() for c in cortex])
+        medulla_res = sum([self.resample(m, t2w_seg, is_roi=True, allow_rotated=True).get_fdata() for m in medulla])
+        t2w_seg.save_derived(cortex_res.astype(np.int32), self.outfile("cortex_res.nii.gz"))
+        t2w_seg.save_derived(medulla_res.astype(np.int32), self.outfile("medulla_res.nii.gz"))
+        t1_kidney = (cortex_res + medulla_res > 0).astype(np.int32)
+        t2w_seg.save_derived(t1_kidney, self.outfile("t1_kidney.nii.gz"))
+
+        from scipy.ndimage import binary_fill_holes, binary_erosion, generate_binary_structure
+        struct = generate_binary_structure(3, 1)
+        struct[..., 0] = 0
+        struct[..., -1] = 0
+        kidney_fill = binary_fill_holes(t2w_seg.data)
+        t2w_seg.save_derived(kidney_fill, self.outfile("kidney_fill.nii.gz"))
+        kidney_fill_ero = binary_erosion(kidney_fill, iterations=1, structure=struct)
+        t2w_seg.save_derived(kidney_fill_ero.astype(np.int32), self.outfile("kidney_fill_ero.nii.gz"))
+        pelvis = (kidney_fill_ero - t1_kidney > 0).astype(np.int32)
+        t2w_seg.save_derived(pelvis, self.outfile("renal_pelvis.nii.gz"))
 
