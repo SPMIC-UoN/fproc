@@ -88,6 +88,8 @@ class Pipeline:
                     LOG.info(f"DONE {module.name.upper()} : end time {timestamp}")
                 except ModuleError as exc:
                     LOG.warn(f"FAILED {module.name.upper()}: {exc}")
+                except:
+                    LOG.exception(f"ERROR {module.name.upper()} - MODULE NOT COMPLETED")
 
             timestamp = self.timestamp()
             LOG.info(f"Finish time {timestamp}")
