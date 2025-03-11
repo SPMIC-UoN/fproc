@@ -31,7 +31,7 @@ class SegFix(Module):
         fix_dir = getattr(self.pipeline.options, fix_dir_option, None)
         try_to_fix = False
         if not fix_dir:
-            LOG.warn(" - No fixed segmentations dir specified - will not try to fix masks")
+            LOG.info(" - No fixed segmentations dir specified - will not try to fix masks")
         elif not os.path.exists(fix_dir):
             LOG.warn(f" - Fixed seg dir {fix_dir} does not exist - will not try to fix masks")
         else:
@@ -60,7 +60,7 @@ class SegFix(Module):
                 fname = fix_spec.get("fname", fname)
             seg_img = self.single_inimg(self._seg_dir, seg_glob, src=self.kwargs.get("seg_src", self.OUTPUT), warn=False)
             if seg_img is None and ignore_missing:
-                LOG.warn(f"No segmentation found matching {self._seg_dir}/{seg_glob} - ignoring")
+                LOG.info(f" - No segmentation found matching {self._seg_dir}/{seg_glob} - ignoring")
                 continue
             elif seg_img is None:
                 LOG.info(f" - No original image matching {self._seg_dir}/{seg_glob} - will check for fix anyway")
@@ -153,7 +153,16 @@ class KidneyT1Clean(Module):
                 if t2w_mask is not None:
                     LOG.info(f" - Cleaning {t1_seg.fname} using T2w mask {t2w_mask.fname}")
                     t2w_mask_res = self.resample(t2w_mask, t1_seg, is_roi=True, allow_rotated=True)
-                    cleaned_data_t1_seg = self._clean_t2w(t1_seg.data, t2w_mask_res.get_fdata())
+                    t2w_mask_res_data = t2w_mask_res.get_fdata()
+                    vol_frac_before = np.count_nonzero(t2w_mask.data) / t2w_mask.data.size
+                    vol_frac_after = np.count_nonzero(t2w_mask_res_data) / t2w_mask_res_data.size
+                    if vol_frac_after / vol_frac_before < 0.2:
+                        LOG.warn(f" - T2w mask volume reduced by more than 80% - not using")
+                        if generic:
+                            LOG.warn(f" - Using generic cleaning instead")
+                            cleaned_data_t1_seg = self._clean_generic(t1_seg, t1_segs)
+                    else:
+                        cleaned_data_t1_seg = self._clean_t2w(t1_seg.data, t2w_mask_res.get_fdata())
                 elif generic:
                     LOG.warn(f" - Could not find T2w mask for {t1_seg.fname} - using generic cleaning")
                     cleaned_data_t1_seg = self._clean_generic(t1_seg, t1_segs)
@@ -285,6 +294,21 @@ class LargestBlob(Module):
 
             seg.save_derived(largest, out_fname)
             LOG.info(f" - Saving to {out_fname}")
+
+class SplitLR(Module):
+    def __init__(self, srcdir, seg_glob):
+        Module.__init__(self, f"{srcdir}_splitlr")
+        self._srcdir = srcdir
+        self._seg_glob = seg_glob
+
+    def process(self):
+        segs = self.inimgs(self._srcdir, self._seg_glob, src=self.OUTPUT)
+        for seg in segs:
+            for side in ("l", "r"):
+                out_fname = self.outfile(seg.fname.replace(".nii", f"_{side}.nii"))
+                split_data = self.split_lr(seg.data, seg.affine, side)
+                LOG.info(f" - Saving {out_fname}")
+                seg.save_derived(split_data, out_fname)
 
 class SegVolumes(Module):
     def __init__(self, name="seg_volumes", **kwargs):
