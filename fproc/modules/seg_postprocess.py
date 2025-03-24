@@ -295,6 +295,7 @@ class LargestBlob(Module):
             seg.save_derived(largest, out_fname)
             LOG.info(f" - Saving to {out_fname}")
 
+
 class SplitLR(Module):
     def __init__(self, srcdir, seg_glob):
         Module.__init__(self, f"{srcdir}_splitlr")
@@ -309,6 +310,7 @@ class SplitLR(Module):
                 split_data = self.split_lr(seg.data, seg.affine, side)
                 LOG.info(f" - Saving {out_fname}")
                 seg.save_derived(split_data, out_fname)
+
 
 class SegVolumes(Module):
     def __init__(self, name="seg_volumes", **kwargs):
@@ -327,6 +329,53 @@ class SegVolumes(Module):
                     LOG.warn(f"Segmentation not found: {seg}")
                 else:
                     f.write("%s,%.2f\n" % (name, seg_img.voxel_volume * np.count_nonzero(seg_img.data)))
+
+
+class Dilate(Module):
+    def __init__(self, **kwargs):
+        name = kwargs.get("name", kwargs.get("seg_dir", "seg") + "_dil")
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        seg_dir = self.kwargs.get("seg_dir", "seg")
+        segs = self.kwargs.get("segs", [])
+        dil_voxels = self.kwargs.get("dil_voxels", 1)
+        slice_axis = self.kwargs.get("slice_axis", None)
+        slice_axcodes = {
+            "A" : "SI",
+            "C" : "AP",
+            "S" : "LR",
+        }
+        for seg in segs:
+            seg_img = self.single_inimg(seg_dir, seg, src=self.OUTPUT)
+            if seg_img is None:
+                LOG.warn(f"Segmentation not found: {seg}")
+            else:
+                LOG.info(f" - Dilating {seg_img.fname} by {dil_voxels} voxels")
+                if slice_axis is not None:
+                    try:
+                        slice_axis_idx = int(slice_axis)
+                        if slice_axis_idx < 0 or slice_axis_idx > 2:
+                            self.bad_data(f"Invalid slice axis index {slice_axis_idx}")
+                        LOG.info(f" - Dilating slicewise along axis index {slice_axis_idx}")
+                    except ValueError:
+                        axcodes = nib.orientations.aff2axcodes(seg_img.affine)
+                        dirs = slice_axcodes.get(slice_axis, None)
+                        if dirs:
+                            slice_axis_idx = axcodes.index(dirs[0]) if dirs[0] in axcodes else axcodes.index(dirs[1])
+                        else:
+                            self.bad_data(f"Unknown slice axis code {slice_axis}")
+                        LOG.info(f" - Dilating slicewise along axis {slice_axis}, index {slice_axis_idx}")
+
+                    dilated_data = np.zeros_like(seg_img.data)
+                    for slice_idx in range(seg_img.data.shape[slice_axis_idx]):
+                        slices = [slice(None)] * 3
+                        slices[slice_axis_idx] = slice_idx
+                        dilated_data[tuple(slices)] = scipy.ndimage.binary_dilation(seg_img.data[tuple(slices)], iterations=dil_voxels)
+                else:
+                    dilated_data = scipy.ndimage.binary_dilation(seg_img.data, iterations=dil_voxels)
+                seg_img.save_derived(dilated_data, self.outfile(seg_img.fname))
+
 
 class KidneyCystClean(Module):
     def __init__(self, name="seg_kidney_cyst_t2w_clean", **kwargs):
