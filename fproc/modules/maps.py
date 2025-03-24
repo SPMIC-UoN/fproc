@@ -362,7 +362,7 @@ class T1SE(Module):
             ph_imgs = [None] * len(mag_imgs)
 
         if not mag_imgs:
-            self.no_data("No T1 SE data found")
+            self.no_data(f"No T1 SE data found in {se_dir}/{se_mag_glob}")
 
         for mag, ph in zip(mag_imgs, ph_imgs):
             LOG.info(f" - Processing SE data from {mag.fname}")
