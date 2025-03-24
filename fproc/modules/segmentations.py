@@ -112,25 +112,35 @@ class KidneyCystT2w(Module):
 
 
 class KidneyT1(Module):
-    def __init__(self, name="seg_kidney_t1", map_dir="t1_kidney", map_glob="t1_map*.nii.gz"):
-        Module.__init__(self, name)
+    def __init__(self, name="seg_kidney_t1", map_dir="t1_kidney", map_glob="t1_map*.nii.gz", **kwargs):
+        Module.__init__(self, name, **kwargs)
         self._dir = map_dir
         self._glob = map_glob
 
     def process(self):
-        t1_maps = self.inimgs(self._dir, self._glob, is_depfile=True)
+        t1_maps = self.inimgs(self._dir, self._glob, src=self.kwargs.get("map_src", self.OUTPUT))
         if not t1_maps:
             self.no_data(f"No T1 maps found to segment in {self._dir}/{self._glob}")
+        t1_limits = self.kwargs.get("t1_limits", None)
 
         single_map = len(t1_maps) == 1
         for t1_map in t1_maps:
             LOG.info(f" - Segmenting KIDNEY using T1 data: {t1_map.fname}")
+            t1_data = t1_map.data
+            if t1_limits is not None:
+                if len(t1_limits) != 2 or len(t1_limits[0]) != 2 or len(t1_limits[1]) != 2:
+                    self.bad_data("Invalid T1 limits format - should be sequence of two tuples ((min, replace), (max, replace)) - ignoring")
+                LOG.info(f" - Replacing T1 < {t1_limits[0][0]} with {t1_limits[0][1]} and T1 > {t1_limits[1][0]} with {t1_limits[1][1]}") 
+                t1_data[t1_data < t1_limits[0][0]] = t1_limits[0][1]
+                t1_data[t1_data > t1_limits[1][0]] = t1_limits[1][1]
+
             if single_map:
                 out_prefix = "kidney"
-                t1_map.save(self.outfile("t1_map.nii.gz"))
+                t1_map = t1_map.save_derived(t1_data, self.outfile("t1_map.nii.gz"))
             else:
                 out_prefix = f'kidney_{t1_map.fname_noext}'
-                t1_map.save(self.outfile(t1_map.fname))
+                t1_map = t1_map.save_derived(t1_data, self.outfile(t1_map.fname))
+ 
             self.runcmd([
                 'kidney_t1_seg',
                 '--input', t1_map.dirname,
@@ -186,6 +196,46 @@ class KidneyT2w(Module):
                     voxel_vol = img.voxel_volume
                     vol = voxel_vol * np.count_nonzero(img.data)
                     f.write(f"kv_{name},{vol}\n")
+
+
+class KidneyT1SE(Module):
+    def __init__(self, name="seg_kidney_t1_se", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        t1_se_dir = self.kwargs.get("t1_se_dir", "t1_se")
+        t1_se_glob = self.kwargs.get("t1_se_glob", "t1_se*.nii.gz")
+        t1_ref_dir = self.kwargs.get("t1_ref_dir", "../fsort/t1_se_raw")
+        t1_ref_glob = self.kwargs.get("t1_ref_glob", "*.nii.gz")
+
+        t1_se_data = self.inimgs(t1_se_dir, t1_se_glob, src=self.OUTPUT)
+        if not t1_se_data:
+            self.no_data(f"No T1 SE data found in {t1_se_dir}/{t1_se_glob}")
+
+        t1_ref_data = self.inimgs(t1_ref_dir, t1_ref_glob)
+        if not t1_ref_data:
+            self.no_data(f"No T1 SE reference data found in {t1_ref_dir}/{t1_ref_glob}")
+        vendor = t1_ref_data[0].vendor
+
+        single_map = len(t1_se_data) == 1
+        for t1_se_img in t1_se_data:
+            LOG.info(f" - Segmenting KIDNEY using T1 SE data: {t1_se_img.fname} from vendor {vendor}")
+            if single_map:
+                out_prefix = "kidney"
+            else:
+                out_prefix = f'kidney_{t1_se_img.fname_noext}'
+            self.runcmd([
+                'seg_kidney_t1_se',
+                '--data', t1_se_img.fpath,
+                '--model', "minmax",
+                '--output', self.outdir,
+                '--output-prefix', out_prefix,
+                '--vendor', vendor],
+                logfile=f'seg.log'
+            )
+
+            #medulla = ImageFile(self.outfile(f"{out_prefix}_medulla.nii.gz"))
+            #self.lightbox(t1_se_img, medulla, name=f"{out_prefix}_t1_lightbox", tight=True)
 
 class SatDixon(Module):
     def __init__(self, name="seg_sat_dixon", **kwargs):
@@ -243,17 +293,19 @@ class VatDixon(Module):
         ff_thresh = self.kwargs.get("ff_thresh", 85)
         ff_glob = self.kwargs.get("ff_glob", "fat_fraction.nii.gz")
         ff = self.inimg(ff_dir, ff_glob, src=ff_src)
-        organs = self.kwargs.get("organs", {})
+        body_dir = self.kwargs.get("body_dir", "seg_body_dixon")
+        body = self.inimg(body_dir, "body.nii.gz", src=self.OUTPUT)
+        sat_dir = self.kwargs.get("sat_dir", "seg_sat_dixon")
+        sat = self.inimg(sat_dir, "sat.nii.gz", src=self.OUTPUT)
+
         vat_data = (ff.data > ff_thresh).astype(np.int8)
         while vat_data.ndim > 3:
             vat_data = vat_data.squeeze(-1)
-
-        body = self.inimg("seg_body_dixon", "body.nii.gz", src=self.OUTPUT)
         vat_data[body.data == 0] = 0
         ff.save_derived(vat_data, self.outfile("fat.nii.gz"))
 
-        sat = self.inimg("seg_sat_dixon", "sat.nii.gz", src=self.OUTPUT)
         vat_data[sat.data > 0] = 0
+        organs = self.kwargs.get("organs", {})
         for organ_dir, fname in organs.items():
             organ_seg = self.inimg(organ_dir, fname, src=self.OUTPUT, check=False)
             if organ_seg is None:
@@ -268,13 +320,14 @@ class VatDixon(Module):
                 vat_data[res_data > 0] = 0
                 ff.save_derived(res_data, self.outfile(fname.replace(".nii.gz", "_res.nii.gz")))
 
-        # FIXME temporary remove top/bottom slices to avoid problem with SAT segmentor
-        vat_data[..., 0] = 0
-        vat_data[..., -1] = 0
+        if self.kwargs.get("prune_slices", True):
+           # FIXME temporary remove top/bottom slices to avoid problem with SAT segmentor
+            vat_data[..., 0] = 0
+            vat_data[..., -1] = 0
 
         ff.save_derived(vat_data, self.outfile("vat.nii.gz"))
         seg = self.inimg(self.name, "vat.nii.gz", src=self.OUTPUT)
-        
+
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         dixon_src = self.kwargs.get("dixon_src", self.INPUT)
         water = self.inimg(dixon_dir, "water.nii.gz", src=dixon_src)
@@ -316,11 +369,12 @@ class KidneyDixon(Module):
         ff = self.inimg(dixon_dir, "fat_fraction.nii.gz", src=src)
         t2star = self.inimg(dixon_dir, "t2star.nii.gz", src=src)
         water = self.inimg(dixon_dir, "water.nii.gz", src=src)
-        self.run_nnunetv2("326", [fat, ff, t2star, water], "kidney", "DIXON", water, "water")
+        model_id = self.kwargs.get("model_id", "422")
+        self.run_nnunetv2(model_id, [fat, ff, t2star, water], "kidney", "DIXON", water, "water")
 
         kidney = self.inimg(self.name, "kidney.nii.gz", src=self.OUTPUT)
         left = self.split_lr(kidney.data, kidney.affine, "l")
-        right = self.split_lr(kidney.data, kidney.affine, "l")
+        right = self.split_lr(kidney.data, kidney.affine, "r")
         kidney.save_derived(left, self.outfile("kidney_left.nii.gz"))
         kidney.save_derived(right, self.outfile("kidney_right.nii.gz"))
 
