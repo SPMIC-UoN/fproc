@@ -220,6 +220,11 @@ class Radiomics(Module):
         return imgs[0]
 
     def process(self):
+        logger = logging.getLogger("radiomics")
+        logger.handlers.clear()
+        logger.propagate = False
+        logger.addHandler(logging.FileHandler(self.outfile("radiomics.log")))
+
         extractor = radiomics.featureextractor.RadiomicsFeatureExtractor(geometryTolerance=1e-3)
         image_types = self.kwargs.get("image_types", None)
         if image_types:
@@ -231,8 +236,11 @@ class Radiomics(Module):
         features = self.kwargs.get("features", None)
         if features:
             extractor.disableAllFeatures()
-            for feature in features:
-                extractor.enableFeatureClassByName(feature)
+            if isinstance(features, dict):
+                extractor.enableFeaturesByName(**features)
+            else:
+                for feature in features:
+                    extractor.enableFeatureClassByName(feature)
         else:
             extractor.enableAllFeatures()
 
@@ -328,7 +336,8 @@ class ShapeMetrics(Module):
     def process(self):
         METRICS_MAPPING = {
             'Surface area': "surf_area",
-            'Volume': "vol",
+            "Surface area / volume" : "surf_area_over_vol",
+            'Volume' : "vol",
             'Bounding box volume': "vol_bb",
             'Convex hull volume': "vol_ch",
             'Volume of holes': "vol_holes",
@@ -356,6 +365,8 @@ class ShapeMetrics(Module):
         if not segs:
             self.no_data(f" - No segmentations provided to generate shape metrics")
 
+        metrics = self.kwargs.get("metrics", [])
+
         csv_fname = self.kwargs.get("csv_fname", "shape_metrics.csv")
         LOG.info(f" - Saving shape metrics to {csv_fname}")
         with open(self.outfile(csv_fname), "w") as f:
@@ -368,9 +379,13 @@ class ShapeMetrics(Module):
                 try:
                     vol_metrics = _volume_features(img.data, affine=img.affine)
                     for metric, value in vol_metrics.items():
+                        if metrics and metric not in metrics and METRICS_MAPPING[metric] not in metrics:
+                            continue
                         value, units = value
                         col_name = f"{name}_" + METRICS_MAPPING[metric]
                         f.write(f"{col_name},{value}\n")
+                    if "surf_area_over_vol" in metrics:
+                        f.write(f"{name}_surf_area_over_vol,{vol_metrics['Surface area'][0] / vol_metrics['Volume'][0]}\n")
                 except Exception as exc:
                     LOG.warn(f"Failed to calculate shape metrics: {exc}")
 
