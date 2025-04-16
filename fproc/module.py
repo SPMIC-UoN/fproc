@@ -54,6 +54,10 @@ class Module:
             raise RuntimeError("No pipeline context")
         return os.path.abspath(os.path.normpath(os.path.join(self.pipeline.options.input, name)))
 
+    def output_exists(self, pipeline_outdir):
+        outdir = os.path.join(pipeline_outdir, self.name)
+        return os.path.exists(outdir) and os.listdir(outdir)
+
     def infile(self, dir, name, check=True, warn=False, src=None, is_depfile=False):
         if not src and is_depfile:
             src = self.pipeline.options.output
@@ -111,7 +115,7 @@ class Module:
         return ret
 
     def runcmd(self, cmd, logfile):
-        LOG.info(cmd)
+        LOG.debug(cmd)
         with open(os.path.join(self.outdir, logfile), "w") as f:
             retval = subprocess.call(cmd, stdout=f, stderr=f)
         if retval != 0:
