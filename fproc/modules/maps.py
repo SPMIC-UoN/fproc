@@ -244,9 +244,13 @@ class T1Molli(Module):
         tis = self.kwargs.get("tis", None)
         parameters = self.kwargs.get("parameters", 3)
         molli = self.kwargs.get("molli", True)
+        tis_use_md = self.kwargs.get("tis_use_md", False)
         if tis is None or len(tis) == 0:
             LOG.info(" - TIs not specified - will try to read from metadata")
+            tis = None
         else:
+            if tis_use_md:
+                LOG.info(" - Default set of TIs specified - but will use metadata if available")
             if any([ti for ti in tis if ti < 10]):
                 tis = [ti * 1000 for ti in tis]
                 LOG.warn(f"Looks like TIs were specified in seconds - converting to ms")
@@ -258,12 +262,15 @@ class T1Molli(Module):
         if imgs:
             for img in imgs:
                 LOG.info(f" - Processing MOLLI data from {img.fname} using MDR={mdr}, MOLLI corrections={molli}, parameters={parameters}")
-                if tis is None or len(tis) == 0:
+                if tis_use_md or tis is None:
                     # Consider TIs to be equivalent if they are with 10ms of each other
                     img_tis = np.array(np.unique([int(t/10) for t in img.inversiontimedelay if int(t) > 0])) * 10
-                    if len(img_tis) == 0:
-                        LOG.warn(" - No TIs found in metadata - skipping this image")
+                    if len(img_tis) == 0 and tis is None:
+                        LOG.warn(" - No TIs found in metadata and no default provided - skipping this image")
                         continue
+                    elif len(img_tis) == 0:
+                        LOG.warn(" - No TIs found in metadata - using default provided")
+                        img_tis = tis
                     else:
                         LOG.info(f" - Found {len(img_tis)} TIs (ms): {img_tis} in metadata")
                 else:
@@ -480,6 +487,92 @@ class T2starDixon(Module):
             exclude_fill[np.isclose(exclude_fill, 100)] = -9999
             imgs[0].save_derived(exclude_fill, self.outfile(f"{t2star_name}_exclude_fill.nii.gz"))
 
+class DixonDerived(Module):
+    """
+    Derived Dixon maps
+    """
+    def __init__(self, name="dixon", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        dixon_dir = self.kwargs.get("dixon_dir", "../fsort/dixon")
+        globs = self.kwargs.get("globs", ["fat.nii.gz", "water.nii.gz", "fat_fraction.nii.gz", "t2star.nii.gz", "ip.nii.gz", "op.nii.gz"])
+        for img_glob in globs:
+            imgs = self.inimgs(dixon_dir, img_glob, src=self.OUTPUT)
+            if not imgs:
+                LOG.info(f" - No Dixon data found in {dixon_dir}/{img_glob}")
+                continue            
+            for img in imgs:
+                LOG.info(f" - Saving Dixon data from {img.fname}")
+                img.save(self.outfile(img.fname))
+
+        # T2* with excluded fill value
+        t2star_name = self.kwargs.get("t2star_name", "t2star")
+        img = self.single_inimg(dixon_dir, f"{t2star_name}.nii.gz", src=self.OUTPUT)
+        if img is not None:
+            # 100 is a fill value - replace with something easier to exclude in stats
+            LOG.info(" - Saving T2* map with excluded fill value")
+            exclude_fill = np.copy(img.data)
+            exclude_fill[np.isclose(exclude_fill, 100)] = -9999
+            img.save_derived(exclude_fill, self.outfile(f"{t2star_name}_exclude_fill.nii.gz"))
+
+        # Scanner derived and calculated FF map
+        ff_name = self.kwargs.get("ff_name", "fat_fraction")
+        fat = self.single_inimg(dixon_dir, "fat.nii.gz")
+        water = self.single_inimg(dixon_dir, "water.nii.gz")
+        ff_scanner = self.single_inimg(dixon_dir, f"{ff_name}.nii.gz", src=self.OUTPUT)
+        if ff_scanner is not None:
+            ff_data = ff_scanner.data
+            ff_max = np.percentile(ff_data, 95)
+            LOG.info(f" - Fat fraction 95% percentile: {ff_max}")
+            if ff_max < 2:
+                LOG.info(" - Fat fraction scaled 0-1 - saving as percentage")
+                ff_data = ff_data * 100
+            elif ff_max > 200:
+                if ff_scanner.philipsscaleslope is not None:
+                    LOG.info(f" - Found Philips enhanced scale slope - scaling Fat fraction by {ff_scanner.philipsscaleslope}")
+                    ff_data = ff_data * ff_scanner.philipsscaleslope
+                    if ff_max * ff_scanner.philipsscaleslope > 200 or ff_max * ff_scanner.philipsscaleslope < 2:
+                        LOG.warn(f"Scaled fat fraction still not in expected range: {ff_max * ff_scanner.philipsscaleslope}")
+                else:
+                    LOG.warn("Fat fraction not in expected range and no scale slope found - check statistics")
+            LOG.info(f" - Saving scanner fat fraction to {ff_name}_scanner.nii.gz")
+            ff_scanner.save_derived(ff_data, self.outfile(f"{ff_name}_scanner.nii.gz"))
+        else:
+            LOG.info(" - Scanner derived fat fraction map not found")
+
+        if fat is not None and water is not None:
+            water_data = self.resample(water, fat, allow_rotated=True).get_fdata()
+            ff = np.zeros_like(fat.data, dtype=np.float32)
+            valid = fat.data + water_data > 0
+            ff[valid] = fat.data.astype(np.float32)[valid] * 100 / (fat.data + water_data)[valid]
+            LOG.info(f" - Saving fat/water derived fat fraction map as {ff_name}_calc")
+            fat.save_derived(ff, self.outfile(f"{ff_name}_calc.nii.gz"))
+        else:
+            LOG.info(" - Could not find fat/water images - not calculating fat fraction")
+            if ff_scanner is None:
+                LOG.warn("No fat fraction data found")
+
+        # IP / OP if not scanner generated
+        ip_glob = self.kwargs.get("ip_glob", "ip.nii.gz")
+        op_glob = self.kwargs.get("op_glob", "op.nii.gz")
+        ip = self.single_inimg(dixon_dir, ip_glob, src=self.OUTPUT, warn=False)
+        op = self.single_inimg(dixon_dir, op_glob, src=self.OUTPUT, warn=False)
+        if ip is not None:
+            LOG.info(f" - Saving scanner generated IP map from {ip.fname}")
+            ip.save(self.outfile("ip.nii.gz"))
+        else:
+            LOG.info(f" - No scanner generated IP map found - using fat + water")
+            ip = fat.data + water.data
+            fat.save_derived(ip, self.outfile("ip.nii.gz"))
+        if op is not None:
+            LOG.info(f" - Saving scanner generated OP map from {op.fname}")
+            op.save(self.outfile("op.nii.gz"))
+        else:
+            LOG.info(f" - No scanner generated OP map found - using abs(water - fat)")
+            op = np.abs(water.data - fat.data)
+            fat.save_derived(op, self.outfile("op.nii.gz"))
+
 class B1(Module):
     def __init__(self, name="b1", **kwargs):
         Module.__init__(self, name, **kwargs)
@@ -584,3 +677,66 @@ class AdditionalMap(Module):
             if img is not None:
                 LOG.info(f" - Saving additional map from {img.fpath} to {fname}")
                 img.save(self.outfile(fname))
+
+class DwiMoco(Module):
+    def __init__(self, name="dwi_moco", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        dwi_dir = self.kwargs.get("dwi_dir", "../fsort/dwi")
+        dwi_glob = self.kwargs.get("dwi_glob", "dwi.nii.gz")
+
+        dwi = self.single_inimg(dwi_dir, dwi_glob)
+        if dwi is None:
+            self.no_data(f"No DWI data found matching {dwi_dir}/{dwi_glob}")
+
+        # Motion correct all bvals
+        LOG.info(f" - Processing DWI data from {dwi.fname}")
+        from ukat.mapping.diffusion import ADC
+        adc_moco_mapper = ADC(dwi.data, dwi.affine, dwi.bval, ukrin_b=False, moco=True)
+        moco_data = adc_moco_mapper.pixel_array_mean
+        dwi.save_derived(moco_data, self.outfile("dwi_moco.nii.gz"), copy_bdata=False)
+        bval_moco = np.unique(dwi.bval)
+        np.savetxt(self.outfile('dwi_moco.bval'), np.expand_dims(bval_moco, 1).T, fmt='%.0f')
+
+        moco_bvals = adc_moco_mapper.u_bvals
+        np.savetxt(self.outfile('dwi_moco.bval'), np.expand_dims(moco_bvals, 1).T, fmt='%.0f')
+
+class DwiAdc(Module):
+    def __init__(self, name="dwi_adc", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        dwi_dir = self.kwargs.get("dwi_dir", "dwi_moco")
+        dwi_glob = self.kwargs.get("dwi_glob", "dwi_moco.nii.gz")
+
+        dwi = self.single_inimg(dwi_dir, dwi_glob, src=self.OUTPUT)
+        if dwi is None:
+            self.no_data(f"No DWI data found matching {dwi_dir}/{dwi_glob}")
+
+        # Fit ADC using a limited number of bvals
+        LOG.info(f" - Processing DWI data from {dwi.fname} (bvals: {dwi.bval})")
+        from ukat.mapping.diffusion import ADC
+        adc_mapper = ADC(dwi.data, dwi.affine, np.unique(dwi.bval), ukrin_b=True, moco=False)
+        adc_mapper.to_nifti(self.outdir, base_file_name=dwi.fname_noext)
+
+
+class AslMoco(Module):
+    def __init__(self, name="asl_moco", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        asl_dir = self.kwargs.get("asl_dir", "../fsort/asl")
+        asl_glob = self.kwargs.get("asl_glob", "asl*.nii.gz")
+
+        asl_imgs = self.inimgs(asl_dir, asl_glob)
+        if not asl_imgs:
+            self.no_data(f"No ASL data found matching {asl_dir}/{asl_glob}")
+
+        from ukat.mapping.perfusion import Perfusion
+        for img in asl_imgs:
+            LOG.info(f" - Processing ASL data from {img.fname}")
+            perf_mapper = Perfusion(img.data, img.affine, moco=True)
+            perf_mapper.to_nifti(self.outdir, base_file_name=img.fname_noext)
+            moco_data = perf_mapper.pixel_array
+            img.save_derived(moco_data, self.outfile(f'{img.fname_noext}_moco.nii.gz'))
