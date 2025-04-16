@@ -6,8 +6,8 @@ import validators
 import wget
 
 import numpy as np
-import scipy
 import skimage
+from scipy.ndimage import binary_fill_holes, binary_erosion, generate_binary_structure
 
 from fsort import ImageFile
 from fproc.module import Module
@@ -58,6 +58,7 @@ class LiverDixon(Module):
         t2star = self.inimg(dixon_dir, "t2star.nii.gz", src=src)
         water = self.inimg(dixon_dir, "water.nii.gz", src=src)
         self.run_nnunetv2("14", [fat, t2star, water], "liver", "DIXON", water, "water")
+
 
 class SpleenDixon(Module):
     def __init__(self, name="seg_spleen_dixon", **kwargs):
@@ -271,7 +272,7 @@ class BodyDixon(Module):
             water_data_nonzero = water_data_slice[water_data_slice > 0]
             thresh = np.percentile(water_data_nonzero, water_thresh)
             mask_slice = (water_data_slice > thresh).astype(np.int8).squeeze()
-            mask_slice_filled = scipy.ndimage.morphology.binary_fill_holes(mask_slice)
+            mask_slice_filled = binary_fill_holes(mask_slice)
             largest_blob = self.blobs_by_size(mask_slice_filled, min_size=10)[0]
             body_mask.append(largest_blob)
         body_mask = np.stack(body_mask, axis=-1)
@@ -358,25 +359,34 @@ class LegDixon(Module):
         seg = self.inimg(self.name, "leg.nii.gz", src=self.OUTPUT)
         self.lightbox(water, seg, name="leg_water_lightbox", tight=True)
 
-class KidneyDixon(Module):
-    def __init__(self, name="seg_kidney_dixon", **kwargs):
+
+class OrganDixon(Module):
+    def __init__(self, organ, **kwargs):
+        self.organ = organ
+        name = kwargs.pop("name", f"seg_{organ}_dixon")
         Module.__init__(self, name, **kwargs)
 
     def process(self):
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         src = self.kwargs.get("dixon_src", self.INPUT)
-        fat = self.inimg(dixon_dir, "fat.nii.gz", src=src)
-        ff = self.inimg(dixon_dir, "fat_fraction.nii.gz", src=src)
-        t2star = self.inimg(dixon_dir, "t2star.nii.gz", src=src)
-        water = self.inimg(dixon_dir, "water.nii.gz", src=src)
+        inputs = self.kwargs.get("inputs", ["fat", "fat_fraction", "t2star", "water"])
+        input_imgs = []
+        for input in inputs:
+            input_imgs.append(self.inimg(dixon_dir, f"{input}.nii.gz", src=src))
         model_id = self.kwargs.get("model_id", "422")
-        self.run_nnunetv2(model_id, [fat, ff, t2star, water], "kidney", "DIXON", water, "water")
+        water = self.inimg(dixon_dir, "water.nii.gz", src=src)
+        self.run_nnunetv2(model_id, input_imgs, self.organ, "DIXON", water, "water")
 
-        kidney = self.inimg(self.name, "kidney.nii.gz", src=self.OUTPUT)
-        left = self.split_lr(kidney.data, kidney.affine, "l")
-        right = self.split_lr(kidney.data, kidney.affine, "r")
-        kidney.save_derived(left, self.outfile("kidney_left.nii.gz"))
-        kidney.save_derived(right, self.outfile("kidney_right.nii.gz"))
+        if self.kwargs.get("splitlr", self.organ == "kidney"):
+            organ_img = self.inimg(self.name, f"{self.organ}.nii.gz", src=self.OUTPUT)
+            left = self.split_lr(organ_img.data, organ_img.affine, "l")
+            right = self.split_lr(organ_img.data, organ_img.affine, "r")
+            organ_img.save_derived(left, self.outfile("kidney_left.nii.gz"))
+            organ_img.save_derived(right, self.outfile("kidney_right.nii.gz"))
+
+class KidneyDixon(OrganDixon):
+    def __init__(self, **kwargs):
+        OrganDixon.__init__(self, "kidney", **kwargs)
 
 class KidneyCortexMedullaT2w(Module):
     """
@@ -427,7 +437,6 @@ class KidneyCortexMedullaT2w(Module):
 
         #fslmaths masktot2star -ero masktot2starero;
         #fslmaths masktot2starero -ero masktot2starero2;
-        from scipy.ndimage import binary_erosion, generate_binary_structure
         struct = generate_binary_structure(3, 1)
         struct[..., 0] = 0
         struct[..., -1] = 0
@@ -499,7 +508,6 @@ class RenalPelvis(Module):
         t1_kidney = (cortex_res + medulla_res > 0).astype(np.int32)
         t2w_seg.save_derived(t1_kidney, self.outfile("t1_kidney.nii.gz"))
 
-        from scipy.ndimage import binary_fill_holes, binary_erosion, generate_binary_structure
         struct = generate_binary_structure(3, 1)
         struct[..., 0] = 0
         struct[..., -1] = 0
@@ -510,3 +518,46 @@ class RenalPelvis(Module):
         pelvis = (kidney_fill_ero - t1_kidney > 0).astype(np.int32)
         t2w_seg.save_derived(pelvis, self.outfile("renal_pelvis.nii.gz"))
 
+
+class KidneyFat(Module):
+    def __init__(self, name="seg_kidney_fat", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        kidney_seg_dir = self.kwargs.get("kidney_seg_dir", "seg_kidney_dixon")
+        kidney_seg_glob = self.kwargs.get("kidney_seg_glob", "kidney.nii.gz")
+        ff_dir = self.kwargs.get("ff_dir", "fat_fraction")
+        ff_glob = self.kwargs.get("ff_glob", "fat_fraction.nii.gz")
+        ff_thresh = self.kwargs.get("ff_thresh", 15)
+
+        kidney = self.single_inimg(kidney_seg_dir, kidney_seg_glob, src=self.OUTPUT)
+        if kidney is None:  
+            self.no_data(f"No kidney segmentation found in {kidney_seg_dir}/{kidney_seg_glob}")
+        kidney_filled = binary_fill_holes(kidney.data)
+
+        ff = self.single_inimg(ff_dir, ff_glob, src=self.OUTPUT)
+        if ff is None:
+            self.no_data(f"No fat fraction data found in {ff_dir}/{ff_glob}")
+        ff_data = self.resample(ff, kidney, is_roi=False, allow_rotated=True).get_fdata()
+        fat_mask = ff_data > ff_thresh
+
+        LOG.info(f" - Segmenting kidney fat / parenchyma using {kidney.fname}, {ff.fname} with threshold {ff_thresh}")
+        kidney_parenchyma = np.copy(kidney_filled)
+        kidney_parenchyma[fat_mask > 0] = 0
+
+        fat_pelvis = np.copy(fat_mask)
+        kidney_dil = binary_erosion(kidney_filled)
+        fat_pelvis[kidney_dil == 0] = 0
+
+        kidney.save_derived(ff_data, self.outfile("ff_res.nii.gz"))
+        kidney.save_derived(fat_mask.astype(np.int32), self.outfile("fat_mask.nii.gz"))
+        kidney.save_derived(kidney_filled.astype(np.int32), self.outfile("kidney_filled.nii.gz"))
+        kidney.save_derived(kidney_dil.astype(np.int32), self.outfile("kidney_dil.nii.gz"))
+        kidney.save_derived(kidney_parenchyma.astype(np.int32), self.outfile("kidney_parenchyma.nii.gz"))
+        kidney.save_derived(fat_pelvis.astype(np.int32), self.outfile("fat_pelvis.nii.gz"))
+
+        for side in ["left", "right"]:
+            side_mask = self.split_lr(fat_pelvis, kidney.affine, side)
+            kidney.save_derived(side_mask, self.outfile(f"fat_pelvis_{side}.nii.gz"))
+            side_mask = self.split_lr(kidney_parenchyma, kidney.affine, side)
+            kidney.save_derived(side_mask, self.outfile(f"kidney_parenchyma_{side}.nii.gz"))
