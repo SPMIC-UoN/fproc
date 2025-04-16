@@ -19,6 +19,7 @@ class ArgumentParser(argparse.ArgumentParser):
         self.add_argument('--subjid', help='Subject ID')
         self.add_argument('--subjidx', type=int, help='Subject index, starting at zero. Subjects are identified by subdirectories of input')
         self.add_argument("--skip", help="Comma separated list of modules to skip", default="")
+        self.add_argument("--skipdone", help="Comma separated list of modules to skip if output is present", default="")
         self.add_argument("--kidney-t1-model", help="Filename or URL for T1 segmentation model weights")
         self.add_argument("--kidney-t2w-model", help="Filename or URL for T1 segmentation model weights")
         self.add_argument("--leg-dixon-model", help="Filename or URL for Dixon leg segmentation model weights")

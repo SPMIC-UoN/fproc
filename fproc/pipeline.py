@@ -75,9 +75,13 @@ class Pipeline:
             LOG.info(subjdir_msg)
 
             skip = [s.lower().strip() for s in self.options.skip.split(",")]
+            skipdone = [s.lower().strip() for s in self.options.skipdone.split(",")]
             for module in self.modules:
                 if module.name.lower() in skip:
                     LOG.info(f"SKIPPING {module.name.upper()}")
+                    continue
+                if module.name.lower() in skipdone and module.output_exists(self.options.output):
+                    LOG.info(f"SKIPPING {module.name.upper()} - OUTPUT EXISTS")
                     continue
 
                 timestamp = self.timestamp()
