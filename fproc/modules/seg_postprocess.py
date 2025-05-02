@@ -164,10 +164,10 @@ class KidneyT1Clean(Module):
                     else:
                         cleaned_data_t1_seg = self._clean_t2w(t1_seg.data, t2w_mask_res.get_fdata())
                 elif generic:
-                    LOG.warn(f" - Could not find T2w mask for {t1_seg.fname} - using generic cleaning")
+                    LOG.warn(f" - Could not find T2w mask in {seg_t2w_srcdir}/{t2w_masks_glob} - using generic cleaning")
                     cleaned_data_t1_seg = self._clean_generic(t1_seg, t1_segs)
                 else:
-                    LOG.warn(f" - Could not find T2w mask for {t1_seg.fname} - not cleaning")
+                    LOG.warn(f" - Could not find T2w mask in {seg_t2w_srcdir}/{t2w_masks_glob} - not cleaning")
                     cleaned_data_t1_seg = t1_seg
             elif generic:
                 LOG.info(f" - Cleaning {t1_seg.fname} using generic algorithm")
