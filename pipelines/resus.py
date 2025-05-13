@@ -1,10 +1,12 @@
+import glob
 import logging
 import os
 
 import numpy as np
 
+from fsort.image_file import ImageFile
 from fproc.module import Module
-from fproc.modules import segmentations, seg_postprocess, statistics, maps
+from fproc.modules import segmentations, seg_postprocess, statistics, maps, regrid
 
 LOG = logging.getLogger(__name__)
 
@@ -69,6 +71,82 @@ class Radiomics(statistics.Radiomics):
             }
         )
 
+class KidneyStats(statistics.SegStats):
+    def __init__(self):
+        statistics.SegStats.__init__(
+            self, name="kidney_stats",
+            default_limits="3t",
+            segs = {
+                "kidney_cortex" : {
+                    "dir" : "seg_kidney_t1_clean",
+                    "glob" : "*cortex*.nii.gz",
+                },
+                "kidney_cortex_l" : {
+                    "dir" : "seg_kidney_t1_clean",
+                    "glob" : "*cortex_l*.nii.gz",
+                },
+                "kidney_cortex_r" : {
+                    "dir" : "seg_kidney_t1_clean",
+                    "glob" : "*cortex_r*.nii.gz",
+                },
+                "kidney_medulla" : {
+                    "dir" : "seg_kidney_t1_clean",
+                    "glob" : "*medulla*.nii.gz",
+                },
+                "kidney_medulla_l" : {
+                    "dir" : "seg_kidney_t1_clean",
+                    "glob" : "*medulla_l*.nii.gz",
+                },
+                "kidney_medulla_r" : {
+                    "dir" : "seg_kidney_t1_clean",
+                    "glob" : "*medulla_r*.nii.gz",
+                },
+            },
+            params = {
+                "t1_se" : {
+                    "dir" : "t1_se",
+                    "glob" : "t1.nii.gz",
+                },
+                "t1_se_nomdr" : {
+                    "dir" : "t1_se_nomdr_stitch",
+                    "glob" : "*map*.nii.gz",
+                    "seg_overrides" : {
+                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                    }
+                },
+                "t1_se_mdr_2p" : {
+                    "dir" : "t1_se_mdr_stitch",
+                    "glob" : "*map*.nii.gz",
+                    "seg_overrides" : {
+                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                    }
+                },
+                "t1_se_mdr_3p" : {
+                    "dir" : "t1_se_mdr_step2_stitch",
+                    "glob" : "*map*.nii.gz",
+                    "seg_overrides" : {
+                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                    }
+                },
+            },
+            stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd"],
+        )
+
 class SegStats(statistics.SegStats):
     def __init__(self):
         statistics.SegStats.__init__(
@@ -108,7 +186,7 @@ class SegStats(statistics.SegStats):
             },
             params={
                 "t2star" : {
-                    "dir" : "t2star",
+                    "dir" : "t2star_dixon",
                     "glob" : "t2star_exclude_fill.nii.gz",
                 },
                 "ff" : {
@@ -123,10 +201,45 @@ class SegStats(statistics.SegStats):
                     "dir" : "t1_se",
                     "glob" : "t1.nii.gz",
                 },
+                "adc" : {
+                    "dir" : "adc",
+                    "glob" : "adc.nii.gz",
+                },
+                "mre" : {
+                    "dir" : "../mre",
+                    "glob" : "mre.nii.gz",
+                },
+                "mre_qiba" : {
+                    "dir" : "../mre_qiba",
+                    "glob" : "mre_qiba.nii.gz",
+                },
             },
             stats=["n", "iqn", "iqmean", "median", "iqstd", "mode", "fwhm"],
             seg_volumes=True,
         )
+
+
+class ADC(Module):
+    def __init__(self):
+        Module.__init__(self, "adc")
+
+    def process(self):
+        adc_img = self.single_inimg("../adc", "adc.nii.gz", src=self.OUTPUT)
+        add_adc_dir = self.pipeline.options.add_niftis
+        if adc_img:
+            LOG.info(f" - Saving ADC map from XNAT: {adc_img.fname}")
+            adc_img.save(self.outfile("adc.nii.gz"))
+        else:
+            LOG.info(f" - No ADC map found in XNAT, looking for additional ADC maps in {add_adc_dir}")
+            subjdir = os.path.join(add_adc_dir, self.pipeline.options.subjid, "adc_map")
+            adc_fnames = list(glob.glob(os.path.join(subjdir, "*.nii.gz")))
+            if adc_fnames:
+                if len(adc_fnames) > 1:
+                    LOG.warning(f"Found multiple ADC images:  {adc_fnames} - using first")
+                adc_fname = adc_fnames[0]
+                LOG.info(f" - Saving ADC map from {adc_fname}")
+                adc_img = ImageFile(adc_fname, warn_json=False)
+                adc_img.save(self.outfile("adc.nii.gz"))
 
 __version__ = "0.0.1"
 
@@ -141,11 +254,14 @@ MODULES = [
     segmentations.KidneyDixon(model_id="422"),
     segmentations.PancreasEthrive(),
     segmentations.KidneyT2w(),
+
     # Parameter maps
     maps.FatFractionDixon(),
     maps.T2starDixon(),
+    ADC(),
     T1Molli(),
     T1SE(),
+
     # Post-processing of segmentations
     seg_postprocess.SegFix(
         "seg_pancreas_ethrive",
@@ -176,9 +292,57 @@ MODULES = [
             "seg_kidney_dixon" : "kidney.nii.gz"
         }
     ),
+
+    # This is the T1-SE pipeline from Afirm
+    maps.T1SE(name="t1_se_nomdr", se_dir="t1_se_raw", tis=np.arange(100, 2001, 100), tss=53.7, mag_only=True),
+    maps.T1SE(name="t1_se_mdr", se_dir="t1_se_raw", tis=np.arange(100, 2001, 100), tss=53.7, mdr=True, mag_only=True, parameters=2),
+    maps.T1SE(name="t1_se_mdr_step2", se_dir="t1_se_mdr", tis=np.arange(100, 2001, 100), tss=53.7, se_mag_glob="*_reg.nii.gz", mdr=True, mag_only=True, parameters=3, se_src=Module.OUTPUT),
+    regrid.StitchSlices(
+        name="t1_se_nomdr_stitch",
+        img_dir="t1_se_nomdr",
+        imgs={
+            "*t1_map*.nii.gz" : "t1_map.nii.gz",
+        }
+    ),
+    regrid.StitchSlices(
+        name="t1_se_mdr_stitch",
+        img_dir="t1_se_mdr",
+        imgs={
+            "*t1_map*.nii.gz" : "t1_map.nii.gz",
+        }
+    ),
+    regrid.StitchSlices(
+        name="t1_se_mdr_step2_stitch",
+        img_dir="t1_se_mdr_step2",
+        imgs={
+            "*t1_map*.nii.gz" : "t1_map.nii.gz",
+            "*_reg_reg*.nii.gz" : "se_data.nii.gz",
+        }
+    ),
+    segmentations.KidneyT1SE(
+        name="seg_kidney_t1_se",
+        t1_se_dir="t1_se_mdr_step2_stitch",
+        t1_se_glob="*se_data.nii.gz",
+        t1_ref_dir="t1_se_raw",
+    ),
+    seg_postprocess.SplitLR(
+        "seg_kidney_t1_se",
+        "*kidney*.nii.gz",
+    ),
+    seg_postprocess.KidneyT1Clean(
+        name="seg_kidney_t1_se_clean_native",
+        srcdir="seg_kidney_t1_se_splitlr",
+        seg_t1_glob="kidney*.nii.gz",
+        t1_map_srcdir="t1_se_mdr_step2_stitch",
+        t1_map_glob="t1_map.nii.gz",
+        t2w=True,
+        seg_t2w_srcdir="seg_kidney_t2w",
+    ),
+
     # Statistics
     Radiomics(),
     SegStats(),
+    KidneyStats(),
 ]
 
 def add_options(parser):
