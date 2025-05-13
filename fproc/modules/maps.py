@@ -239,7 +239,7 @@ class T1Molli(Module):
     def process(self):
         molli_dir = self.kwargs.get("molli_dir", "molli_raw")
         molli_glob = self.kwargs.get("molli_glob", "molli_raw*.nii.gz")
-        molli_src = self.kwargs.get("molli_src", self.INPUT)
+        molli_src = self.kwargs.get("molli_src", self.OUTPUT)
         mdr = self.kwargs.get("mdr", False)
         tis = self.kwargs.get("tis", None)
         parameters = self.kwargs.get("parameters", 3)
@@ -740,3 +740,13 @@ class AslMoco(Module):
             perf_mapper.to_nifti(self.outdir, base_file_name=img.fname_noext)
             moco_data = perf_mapper.pixel_array
             img.save_derived(moco_data, self.outfile(f'{img.fname_noext}_moco.nii.gz'))
+
+            # Do our own label-control subtraction
+            if moco_data.ndim != 4 or moco_data.shape[-1] % 2 != 0:
+                LOG.warn(f" - ASL data not in label/control format - skipping label-control subtraction")
+                continue
+            else:
+                n = moco_data.shape[-1] // 2
+                c, l = moco_data[..., n:], moco_data[..., :n]
+                perf_data = c - l
+                img.save_derived(perf_data, self.outfile(f'{img.fname_noext}_pwi.nii.gz'))
