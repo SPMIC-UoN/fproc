@@ -2,7 +2,9 @@ from collections import OrderedDict
 import logging
 
 import numpy as np
+import mdreg
 
+from fsort.image_file import ImageFile
 from fproc.module import Module, CopyModule
 from fproc.modules import maps, segmentations, statistics, seg_postprocess
 
@@ -425,6 +427,92 @@ class SegStatsMolli7(statistics.SegStats):
             seg_volumes=True,
         )
 
+class T1Moco(Module):
+    def __init__(self, name="t1_moco", **kwargs):
+        Module.__init__(self, name, **kwargs)
+    
+    def process(self):
+        t1_dir = self.kwargs.get("t1_dir", "t1_molli_5")
+        t1_glob = self.kwargs.get("t1_glob", "*_%i_*t1_map.nii.gz")
+        t1_maps = []
+        t1_ref = None
+        for n in range(1, 21):
+            t1_map = self.single_inimg(t1_dir, t1_glob % n, src=self.OUTPUT)
+            if t1_map:
+                t1_maps.append(t1_map)
+            else:
+                break
+        
+            # Check consistent
+            if t1_map.shape != t1_maps[0].shape:
+                self.no_data(f"T1 map {t1_map.fname} has different shape than first T1 map {t1_maps[0].fname} - aborting")
+            elif not np.allclose(t1_map.affine, t1_maps[0].affine):
+                self.no_data(f"T1 map {t1_map.fname} has different affine than first T1 map {t1_maps[0].fname} - aborting")
+
+            # Only t1_thresh has the metadata?
+            if self.kwargs.get("use_t1_thresh", False):
+                t1_md = ImageFile(t1_map.fpath.replace("t1_map", "t1_thresh"))
+            else:
+                t1_md = t1_map
+            hr = t1_md.heartrate[0]
+            fa = t1_md.flipangle
+            if hr == 60 and fa == 35:
+                if t1_ref is not None:
+                    LOG.warn(f" - Found multiple T1 maps with 60 bpm and 35 degree flip angle: {t1_ref.fname} and {t1_map.fname} - using first one")
+                else:
+                    LOG.info(f" - Found reference T1 map {t1_map.fname} with {hr} bpm and {fa} degree flip angle")
+                    t1_ref = t1_map
+
+        if t1_ref is None:
+            self.no_data(f"No T1 maps found in {t1_dir} with 60 bpm and 35 degree flip angle")
+
+        t1_ref_data = t1_ref.data.squeeze(-1) if len(t1_ref.data.shape) == 4 else t1_ref.data
+        t1_data_3d = [t1_map.data.squeeze(-1) if len(t1_map.data.shape) == 4 else t1_map.data for t1_map in t1_maps]
+        t1_data_stacked = np.stack(t1_data_3d, axis=-1)
+        t1_ref.save(self.outfile("t1_ref.nii.gz"))
+        t1_ref.save_derived(t1_data_stacked, self.outfile("t1_data_stacked.nii.gz"))
+
+        LOG.info(f" - Doing slicewise MoCo on stacked T1 data")
+        num_slices = t1_ref.shape[2]
+        moco_data = np.zeros_like(t1_data_stacked)
+        print(t1_data_stacked.shape)
+        def_field = np.zeros(list(t1_data_stacked.shape) + [2,])
+        for sl_idx in range(num_slices):
+            def _ref_slice(*args, **kwargs):
+                slice_data = t1_ref_data[..., sl_idx]
+                fit = np.repeat(slice_data[...,np.newaxis], len(t1_maps), axis=-1)
+                return fit, np.expand_dims(np.zeros_like(slice_data), axis=-1)
+
+            stacked_slices = t1_data_stacked[..., sl_idx, :]
+            print(stacked_slices.shape)
+            sl_data_moco, sl_def_field, fit, pars = mdreg.fit(stacked_slices, fit_image={"func" : _ref_slice})
+            print(sl_data_moco.shape, sl_def_field.shape, fit.shape)
+            sl_def_field = np.transpose(sl_def_field, (0, 1, 3, 2))
+            moco_data[..., sl_idx, :] = sl_data_moco
+            def_field[..., sl_idx, :, :] = sl_def_field
+
+        t1_ref.save_derived(moco_data, self.outfile("t1_data_moco.nii.gz"))
+        # for idx, t1_map in enumerate(t1_maps):
+        #     data = moco_data[..., idx]
+        #     t1_map.save_derived(data, self.outfile(t1_map.fname.replace(".nii.gz", "_moco.nii.gz")))
+        LOG.info(f" - Saved MoCo T1 maps")
+
+        t1_ref.save_derived(fit, self.outfile("fit.nii.gz"))
+        u = def_field[..., 0]
+        v = def_field[..., 1]
+        t1_ref.save_derived(u, self.outfile("def_field_u.nii.gz"))
+        t1_ref.save_derived(v, self.outfile("def_field_v.nii.gz"))
+        LOG.info(f" - Saved MoCo def field")
+
+        LOG.info(f" - Copying kidney segs from reference into output")
+        seg_dir = self.kwargs.get("seg_dir", "seg_kidney_t1_molli_5_clean")
+        segs = self.inimgs(seg_dir, f"kidney*_{t1_ref.fname_noext}*.nii.gz", src=self.OUTPUT)
+        for seg in segs:
+            fname = seg.fname.replace("_" + t1_ref.fname_noext, "")
+            LOG.info(f" - {seg.fname} -> {fname}")
+            seg.save(self.outfile(fname))
+
+
 __version__ = "0.0.1"
 
 NAME = "mollihr"
@@ -445,14 +533,21 @@ class T1Thresh(Module):
 
             data[r2.data < 0.3] = 0
             data[data >= 4000] = 0
+            data[data < 0] = 0
             
             data[:20, ...] = 0
             data[-20:, ...] = 0
             data[:, :20, ...] = 0
             data[:, -20:, ...] = 0
 
+            t1_thresh = ImageFile(t1_map.fpath.replace("t1_map", "t1_thresh"))
+            LOG.info(f" - Saving {t1_thresh.fname} to ensure we have JSON")
+            t1_thresh.save(self.outfile(t1_map.fname))
+            
+            LOG.info(f" - Saving thresholded version of {t1_map.fname}")
             t1_map.save_derived(data, self.outfile(t1_map.fname))
-
+            
+            
 MODULES = [
     # Parameter maps
     maps.B0(),
@@ -461,8 +556,8 @@ MODULES = [
     maps.T2starDixon(),
     T1(),
     MolliRaw5(),
-    maps.T1Molli(name="t1_molli_5", molli_dir="molli_raw_5", molli_src=Module.OUTPUT), # Use this as source for T1 seg
-    maps.T1Molli(name="t1_molli_7"),
+    maps.T1Molli(name="t1_molli_5", molli_dir="molli_raw_5", src=Module.OUTPUT), # Use this as source for T1 seg
+    maps.T1Molli(name="t1_molli_7", molli_dir="../fsort/molli_raw"),
     T1Thresh(t1_dir="t1_molli_5"),
     T1Thresh(t1_dir="t1_molli_7"),
     # Segmentations
@@ -501,6 +596,10 @@ MODULES = [
     seg_postprocess.KidneyT1Clean(t2w=False),
     seg_postprocess.KidneyT1Clean(name="seg_kidney_t1_molli_5_clean", srcdir="seg_kidney_t1_molli_5", t1_map_srcdir="t1_molli_5", t2w=False),
     seg_postprocess.KidneyT1Clean(name="seg_kidney_t1_molli_7_clean", srcdir="seg_kidney_t1_molli_7", t1_map_srcdir="t1_molli_7", t2w=False),
+    # Alignment of T1maps
+    T1Moco(name="seg_kidney_t1_scanner_moco_vol", t1_dir="t1", t1_glob="t1_map_%i.nii.gz", seg_dir="seg_kidney_t1_clean"),
+    T1Moco(name="seg_kidney_t1_molli_5_moco_vol", t1_dir="t1_molli_5_thresh", t1_glob="*_%i_5_t1_map.nii.gz", seg_dir="seg_kidney_t1_molli_5_clean"),
+    T1Moco(name="seg_kidney_t1_molli_7_moco_vol", t1_dir="t1_molli_7_thresh", t1_glob="*_%i_t1_map.nii.gz", seg_dir="seg_kidney_t1_molli_7_clean"),
     # Statistics
     SegStats(),
     SegStatsMolli5(),
