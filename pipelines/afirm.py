@@ -105,18 +105,6 @@ class Stats(statistics.SegStats):
                         "kidney_medulla_r" : {"dir" : "seg_kidney_t1_clean_native"},
                     }
                 },
-                "t1_noclean" : {
-                    "dir" : "t1_molli_stitch_fix",
-                    "glob" : "t1_conf.nii.gz",
-                    "seg_overrides" : {
-                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_clean_native_generic"},
-                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_clean_native_generic"},
-                        "kidney_cortex" : {"dir" : "seg_kidney_t1_clean_native_generic"},
-                        "kidney_medulla" : {"dir" : "seg_kidney_t1_clean_native_generic"},
-                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_clean_native_generic"},
-                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_clean_native_generic"},
-                    }
-                },
                 "t1_molli_nomdr" : {
                     "dir" : "t1_molli_nomdr_stitch",
                     "glob" : "*map*.nii.gz",
@@ -145,29 +133,53 @@ class Stats(statistics.SegStats):
                     "dir" : "t1_se_nomdr_stitch",
                     "glob" : "*map*.nii.gz",
                     "seg_overrides" : {
-                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_clean_native"},
-                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_clean_native"},
-                        "kidney_cortex" : {"dir" : "seg_kidney_t1_clean_native"},
-                        "kidney_medulla" : {"dir" : "seg_kidney_t1_clean_native"},
-                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_clean_native"},
-                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_clean_native"},
+                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
                     }
                 },
-                "t1_se_mdr" : {
+                "t1_se_mdr_2p" : {
                     "dir" : "t1_se_mdr_stitch",
                     "glob" : "*map*.nii.gz",
                     "seg_overrides" : {
-                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_clean_native"},
-                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_clean_native"},
-                        "kidney_cortex" : {"dir" : "seg_kidney_t1_clean_native"},
-                        "kidney_medulla" : {"dir" : "seg_kidney_t1_clean_native"},
-                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_clean_native"},
-                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_clean_native"},
+                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                    }
+                },
+                "t1_se_mdr_3p" : {
+                    "dir" : "t1_se_mdr_step2_stitch",
+                    "glob" : "*map*.nii.gz",
+                    "seg_overrides" : {
+                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
                     }
                 },
                  "mtr" : {
                     "dir" : "mtr",
                     "glob" : "mtr.nii.gz",
+                },
+                 "mtr_mdr" : {
+                    "dir" : "mtr",
+                    "glob" : "mtr.nii.gz",
+                    "seg_overrides" : {
+                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_mdr_clean_native"},
+                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_mdr_clean_native"},
+                        "kidney_cortex" : {"dir" : "seg_kidney_t1_mdr_clean_native"},
+                        "kidney_medulla" : {"dir" : "seg_kidney_t1_mdr_clean_native"},
+                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_mdr_clean_native"},
+                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_mdr_clean_native"},
+                    }
                 },
                 "b0" : {
                     "dir" : "b0",
@@ -184,6 +196,18 @@ class Stats(statistics.SegStats):
                     "glob" : "b1_rescaled.nii.gz",
                     "segs" : ["tkv_l", "tkv_r"],
                 },
+                "adc_mdr" : {
+                    "dir" : "dwi_adc",
+                    "glob" : "*adc_map*.nii.gz",
+                    "seg_overrides" : {
+                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
+                    }
+                },
             },
             stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd"],
         )
@@ -194,6 +218,21 @@ class StatsDixon(statistics.SegStats):
             self, name="stats_dixon", 
             default_limits="3t",
             segs={
+                 "liver_cor" : {
+                    "dir" : "seg_liver_dixon_cor",
+                    "glob" : "liver.nii.gz",
+                    "seg_volumes" : False,
+                },
+                "spleen_cor" : {
+                    "dir" : "seg_spleen_dixon_cor",
+                    "glob" : "spleen.nii.gz",
+                    "seg_volumes" : False,
+                },
+                "sat_cor" : {
+                    "dir" : "seg_sat_dixon_cor",
+                    "glob" : "sat.nii.gz",
+                    "seg_volumes" : False,
+                },
                 "liver_ax" : {
                     "dir" : "seg_liver_dixon_ax",
                     "glob" : "liver.nii.gz"
@@ -206,21 +245,74 @@ class StatsDixon(statistics.SegStats):
                     "dir" : "seg_sat_dixon_ax",
                     "glob" : "sat.nii.gz",
                 },
-                "liver_cor" : {
-                    "dir" : "seg_liver_dixon_cor",
-                    "glob" : "liver.nii.gz"
-                },
-                "spleen_cor" : {
-                    "dir" : "seg_spleen_dixon_cor",
-                    "glob" : "spleen.nii.gz"
-                },
-                "sat_cor" : {
-                    "dir" : "seg_sat_dixon_cor",
-                    "glob" : "sat.nii.gz",
+                "vat_ax" : {
+                    "dir" : "seg_vat_dixon_ax",
+                    "glob" : "vat.nii.gz",
+                    "params" : []  # Volumes only
                 },
                 "pancreas" : {
                     "dir" : "seg_pancreas_ethrive",
                     "glob" : "pancreas.nii.gz",
+                },
+                "kidney_dixon_nofat_cor" : {
+                    "dir" : "seg_kidney_fat_dixon_cor",
+                    "glob" : "kidney_parenchyma.nii.gz",
+                    "params" : [],
+                },
+                "kidney_dixon_left_nofat_cor" : {
+                    "dir" : "seg_kidney_fat_dixon_cor",
+                    "glob" : "kidney_parenchyma_left.nii.gz",
+                    "params" : [],
+                },
+                "kidney_dixon_right_nofat_cor" : {
+                    "dir" : "seg_kidney_fat_dixon_cor",
+                    "glob" : "kidney_parenchyma_right.nii.gz",
+                    "params" : [],
+                },
+                "kidney_dixon_nofat_ax" : {
+                    "dir" : "seg_kidney_fat_dixon_ax",
+                    "glob" : "kidney_parenchyma.nii.gz",
+                    "params" : [],
+                },
+                "kidney_dixon_left_nofat_ax" : {
+                    "dir" : "seg_kidney_fat_dixon_ax",
+                    "glob" : "kidney_parenchyma_left.nii.gz",
+                    "params" : [],
+                },
+                "kidney_dixon_right_nofat_ax" : {
+                    "dir" : "seg_kidney_fat_dixon_ax",
+                    "glob" : "kidney_parenchyma_right.nii.gz",
+                    "params" : [],
+                },
+                "fat_pelvis_cor" : {
+                    "dir" : "seg_kidney_fat_dixon_cor",
+                    "glob" : "fat_pelvis.nii.gz",
+                    "params" : ["ff_cor"],
+                },
+                "fat_pelvis_left_cor" : {
+                    "dir" : "seg_kidney_fat_dixon_cor",
+                    "glob" : "fat_pelvis_left.nii.gz",
+                    "params" : ["ff_cor"],
+                },
+                "fat_pelvis_right_cor" : {
+                    "dir" : "seg_kidney_fat_dixon_cor",
+                    "glob" : "fat_pelvis_right.nii.gz",
+                    "params" : ["ff_cor"],
+                },
+                "fat_pelvis_ax" : {
+                    "dir" : "seg_kidney_fat_dixon_ax",
+                    "glob" : "fat_pelvis.nii.gz",
+                    "params" : ["ff_ax"],
+                },
+                "fat_pelvis_left_ax" : {
+                    "dir" : "seg_kidney_fat_dixon_ax",
+                    "glob" : "fat_pelvis_left.nii.gz",
+                    "params" : ["ff_ax"],
+                },
+                "fat_pelvis_right_ax" : {
+                    "dir" : "seg_kidney_fat_dixon_ax",
+                    "glob" : "fat_pelvis_right.nii.gz",
+                    "params" : ["ff_ax"],
                 },
             },
             params={
@@ -287,7 +379,7 @@ class StatsDixon(statistics.SegStats):
                 },
             },
             stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd"],
-            seg_volumes=False,
+            seg_volumes=True,
         )
 
 class T1MolliMetadata(Module):
@@ -376,10 +468,10 @@ class T1Scaled(Module):
 
 MODULES = [
     # Parameter maps
-    maps.T1Molli(name="t1_molli", molli_dir="t1_molli", molli_glob="t1_molli_raw*.nii.gz", t1_thresh=(0, 5000)),
-    maps.T1Molli(name="t1_molli_mdr", molli_dir="t1_molli_raw", molli_glob="t1_molli_raw*.nii.gz", mdr=True, use_scanner_maps=False),
-    maps.T1Molli(name="t1_molli_nomdr", molli_dir="t1_molli_raw", molli_glob="t1_molli_raw*.nii.gz", mdr=False, use_scanner_maps=False),
-    maps.T1SE(name="t1_se_nomdr", se_dir="t1_se_raw", tis=np.arange(100, 2001, 100), tss=53.7, mag_only=True),
+    maps.T1Molli(name="t1_molli", molli_dir="../fsort/t1_molli", molli_glob="t1_molli_raw*.nii.gz", t1_thresh=(0, 5000), tis=[117.0, 201.0, 1117.0, 1201.0, 2117.0, 2201.0, 3117.0, 4117.0], tis_use_md=True),
+    maps.T1Molli(name="t1_molli_mdr", molli_dir="../fsort/t1_molli_raw", molli_glob="t1_molli_raw*.nii.gz", mdr=True, use_scanner_maps=False, tis=[117.0, 201.0, 1117.0, 1201.0, 2117.0, 2201.0, 3117.0, 4117.0], tis_use_md=True),
+    maps.T1Molli(name="t1_molli_nomdr", molli_dir="../fsort/t1_molli_raw", molli_glob="t1_molli_raw*.nii.gz", mdr=False, use_scanner_maps=False, tis=[117.0, 201.0, 1117.0, 1201.0, 2117.0, 2201.0, 3117.0, 4117.0], tis_use_md=True),
+    maps.T1SE(name="t1_se_nomdr", se_dir="../fsort/t1_se_raw", tis=np.arange(100, 2001, 100), tss=53.7, mag_only=True),
     maps.T1SE(name="t1_se_mdr", se_dir="t1_se_raw", tis=np.arange(100, 2001, 100), tss=53.7, mdr=True, mag_only=True, parameters=2),
     maps.T1SE(name="t1_se_mdr_step2", se_dir="t1_se_mdr", tis=np.arange(100, 2001, 100), tss=53.7, se_mag_glob="*_reg.nii.gz", mdr=True, mag_only=True, parameters=3, se_src=Module.OUTPUT),
     maps.T2(),
@@ -389,6 +481,10 @@ MODULES = [
     maps.B1(),
     maps.FatFractionDixon(name="ff_dixon_cor", dixon_dir="dixon_cor"),
     maps.FatFractionDixon(name="ff_dixon_ax", dixon_dir="dixon_ax"),
+    maps.DwiMoco(),
+    maps.DwiAdc(),
+    maps.AslMoco(name="pcasl_moco", asl_glob="pcasl*.nii.gz"),
+    maps.AslMoco(name="fair_moco", asl_glob="fair*.nii.gz"),
 
     # Stitch together potentially multiple slice maps
     regrid.StitchSlices(
@@ -428,10 +524,20 @@ MODULES = [
             "*t1_map*.nii.gz" : "t1_map.nii.gz",
         }
     ),
+    regrid.StitchSlices(
+        name="t1_se_mdr_step2_stitch",
+        img_dir="t1_se_mdr_step2",
+        imgs={
+            "*t1_map*.nii.gz" : "t1_map.nii.gz",
+            "*_reg_reg*.nii.gz" : "se_data.nii.gz",
+        }
+    ),
 
     # Segmentations
-    segmentations.KidneyT1(map_dir="t1_molli_stitch", map_glob="t1_conf.nii.gz"),
-    segmentations.KidneyT1(name="seg_kidney_t1_mdr", map_dir="t1_molli_mdr_stitch", map_glob="t1_map.nii.gz"),
+    segmentations.KidneyT1(map_dir="t1_molli_stitch", map_glob="t1_conf.nii.gz", t1_limits=[(0, 0), (4136, 0)]),
+    segmentations.KidneyT1(name="seg_kidney_t1_mdr", map_dir="t1_molli_mdr_stitch", map_glob="t1_map.nii.gz", t1_limits=[(0, 0), (4136, 0)]),
+    segmentations.KidneyT1(name="seg_kidney_t1_nomdr", map_dir="t1_molli_nomdr_stitch", map_glob="t1_map.nii.gz", t1_limits=[(0, 0), (4136, 0)]),
+    segmentations.KidneyT1SE(name="seg_kidney_t1_se", t1_se_dir="t1_se_mdr_step2_stitch", t1_se_glob="*se_data.nii.gz"),
     segmentations.KidneyT2w(),
     segmentations.KidneyCystT2w(t2w_dir="t2w", t2w_glob="t2w.nii.gz", t2w_src=Module.INPUT),
     #segmentations.BodyDixon(),
@@ -444,8 +550,27 @@ MODULES = [
     segmentations.SpleenDixon(name="seg_spleen_dixon_ax", dixon_dir="dixon_ax"),
     segmentations.KidneyDixon(name="seg_kidney_dixon_ax", dixon_dir="dixon_ax", model_id="422"),
     segmentations.PancreasEthrive(),
+    segmentations.BodyDixon(name="seg_body_dixon_ax", dixon_dir="dixon_ax"),
+    seg_postprocess.LargestBlob("seg_pancreas_ethrive", "pancreas.nii.gz"),
+    segmentations.VatDixon(
+        name="seg_vat_dixon_ax",
+        ff_dir="ff_dixon_ax",
+        ff_glob="fat_fraction_scanner.nii.gz",
+        body_dir="seg_body_dixon_ax",
+        sat_dir="seg_sat_dixon_ax",
+        organs={
+            "seg_liver_dixon_ax" : "liver.nii.gz",
+            "seg_spleen_dixon_ax" : "spleen.nii.gz",
+            "seg_pancreas_ethrive_largestblob" : "pancreas.nii.gz",
+            "seg_kidney_dixon_ax" : "kidney.nii.gz"
+        }
+    ),
 
     # Manual fixes
+    seg_postprocess.SplitLR(
+        "seg_kidney_t1_se",
+        "*kidney*.nii.gz",
+    ),
     maps.MapFix(
         "t1_molli_stitch",
         fix_dir_option="seg_kidney_t1_fix",
@@ -566,8 +691,17 @@ MODULES = [
         seg_t2w_srcdir="seg_kidney_t2w_fix",
     ),
     seg_postprocess.KidneyT1Clean(
+        name="seg_kidney_t1_se_clean_native",
+        srcdir="seg_kidney_t1_se_splitlr",
+        seg_t1_glob="kidney*.nii.gz",
+        t1_map_srcdir="t1_se_mdr_step2_stitch",
+        t1_map_glob="t1_map.nii.gz",
+        t2w=True,
+        seg_t2w_srcdir="seg_kidney_t2w_fix",
+    ),
+    seg_postprocess.KidneyT1Clean(
         name="seg_kidney_t1_clean_native_generic",
-        srcdir="kidney_t1_fix",
+        srcdir="seg_kidney_t1_fix",
         seg_t1_glob="kidney*.nii.gz",
         t1_map_srcdir="t1_molli_stitch_fix",
         t1_map_glob="t1_map.nii.gz",
@@ -580,8 +714,33 @@ MODULES = [
         t2w_glob="t2w.nii.gz",
         t2w_src=Module.INPUT,
     ),
+    seg_postprocess.SegVolumes(
+        "seg_kidney_t2w_vols",
+        seg_dir="seg_kidney_t2w_fix",
+        segs={
+            "kv_left" : "*left*.nii.gz",
+            "kv_right" : "*right*.nii.gz",
+            "kv_mask" : "*mask*.nii.gz",
+        }
+    ),
     segmentations.KidneyCortexMedullaT2w(
         t2w_seg_dir="seg_kidney_t2w_fix",
+    ),
+    segmentations.KidneyFat(
+        name="seg_kidney_fat_dixon_ax",
+        ff_dir="ff_dixon_ax",
+        ff_glob="fat_fraction_scanner.nii.gz",
+        kidney_seg_dir="seg_kidney_dixon_ax",
+        kidney_seg_glob="kidney.nii.gz",
+        ff_thresh=15,
+    ),
+    segmentations.KidneyFat(
+        name="seg_kidney_fat_dixon_cor",
+        ff_dir="ff_dixon_cor",
+        ff_glob="fat_fraction_scanner.nii.gz",
+        kidney_seg_dir="seg_kidney_dixon_cor",
+        kidney_seg_glob="kidney.nii.gz",
+        ff_thresh=15,
     ),
     segmentations.RenalPelvis(
         t2w_seg_dir="seg_kidney_t2w_fix",
@@ -603,6 +762,7 @@ MODULES = [
             "tkv_l" : "*left*.nii.gz",
             "tkv_r" : "*right*.nii.gz"
         },
+        metrics = ["surf_area", "surf_area_over_vol", "vol", "compactness", "long_axis", "short_axis", "mi1", "mi2", "mi3", "mi_mean", "fa"]
     ),
     statistics.ShapeMetrics(
         name="kidney_dixon_shape_metrics_cor",
@@ -611,6 +771,7 @@ MODULES = [
             "kidney_left_cor" : "kidney_left.nii.gz",
             "kidney_right_cor" : "kidney_right.nii.gz"
         },
+        metrics = ["surf_area", "surf_area_over_vol", "vol", "compactness", "long_axis", "short_axis", "mi1", "mi2", "mi3", "mi_mean", "fa"]
     ),
     statistics.ShapeMetrics(
         name="kidney_dixon_shape_metrics_ax",
@@ -619,6 +780,7 @@ MODULES = [
             "kidney_left_ax" : "kidney_left.nii.gz",
             "kidney_right_ax" : "kidney_right.nii.gz"
         },
+        metrics = ["surf_area", "surf_area_over_vol", "vol", "compactness", "long_axis", "short_axis", "mi1", "mi2", "mi3", "mi_mean", "fa"]
     ),
     statistics.Radiomics(
         name="tkv_radiomics",
@@ -629,9 +791,9 @@ MODULES = [
             "tkv_l" : {"dir" : "seg_kidney_t2w_fix", "fname" : "*left*.nii.gz"},
             "tkv_r" : {"dir" : "seg_kidney_t2w_fix", "fname" : "*right*.nii.gz"},
         },
-        features=[
-            "shape"
-        ],
+        features={
+            "shape" : ["SurfaceArea", "VoxelVolume", "SurfaceVolumeRatio", "MajorAxisLength", "MinorAxisLength", "Elongation", "Compactness1"],
+        },
     ),
     statistics.Radiomics(
         name="kidney_dixon_radiomics_cor",
@@ -642,9 +804,9 @@ MODULES = [
             "kidney_dixon_l_cor" : {"dir" : "seg_kidney_dixon_cor", "fname" : "*left*.nii.gz"},
             "kidney_dixon_r_cor" : {"dir" : "seg_kidney_dixon_cor", "fname" : "*right*.nii.gz"},
         },
-        features=[
-            "shape"
-        ],
+        features={
+            "shape" : ["SurfaceArea", "VoxelVolume", "SurfaceVolumeRatio", "MajorAxisLength", "MinorAxisLength", "Elongation", "Compactness1"],
+        },
     ),
     statistics.Radiomics(
         name="kidney_dixon_radiomics_ax",
@@ -655,9 +817,10 @@ MODULES = [
             "kidney_dixon_l_ax" : {"dir" : "seg_kidney_dixon_ax", "fname" : "*left*.nii.gz"},
             "kidney_dixon_r_ax" : {"dir" : "seg_kidney_dixon_ax", "fname" : "*right*.nii.gz"},
         },
-        features=[
-            "shape"
-        ],
+
+        features={
+            "shape" : ["SurfaceArea", "VoxelVolume", "SurfaceVolumeRatio", "MajorAxisLength", "MinorAxisLength", "Elongation", "Compactness1"],
+        },
     ),
     statistics.Radiomics(
         name="t1_radiomics_left",
