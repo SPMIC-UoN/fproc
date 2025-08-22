@@ -264,8 +264,10 @@ class Radiomics(Module):
                     minval, maxval = param_spec.get("minval", None), param_spec.get("maxval", None)
                     if minval is not None:
                         seg_restricted[map_data < minval] = 0
+                        LOG.info(f" - Restricting mask to value >= {minval}")
                     if maxval is not None:
                         seg_restricted[map_data > maxval] = 0
+                        LOG.info(f" - Restricting mask to value <= {maxval}")
                     seg_restricted_fpath = self.outfile(f"{seg_name}_restricted_{param_name}.nii.gz")
                     seg_img.save_derived(seg_restricted, seg_restricted_fpath)
 
