@@ -100,7 +100,7 @@ class SegFix(Module):
                 LOG.warn(f" - No fixed segmentation found - will not save")
 
             if map_img is not None and fixed_img is not None:
-                self.lightbox(map_img, fixed_img, name=f"{fixed_img.fname}_lightbox", tight=True)
+                self.lightbox(map_img, fixed_img, name=f"{fixed_img.fname_noext}_lightbox", tight=True)
 
     def _split_lr(self, data, affine, side):
         LOG.debug(f" - Affine:\n{affine}")
