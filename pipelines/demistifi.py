@@ -209,18 +209,18 @@ class ShapeMetrics(Module):
             segimgs = self.inimgs("qpdata", f"{seg}.nii.gz")
             if not segimgs:
                 LOG.warn(f" - No segmentation matching {seg} found for shape metrics")
-                continue
-            elif len(segimgs) > 1:
-                LOG.warn(f" - Multiple segmentations matching {seg} found - using first")
-            segimg = segimgs[0]
-            LOG.info(f" - Calculating shape metrics from {segimg.fname}")
-            try:
-                vol_metrics = _volume_features(segimg.data, affine=segimg.affine)
-            except:
-                LOG.exception(f"Error getting volume features for {seg}")
                 vol_metrics = {}
+            else:
+                if len(segimgs) > 1:
+                    LOG.warn(f" - Multiple segmentations matching {seg} found - using first")
+                segimg = segimgs[0]
+                LOG.info(f" - Calculating shape metrics from {segimg.fname}")
+                try:
+                    vol_metrics = _volume_features(segimg.data, affine=segimg.affine)
+                except:
+                    LOG.exception(f"Error getting volume features for {seg}")
+                    vol_metrics = {}
 
-            print(vol_metrics)
             for name, metric in METRICS_MAPPING.items():
                 col_name = f"{seg}_{metric}"
                 value, _units = vol_metrics.get(name, ("", ""))
