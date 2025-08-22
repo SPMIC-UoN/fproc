@@ -3,6 +3,7 @@ import logging
 import os
 
 import numpy as np
+import scipy.ndimage
 
 from fsort.image_file import ImageFile
 from fproc.module import Module
@@ -63,8 +64,8 @@ class Radiomics(statistics.Radiomics):
         statistics.Radiomics.__init__(
             self,
             params={
-                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "maxval" : 1400},
-                "t1_se" : {"dir" : "t1_se", "fname" : "t1.nii.gz", "maxval" : 1400},
+                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "minval" : 200, "maxval" : 1400},
+                "t1_se" : {"dir" : "t1_se", "fname" : "t1.nii.gz", "minval" : 200, "maxval" : 1400},
             },
             segs = {
                 "liver" : {"dir" : "seg_liver_dixon_fix", "fname" : "liver.nii.gz"},
@@ -78,27 +79,27 @@ class KidneyStats(statistics.SegStats):
             default_limits="3t",
             segs = {
                 "kidney_cortex" : {
-                    "dir" : "seg_kidney_t1_clean",
+                    "dir" : "seg_kidney_t1_se_clean_native",
                     "glob" : "*cortex*.nii.gz",
                 },
                 "kidney_cortex_l" : {
-                    "dir" : "seg_kidney_t1_clean",
+                    "dir" : "seg_kidney_t1_se_clean_native",
                     "glob" : "*cortex_l*.nii.gz",
                 },
                 "kidney_cortex_r" : {
-                    "dir" : "seg_kidney_t1_clean",
+                    "dir" : "seg_kidney_t1_se_clean_native",
                     "glob" : "*cortex_r*.nii.gz",
                 },
                 "kidney_medulla" : {
-                    "dir" : "seg_kidney_t1_clean",
+                    "dir" : "seg_kidney_t1_se_clean_native",
                     "glob" : "*medulla*.nii.gz",
                 },
                 "kidney_medulla_l" : {
-                    "dir" : "seg_kidney_t1_clean",
+                    "dir" : "seg_kidney_t1_se_clean_native",
                     "glob" : "*medulla_l*.nii.gz",
                 },
                 "kidney_medulla_r" : {
-                    "dir" : "seg_kidney_t1_clean",
+                    "dir" : "seg_kidney_t1_se_clean_native",
                     "glob" : "*medulla_r*.nii.gz",
                 },
             },
@@ -183,6 +184,30 @@ class SegStats(statistics.SegStats):
                     "dir" : "seg_kidney_t2w",
                     "glob" : "kidney_mask.nii.gz",
                 },
+                "kidney_cortex" : {
+                    "dir" : "seg_kidney_t1_se_clean_native",
+                    "glob" : "*cortex*.nii.gz",
+                },
+                "kidney_cortex_l" : {
+                    "dir" : "seg_kidney_t1_se_clean_native",
+                    "glob" : "*cortex_l*.nii.gz",
+                },
+                "kidney_cortex_r" : {
+                    "dir" : "seg_kidney_t1_se_clean_native",
+                    "glob" : "*cortex_r*.nii.gz",
+                },
+                "kidney_medulla" : {
+                    "dir" : "seg_kidney_t1_se_clean_native",
+                    "glob" : "*medulla*.nii.gz",
+                },
+                "kidney_medulla_l" : {
+                    "dir" : "seg_kidney_t1_se_clean_native",
+                    "glob" : "*medulla_l*.nii.gz",
+                },
+                "kidney_medulla_r" : {
+                    "dir" : "seg_kidney_t1_se_clean_native",
+                    "glob" : "*medulla_r*.nii.gz",
+                },
             },
             params={
                 "t2star" : {
@@ -206,12 +231,30 @@ class SegStats(statistics.SegStats):
                     "glob" : "adc.nii.gz",
                 },
                 "mre" : {
-                    "dir" : "../mre",
-                    "glob" : "mre.nii.gz",
+                    "dir" : "mre_noconf",
+                    "glob" : "mre_noconf.nii.gz",
+                    "limits" : (1e-5, None),  # Remove zeros from confidence removal
                 },
                 "mre_qiba" : {
-                    "dir" : "../mre_qiba",
-                    "glob" : "mre_qiba.nii.gz",
+                    "dir" : "mre_qiba_noconf",
+                    "glob" : "mre_qiba_noconf.nii.gz",
+                    "limits" : (1e-5, None),  # Remove zeros from confidence removal
+                },
+                "t2_scanner" : {
+                    "dir" : "../t2_map",
+                    "glob" : "t2_map.nii.gz",
+                },
+                "t2_stim" : {
+                    "dir" : "t2",
+                    "glob" : "t2_stim.nii.gz",
+                },
+                "b1_stim" : {
+                    "dir" : "t2",
+                    "glob" : "b1_stim.nii.gz",
+                },
+                "mtr" : {
+                    "dir" : "mtr",
+                    "glob" : "mtr.nii.gz",
                 },
             },
             stats=["n", "iqn", "iqmean", "median", "iqstd", "mode", "fwhm"],
@@ -241,11 +284,65 @@ class ADC(Module):
                 adc_img = ImageFile(adc_fname, warn_json=False)
                 adc_img.save(self.outfile("adc.nii.gz"))
 
+class MRE(Module):
+    def __init__(self, name):
+        Module.__init__(self, name)
+
+    def process(self):
+        img = self.single_inimg(f"../{self.name}", f"{self.name}.nii.gz", src=self.OUTPUT)
+        add_dir = self.pipeline.options.add_niftis
+        if img is not None:
+            LOG.info(f" - Saving {self.name.upper()} map from XNAT: {img.fname}")
+            img.save(self.outfile(f"{self.name}.nii.gz"))
+        else:
+            LOG.info(f" - No {self.name.upper()} map found in XNAT, looking for additional maps in {add_dir}")
+            subjdir = os.path.join(add_dir, self.pipeline.options.subjid, f"{self.name}_map")
+            fnames = list(glob.glob(os.path.join(subjdir, "*.nii.gz")))
+            if fnames:
+                if len(fnames) > 1:
+                    LOG.warning(f"Found multiple images:  {fnames} - using first")
+                fname = fnames[0]
+                LOG.info(f" - Saving {self.name.upper()} map from {fname}")
+                img = ImageFile(fname, warn_json=False)
+                img.save(self.outfile(f"{self.name}.nii.gz"))
+
+class MRERemoveConf(Module):
+    def __init__(self, name="mre_noconf", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        mre_dir = self.kwargs.get("mre_dir", "../mre")
+        mre_glob = self.kwargs.get("mre_glob", "mre*.nii.gz")
+        mre_imgs = self.inimgs(mre_dir, mre_glob, is_depfile=True)
+        for img in mre_imgs:
+            LOG.info(f" - Removing confidence map from MRE image {img.fname}")
+            if img.data.ndim > 3:
+                LOG.warning(f" - MRE image {img.fname} has more than 3 dimensions, cannot remove confidence map")
+                continue
+
+            data = img.data
+            clean = np.zeros(data.shape, dtype=np.float32)
+            for vol in range(img.shape[-1]):
+                sl = np.array(data[..., vol])
+                sl[sl > 0] = 1
+                px = scipy.ndimage.prewitt(sl, axis=0)
+                py = scipy.ndimage.prewitt(sl, axis=1)
+                mag = np.sqrt(px**2 + py**2)
+                mag[mag == 0] = 1
+                mag[mag > 1] = 0
+                clean[..., vol] = mag
+
+            clean = clean * data
+            clean[clean < 0] = 0
+            img.save_derived(clean, self.outfile(img.fname.replace(".nii.gz", "_noconf.nii.gz")))
+
 __version__ = "0.0.1"
 
 NAME = "resus"
 
 MODULES = [
+    maps.DixonClassify(dixon_src="../raw_dixon"),
+
     # Segmentations
     segmentations.BodyDixon(),
     segmentations.SatDixon(),
@@ -254,20 +351,30 @@ MODULES = [
     segmentations.KidneyDixon(model_id="422"),
     segmentations.PancreasEthrive(),
     segmentations.KidneyT2w(),
+    segmentations.TotalSeg(src_dir="fproc/dixon_classify", dilate=1),
 
     # Parameter maps
-    maps.FatFractionDixon(),
+    maps.FatFractionDixon(dixon_dir="fproc/dixon_classify"),
     maps.T2starDixon(),
     ADC(),
     T1Molli(),
     T1SE(),
+    maps.MTR(),
+    MRE(name="mre"),
+    MRE(name="mre_qiba"),
+    MRERemoveConf(name="mre_noconf", mre_dir="mre"),
+    MRERemoveConf(name="mre_qiba_noconf", mre_dir="mre_qiba"),
+    maps.T2(),
 
     # Post-processing of segmentations
     seg_postprocess.SegFix(
         "seg_pancreas_ethrive",
         fix_dir_option="pancreas_masks",
         segs={
-            "pancreas.nii.gz" : "%s_*.nii.gz",
+            "pancreas.nii.gz" : {
+                "glob" : "%s_*.nii.gz",
+                "fname" : "pancreas.nii.gz",
+            }
         },
         map_dir="../dixon",
         map_fname="water.nii.gz"
@@ -276,7 +383,10 @@ MODULES = [
         "seg_liver_dixon",
         fix_dir_option="liver_masks",
         segs={
-            "liver.nii.gz" : "%s_*.nii.gz",
+            "liver.nii.gz" : {
+                "glob" : "%s_*.nii.gz",
+                "fname" : "liver.nii.gz",
+            }
         },
         map_dir="../dixon",
         map_fname="water.nii.gz"
@@ -285,6 +395,7 @@ MODULES = [
     PancreasSegRestricted(),
     segmentations.VatDixon(
         ff_glob="fat_fraction_scanner.nii.gz",
+        fail_on_missing=False,
         organs={
             "seg_liver_dixon_fix" : "liver.nii.gz",
             "seg_spleen_dixon" : "spleen.nii.gz",
