@@ -108,8 +108,8 @@ class Radiomics(statistics.Radiomics):
         statistics.Radiomics.__init__(
             self,
             params={
-                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "maxval" : 1400},
-                "t1_se" : {"dir" : "t1_se", "fname" : "t1.nii.gz", "maxval" : 1400},
+                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "maxval" : 1250},
+                "t1_se" : {"dir" : "t1_se", "fname" : "t1.nii.gz", "maxval" : 1250},
             },
             segs = {
                 "liver" : {"dir" : "seg_liver_dixon_fix", "fname" : "liver.nii.gz"},

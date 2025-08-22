@@ -27,7 +27,7 @@ class Nifti(Module):
         t1 = t1s[0]
         nii_t1 = nib.load(t1)
         LOG.info(f" - T1 data from {t1}: {nii_t1.shape}")
-        nii_t1 = nib.Nifti1Image(nii_t1.get_fdata(), nii_t1.header.get_best_affine(), nii_t1.header)
+        nii_t1 = nib.Nifti1Image(nii_t1.get_fdata().squeeze(-1), nii_t1.header.get_best_affine(), nii_t1.header)
         nii_t1.to_filename(self.outfile("t1.nii.gz"))
 
         masks = [img for img in imgs if "mask" in img.lower()]
@@ -51,7 +51,7 @@ class PyRadiomics(Module):
         mask = self.inimg("nifti", "mask.nii.gz", is_depfile=True)
         mask_restricted = np.copy(mask.data)
         mask_restricted[t1.data < 200] = 0
-        mask_restricted[t1.data > 1000] = 0
+        mask_restricted[t1.data > 1250] = 0
         mask.save_derived(mask_restricted, self.outfile("mask_restricted.nii.gz"))
 
         extractor = radiomics.featureextractor.RadiomicsFeatureExtractor()
