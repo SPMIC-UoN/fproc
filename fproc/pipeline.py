@@ -79,16 +79,19 @@ class Pipeline:
             for module in self.modules:
                 if module.name.lower() in skip:
                     LOG.info(f"SKIPPING {module.name.upper()}")
+                    # Temporary to introduce the done.txt file retrospectively
+                    module.outdir = os.path.abspath(os.path.normpath(os.path.join(self.options.output, module.name)))
+                    self._write_done_file(module)
                     continue
-                if module.name.lower() in skipdone and module.output_exists(self.options.output):
-                    LOG.info(f"SKIPPING {module.name.upper()} - OUTPUT EXISTS")
+                if (module.name.lower() in skipdone or "*" in skipdone) and module.already_done(self.options.output):
+                    LOG.info(f"SKIPPING {module.name.upper()} - ALREADY DONE")
                     continue
 
                 timestamp = self.timestamp()
                 LOG.info(f"RUNNING {module.name.upper()} : start time {timestamp}")
                 try:
                     module.run(self)
-                    timestamp = self.timestamp()
+                    timestamp = self._write_done_file(module)
                     LOG.info(f"DONE {module.name.upper()} : end time {timestamp}")
                 except ModuleError as exc:
                     LOG.warn(f"FAILED {module.name.upper()}: {exc}")
@@ -101,6 +104,14 @@ class Pipeline:
         except:
             LOG.exception(f"{self.name.upper()} UNEXPECTED ERROR - STOPPING")
             sys.exit(1)
+
+    def _write_done_file(self, module):
+        timestamp = self.timestamp()
+        done_file = os.path.join(module.outdir, "done.txt")
+        with open(done_file, "w") as f:
+            f.write(f"{module.name} completed at {timestamp}\n")
+        LOG.info(f"Done file written: {done_file}")
+        return timestamp
 
     def timestamp(self):
         return str(datetime.datetime.now())
