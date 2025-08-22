@@ -54,9 +54,9 @@ class Module:
             raise RuntimeError("No pipeline context")
         return os.path.abspath(os.path.normpath(os.path.join(self.pipeline.options.input, name)))
 
-    def output_exists(self, pipeline_outdir):
+    def already_done(self, pipeline_outdir):
         outdir = os.path.join(pipeline_outdir, self.name)
-        return os.path.exists(outdir) and os.listdir(outdir)
+        return os.path.isfile(os.path.join(outdir, "done.txt"))
 
     def infile(self, dir, name, check=True, warn=False, src=None, is_depfile=False):
         if not src and is_depfile:
@@ -332,6 +332,7 @@ class Module:
             self.no_data(f"Missing input images for {organ} segmentation")
 
         for idx, img in enumerate(input_imgs):
+            LOG.info(f" - Input {idx+1} from {img.fpath}")
             img.reorient2std().save(self.outfile(f"{organ}_000{idx}.nii.gz"))
         self.runcmd([
                 'nnUNetv2_predict',
