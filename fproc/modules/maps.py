@@ -429,6 +429,22 @@ class T1SE(Module):
             #    img.save_derived(t1_map_thresh, self.outfile(img.fname.replace(".nii.gz", "_t1_thresh.nii.gz")))
 
 
+class DixonClassify(Module):
+    def __init__(self, name="dixon_classify", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        model_fpath = self.kwargs.get("model", "/spmstore/project/RenalMRI/dixon_classifier/dixon_classifier_20250702.h5")
+        LOG.info(f" - Using Dixon classifier model: {model_fpath}")
+        from dixon_classify import DixonClassifier
+        classifier = DixonClassifier()
+        classifier.load(model_fpath)
+
+        dixon_src = self.kwargs.get("dixon_src", "raw_dixon")
+        dixon_glob = self.kwargs.get("dixon_glob", "raw_dixon*.nii.gz")
+        input_dir = os.path.join(self.pipeline.options.output, dixon_src)
+        classifier.classify(input_dir, dixon_glob, self.outfile(""))
+
 class FatFractionDixon(Module):
     def __init__(self, name="fat_fraction", **kwargs):
         Module.__init__(self, name, **kwargs)
