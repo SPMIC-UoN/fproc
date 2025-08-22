@@ -133,7 +133,7 @@ NAME="tk21"
 
 MODULES = [
     CopyModule("t1w"),
-    maps.T1Molli(molli_dir="t1", molli_glob="t1_raw_molli*.nii.gz", tis=[235, 315, 1235, 1315, 2235, 2315, 3235, 4235]),
+    maps.T1Molli(molli_dir="../fsort/t1", molli_glob="t1_raw_molli*.nii.gz", tis=[235, 315, 1235, 1315, 2235, 2315, 3235, 4235]),
     maps.B0(),
     maps.B1(),
     maps.MTR(),
