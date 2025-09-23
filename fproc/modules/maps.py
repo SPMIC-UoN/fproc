@@ -151,8 +151,8 @@ class T2star(Module):
 
 
 class T2(Module):
-    def __init__(self, t2_dir="t2", t2_glob="t2_e*.nii.gz", echos=10, max_echos=11, methods=["exp", "stim"]):
-        Module.__init__(self, "t2")
+    def __init__(self, name="t2", t2_dir="t2", t2_glob="t2_e*.nii.gz", echos=10, max_echos=11, methods=["exp", "stim"]):
+        Module.__init__(self, name)
         self._dir = t2_dir
         self._glob = t2_glob
         self._echos = echos
