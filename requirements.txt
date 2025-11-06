@@ -1,1 +1,5 @@
 nibabel
+scipy
+numpy
+scikit-image
+matplotlib
