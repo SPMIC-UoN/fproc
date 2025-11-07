@@ -9,6 +9,7 @@ import glob
 import numpy as np
 import skimage
 from scipy.ndimage import binary_fill_holes, binary_erosion, generate_binary_structure, binary_dilation
+import radiomics
 
 from fsort import ImageFile
 from fproc.module import Module
@@ -585,6 +586,11 @@ class TotalSeg(Module):
         csv_path = self.outfile("volumes.csv")
         LOG.info(f" - Found {len(nifti_files)} segmentation files. Generating overlays and CSV at {csv_path}")
 
+        extractor = radiomics.featureextractor.RadiomicsFeatureExtractor(geometryTolerance=1e-3)
+        extractor.disableAllFeatures()
+        extractor.enableFeatureClassByName("shape")
+
+        suffix = self.kwargs.get("csv_suffix", "")
         with open(csv_path, "w") as csv_file:
             for nifti_file in nifti_files:
                 seg_img = self.single_inimg(self.name, nifti_file, src=self.OUTPUT)
@@ -593,8 +599,26 @@ class TotalSeg(Module):
                     continue
 
                 volume = np.count_nonzero(seg_img.data) * seg_img.voxel_volume
-                csv_file.write(f"{seg_img.fname_noext},{volume}\n")
+                csv_file.write(f"{seg_img.fname_noext}{suffix}_vol,{volume}\n")
                 LOG.info(f" - {seg_img.fname_noext}: volume = {volume} mL")
+
+                if np.count_nonzero(seg_img.data) > 0:
+                    try:
+                        radiomics_results = extractor.execute(water.fpath, seg_img.fpath)
+                        for k, v in radiomics_results.items():
+                            if k.startswith("diagnostics"):
+                                continue
+                            elif "SurfaceArea" in k:
+                                csv_file.write(f"{seg_img.fname_noext}{suffix}_sa,{v/100}\n")
+                            elif "SurfaceVolumeRatio" in k:
+                                csv_file.write(f"{seg_img.fname_noext}{suffix}_svr,{v*10}\n")
+                    except Exception:
+                        LOG.warn(f" - Radiomics extraction failed for {seg_img.fname_noext}, setting surface area and surface volume ratio to 0")
+                        csv_file.write(f"{seg_img.fname_noext}{suffix}_sa,0\n")
+                        csv_file.write(f"{seg_img.fname_noext}{suffix}_svr,0\n")
+                else:
+                    csv_file.write(f"{seg_img.fname_noext}{suffix}_sa,0\n")
+                    csv_file.write(f"{seg_img.fname_noext}{suffix}_svr,0\n")
 
                 # Generate overlay PNG
                 overlay_name = f"{seg_img.fname_noext}_overlay"
@@ -614,9 +638,67 @@ class TotalSeg(Module):
                     dilated_data = binary_dilation(seg_img.data, iterations=dilate).astype(np.int8)
                     dilated_img = seg_img.save_derived(dilated_data, self.outfile(f"{seg_img.fname_noext}_dilated.nii.gz"))
                     volume = np.count_nonzero(dilated_data) * dilated_img.voxel_volume
-                    csv_file.write(f"{dilated_img.fname_noext},{volume}\n")
+                    csv_file.write(f"{dilated_img.fname_noext}{suffix},{volume}\n")
                     LOG.info(f" - {dilated_img.fname_noext}: dilated volume = {volume} mL")
+
+                    if np.count_nonzero(dilated_img.data) > 0:
+                        try:
+                            radiomics_results = extractor.execute(water.fpath, dilated_img.fpath)
+                            for k, v in radiomics_results.items():
+                                if k.startswith("diagnostics"):
+                                    continue
+                                elif "SurfaceArea" in k:
+                                    csv_file.write(f"{dilated_img.fname_noext}{suffix}_sa,{v/100}\n")
+                                elif "SurfaceVolumeRatio" in k:
+                                    csv_file.write(f"{dilated_img.fname_noext}{suffix}_svr,{v*10}\n")
+                        except Exception:
+                            LOG.warn(f" - Radiomics extraction failed for {dilated_img.fname_noext}, setting surface area and surface volume ratio to 0")
+                            csv_file.write(f"{dilated_img.fname_noext}{suffix}_sa,0\n")
+                            csv_file.write(f"{dilated_img.fname_noext}{suffix}_svr,0\n")
+                    else:
+                        csv_file.write(f"{dilated_img.fname_noext}{suffix}_sa,0\n")
+                        csv_file.write(f"{dilated_img.fname_noext}{suffix}_svr,0\n")
 
                     # Generate overlay PNG for dilated segmentation
                     overlay_name = f"{dilated_img.fname_noext}_overlay"
                     self.lightbox(water, dilated_img, name=overlay_name, tight=True)
+
+class TraceSeg(Module):
+    def __init__(self, name="traceseg", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        src_dir = self.kwargs.get("src_dir", "t1")
+        img_glob = self.kwargs.get("img_glob", "t1.nii.gz")
+        img = self.single_inimg(src_dir, img_glob)
+        if img is None:
+            self.no_data(f"No input image found in {src_dir}/{img_glob}")
+        LOG.info(f" - Running Trace Seg using {img.fname}")
+
+        self.runcmd([
+            'trace_seg',
+            img.fpath,
+            '-o', self.outfile(img.fname.replace('.nii.gz', '_seg.nii.gz')),
+            ],
+            logfile=f'trace_seg.log'
+        )
+        seg_img = ImageFile(self.outfile(img.fname.replace('.nii.gz', '_seg.nii.gz')), warn_json=False)
+        with open(self.outfile("volumes.csv", "w")) as f:
+            for idx, name in {
+                1 : "kidney_right",
+                2 : "kidney_left",
+                3 : "spleen",
+                4 : "liver", 
+            }.items():
+                roi = (seg_img.data == idx).astype(np.int8)
+                organ_img = seg_img.save_derived(roi, self.outfile(f"{name}.nii.gz"))
+                self.lightbox(img, organ_img, name=f"{name}_overlay", tight=True)
+                volume = np.count_nonzero(roi) * seg_img.voxel_volume
+                LOG.info(f" - {name}: volume = {volume} mL")
+                f.write(f"{name},{volume}\n")
+            tkv = (seg_img.data in (1, 2))
+            tvk_img = seg_img.save_derived(tkv.astype(np.int8), self.outfile("kidney_total.nii.gz"))
+            self.lightbox(img, tvk_img, name="kidney_total_overlay", tight=True)
+            tkv_volume = np.count_nonzero(tkv) * seg_img.voxel_volume
+            LOG.info(f" - Total kidney volume: {tkv_volume} mL")
+            f.write(f"kidney_total,{tkv_volume}\n")
