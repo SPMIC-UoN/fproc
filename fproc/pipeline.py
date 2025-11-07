@@ -99,10 +99,28 @@ class Pipeline:
             skip = [s.lower().strip() for s in self.options.skip.split(",")]
             skipdone = [s.lower().strip() for s in self.options.skipdone.split(",")]
             noskip = [s.lower().strip() for s in self.options.noskip.split(",")]
+            autoskip = self.options.autoskip
 
             for module in self.modules:
                 name = module.name.lower()
-                if name in skip and name not in noskip:
+                last_done = module.timestamp(self.options.output)
+                if name in noskip:
+                    LOG.info(f"FORCING {module.name.upper()}")
+                elif not last_done:
+                    pass
+                elif self.options.autoskip:
+                    deps = [self._get_module(d) for d in module.deps]
+                    if not deps:
+                        LOG.info(f"SKIPPING {module.name.upper()} - ALREADY DONE")
+                        continue
+                    last_done_deps = [(d.name, d.timestamp(self.options.output)) for d in deps if d is not None]
+                    out_of_date = [d for d in last_done_deps if d[1] is None or (last_done is not None and d[1] > last_done)]
+                    if not out_of_date:
+                        LOG.info(f"SKIPPING {module.name.upper()} - NOT OUT OF DATE")
+                        continue
+                    else:
+                        LOG.info(f"OUT OF DATE {module.name.upper()}: {last_done} < {out_of_date}")
+                elif name in skip:
                     LOG.info(f"SKIPPING {module.name.upper()}")
                     # Temporary to introduce the done.txt file retrospectively
                     module.outdir = os.path.abspath(
@@ -110,16 +128,15 @@ class Pipeline:
                     )
                     self._write_done_file(module)
                     continue
-                if (
+                elif (
                     (name in skipdone or "*" in skipdone)
-                    and name not in noskip
-                    and module.already_done(self.options.output)
+                    and last_done is not None
                 ):
                     LOG.info(f"SKIPPING {module.name.upper()} - ALREADY DONE")
                     continue
 
                 timestamp = self.timestamp()
-                LOG.info(f"RUNNING {module.name.upper()} : start time {timestamp}")
+                LOG.info(f"RUNNING {module.name.upper()} : last done {last_done} start time {timestamp}")
                 try:
                     module.run(self)
                     timestamp = self._write_done_file(module)
@@ -143,6 +160,12 @@ class Pipeline:
             f.write(f"{module.name} completed at {timestamp}\n")
         LOG.info(f"Done file written: {done_file}")
         return timestamp
+
+    def _get_module(self, name):
+        for module in self.modules:
+            if module.name.lower() == name.lower():
+                return module
+        return None
 
     def timestamp(self):
         return str(datetime.datetime.now())

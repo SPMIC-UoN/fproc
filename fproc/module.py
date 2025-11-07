@@ -38,6 +38,7 @@ class Module:
         self.name = name
         self.pipeline = None
         self.kwargs = kwargs
+        self.deps = self.kwargs.pop("deps", [])
 
     def run(self, pipeline):
         self.pipeline = pipeline
@@ -59,9 +60,17 @@ class Module:
             os.path.normpath(os.path.join(self.pipeline.options.input, name))
         )
 
-    def already_done(self, pipeline_outdir):
+    def timestamp(self, pipeline_outdir):
         outdir = os.path.join(pipeline_outdir, self.name)
-        return os.path.isfile(os.path.join(outdir, "done.txt"))
+        donefile = os.path.join(outdir, "done.txt")
+        if os.path.isfile(donefile):
+            try:
+                return os.path.getmtime(donefile)
+            except Exception as e:
+                LOG.warning(f"Error getting timestamp for {donefile}: {e}")
+                return None
+        else:
+            return None
 
     def infile(self, dir, name, check=True, warn=False, src=None, is_depfile=False):
         if not src and is_depfile:
