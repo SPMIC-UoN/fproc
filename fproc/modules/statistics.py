@@ -7,6 +7,7 @@ import os
 import numpy as np
 import radiomics
 from dbdicom.wrappers.skimage import _volume_features
+import nibabel as nib
 
 from fproc.module import Module
 from fproc import stats
@@ -208,16 +209,18 @@ class Radiomics(Module):
         self.params = params
         self.out_name = out_name
 
-    def _get_img(self, spec, warn_none=True, warn_multiple=True):
+    def _get_imgs(self, spec, warn_none=True):
         src, subdir, globexpr = spec.get("src", self.pipeline.options.output), spec["dir"], spec.get("fname", spec.get("glob", ""))
         imgs = self.inimgs(subdir, globexpr, src=src)
-        if not imgs:
-            if warn_none:
-                LOG.warn(f" - No images found matching {globexpr} in {src}/{subdir}")
-            return None
-        elif len(imgs) > 1 and warn_multiple:
-            LOG.warn(f" - Multiple images found matching {globexpr} in {src}/{subdir} - returning first")
-        return imgs[0]
+        if not imgs and warn_none:
+            LOG.warn(f" - No images found matching {spec}")
+        return imgs
+
+    def _get_img(self, spec, warn_none=True, warn_multiple=True):
+        imgs = self._get_imgs(spec, warn_none=warn_none)
+        if len(imgs) > 1 and warn_multiple:
+            LOG.warn(f" - Multiple images found matching {spec} - returning first")
+        return None if not imgs else imgs[0]
 
     def process(self):
         logger = logging.getLogger("radiomics")
@@ -249,18 +252,32 @@ class Radiomics(Module):
                 LOG.info(f" - Extracting features for map: {param_name}")
                 param_img = self._get_img(param_spec)
                 if param_img is None:
+                    LOG.warn("Map not found - skipping")
                     continue
                 for seg_name, seg_spec in self.segs.items():
                     LOG.info(f" - Extracting features for segmentation: {seg_name}")
-                    seg_img = self._get_img(seg_spec)
-                    if seg_img is None:
+                    seg_imgs = self._get_imgs(seg_spec)
+                    if not seg_imgs:
+                        LOG.warn("No segmentation images found - skipping")
                         continue
-                    
+                    LOG.info(f" - Found {len(seg_imgs)} segmentation images: {','.join([s.fname for s in seg_imgs])}")
+                    seg_img = seg_imgs[0]
+                    seg_data = seg_img.data.astype(int)
+                    for seg_img2 in seg_imgs[1:]:
+                        seg_data = np.logical_or(seg_data, seg_img2.data.astype(int))
+                    seg_data = seg_data.astype(int)
+
                     map_res = self.resample(param_img, seg_img, is_roi=False, allow_rotated=True)
+                    if "vol" in param_spec:
+                        data_vol = map_res.get_fdata()[..., param_spec["vol"]]
+                        map_res = nib.Nifti1Image(data_vol, map_res.affine, map_res.header)
                     map_res_fpath = self.outfile(f"{param_name}_res_{seg_name}.nii.gz")
                     map_res.to_filename(map_res_fpath)
-                    map_data = map_res.get_fdata().squeeze()
-                    seg_restricted = np.copy(seg_img.data)
+                    map_data = map_res.get_fdata()
+                    while map_data.ndim > 3:
+                        map_data = map_data.squeeze(-1)
+
+                    seg_restricted = np.copy(seg_data)
                     minval, maxval = param_spec.get("minval", None), param_spec.get("maxval", None)
                     if minval is not None:
                         seg_restricted[map_data < minval] = 0
