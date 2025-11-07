@@ -473,6 +473,7 @@ class FatFractionDixon(Module):
                     LOG.warn("Fat fraction not in expected range and no scale slope found - check statistics")
             LOG.info(f" - Saving scanner fat fraction to {ff_name}_scanner.nii.gz")
             ff_scanner.save_derived(ff_data, self.outfile(f"{ff_name}_scanner.nii.gz"))
+            ff_scanner.save_derived(ff_data, self.outfile(f"{ff_name}.nii.gz"))
         else:
             LOG.info(" - Scanner derived fat fraction map not found")
 
@@ -483,6 +484,8 @@ class FatFractionDixon(Module):
             ff[valid] = fat.data.astype(np.float32)[valid] * 100 / (fat.data + water_data)[valid]
             LOG.info(f" - Saving fat/water derived fat fraction map as {ff_name}_calc")
             fat.save_derived(ff, self.outfile(f"{ff_name}_calc.nii.gz"))
+            if ff_scanner is None:
+                fat.save_derived(ff, self.outfile(f"{ff_name}.nii.gz"))
         else:
             LOG.info(" - Could not find fat/water images - not calculating fat fraction")
             if ff_scanner is None:
