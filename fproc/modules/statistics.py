@@ -11,6 +11,7 @@ import nibabel as nib
 
 from fproc.module import Module
 from fproc import stats
+from fproc.pipeline import ALL_MODULES
 
 LOG = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class SegStats(Module):
     }
 
     def __init__(self, name="stats", segs={}, params={}, stats=[], out_name="stats.csv", default_limits=None, multi_mode="combine", allow_rotated=True, seg_volumes=False, overlays=True):
-        Module.__init__(self, name)
+        Module.__init__(self, name, deps=ALL_MODULES)
         self.segs = segs
         self.params = params
         self.stats = stats
@@ -506,3 +507,50 @@ class ISNR(Module):
 #             f.write(f"t1_molli_ti1,{ti1}\n")
 #             f.write(f"t1_molli_ti2,{ti2}\n")
 #             f.write(f"t1_molli_ti_spacing,{spacing}\n")
+
+class KidneyCystStats(Module):
+    def __init__(self, name="seg_kidney_cyst_t2w_stats", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        cyst_glob = self.kwargs.get("cyst_glob", "kidney_cyst_mask.nii.gz")
+        cyst_dir = self.kwargs.get("cyst_dir", "seg_kidney_cyst_t2w")
+        cyst_src = self.kwargs.get("cyst_src", self.OUTPUT)
+        cyst_seg = self.single_inimg(cyst_dir, cyst_glob, src=cyst_src)
+        if cyst_seg is None:
+            self.no_data("No T2w kidney cyst segmentation found to clean")
+
+        # Count number of cysts and volume
+        cyst_blobs = [b for b in self.blobs_by_size(cyst_seg.data) if np.count_nonzero(b) > 1]
+        num_cysts = len(cyst_blobs)
+        blob_sizes = [np.count_nonzero(b) for b in cyst_blobs]
+        if num_cysts == 0:
+            LOG.info(" - No cysts found with size > 1 voxel")
+            total_volume, vol_mean, vol_min, vol_max = 0, 0, 0, 0
+        else:
+            total_volume = sum(blob_sizes) * cyst_seg.voxel_volume
+            vol_mean = total_volume / num_cysts
+            vol_min, vol_max = min(blob_sizes) * cyst_seg.voxel_volume, max(blob_sizes) * cyst_seg.voxel_volume
+
+        vol_cats = self.kwargs.get("vol_cats", [1.2, 0.56, 0.45, 0.34, 0.23, 0.12, 0.045, 0])
+        with open(self.outfile("kidney_cyst.csv"), "w") as f:
+            f.write(f"kidney_cyst_vol,{total_volume}\n")
+            f.write(f"kidney_cyst_n,{num_cysts}\n")
+            f.write(f"kidney_cyst_vol_mean,{vol_mean}\n")
+            f.write(f"kidney_cyst_vol_min,{vol_min}\n")
+            f.write(f"kidney_cyst_vol_max,{vol_max}\n")
+
+            cyst_cats = []
+            for blob_size in blob_sizes:
+                for cat_id, min_vol in enumerate(vol_cats):
+                    if blob_size * cyst_seg.voxel_volume > min_vol:
+                        cyst_cats.append(cat_id)
+                        break
+            prev_min_vol = None
+            for cat_id, min_vol in enumerate(vol_cats):
+                num_cat = cyst_cats.count(cat_id)
+                if prev_min_vol:
+                    f.write(f"kidney_cyst_vol_gt_{min_vol}_lt_{prev_min_vol},{num_cat}\n")
+                else:
+                    f.write(f"kidney_cyst_vol_gt_{min_vol},{num_cat}\n")
+                prev_min_vol = min_vol
