@@ -41,18 +41,20 @@ def main():
     _setup_logging(options)
     LOG.info(f"FPROC v{__version__}")
 
-    pipeline_config_fpath = os.path.abspath(os.path.normpath(options.pipeline))
-    pipeline_config_dirname, pipeline_config_fname = os.path.split(pipeline_config_fpath)
-
     try:
-        LOG.info(f" - Loading configuration from {pipeline_config_fpath}")
-        sys.path.append(pipeline_config_dirname)
-        pipeline = importlib.import_module(pipeline_config_fname.replace(".py", ""))
+        LOG.info(f" - Loading configuration from {options.pipeline}")
+        pipeline = importlib.import_module(options.pipeline)
     except ImportError:
-        LOG.exception("Loading config")
-        raise ValueError(f"Could not load configuration {pipeline_config_fpath} - make sure file exists and has extension .py")
-    finally:
-        sys.path.remove(pipeline_config_dirname)
+        pipeline_config_fpath = os.path.abspath(os.path.normpath(options.pipeline))
+        pipeline_config_dirname, pipeline_config_fname = os.path.split(pipeline_config_fpath)
+        try:
+            sys.path.append(pipeline_config_dirname)
+            pipeline = importlib.import_module(pipeline_config_fname.replace(".py", ""))
+        except ImportError:
+            LOG.exception("Loading config")
+            raise ValueError(f"Could not load configuration {options.pipeline} - must be a python module or file")
+        finally:
+            sys.path.remove(pipeline_config_dirname)
 
     if hasattr(pipeline, "add_options"):
         LOG.info(f" - Parsing pipeline-specific options")

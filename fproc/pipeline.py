@@ -12,6 +12,7 @@ from .module import ModuleError
 
 LOG = logging.getLogger(__name__)
 
+ALL_MODULES = "*"
 
 class Pipeline:
 
@@ -109,7 +110,10 @@ class Pipeline:
                 elif not last_done:
                     pass
                 elif self.options.autoskip:
-                    deps = [self._get_module(d) for d in module.deps]
+                    if module.deps == ALL_MODULES:
+                        deps = list(self.modules)
+                    else:
+                        deps = [self._get_module(d) for d in module.deps]
                     if not deps:
                         LOG.info(f"SKIPPING {module.name.upper()} - ALREADY DONE")
                         continue
