@@ -498,6 +498,53 @@ class RenalPelvis(Module):
         t2w_seg.save_derived(pelvis, self.outfile("renal_pelvis.nii.gz"))
 
 
+class RenalPelvisT2w(Module):
+    def __init__(self, name="seg_renal_pelvis_t2w", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        paren_dir = self.kwargs.get("paren_dir", "seg_kidney_t2w")
+        paren_glob = self.kwargs.get("paren_glob", "kidney_mask.nii.gz")
+        paren = self.single_inimg(paren_dir, paren_glob, src=self.OUTPUT)
+        if paren is None:
+            self.no_data("No kidney parenchyma segmentation found to define pelvis region")
+
+        whole_dir = self.kwargs.get("whole_dir", "traceseg")
+        whole_glob = self.kwargs.get("whole_glob", "trace_kidney_all.nii.gz")
+        whole = self.single_inimg(whole_dir, whole_glob, src=self.OUTPUT)
+        if whole is None:
+            self.no_data("No whole kidney segmentation found to define pelvis region")
+
+        cyst_dir = self.kwargs.get("cyst_dir", "seg_kidney_cyst_t2w_trace")
+        cyst_glob = self.kwargs.get("cyst_glob", "kidney_cyst_fixed.nii.gz")
+        cyst = self.single_inimg(cyst_dir, cyst_glob, src=self.OUTPUT)
+        if cyst is None:
+            self.no_data("No kidney cyst segmentation found to define pelvis region")
+
+        whole_data = whole.data > 0
+        cyst_paren_data = np.logical_or(cyst.data > 0, paren.data > 0)
+        whole.save_derived(cyst_paren_data, self.outfile("seg_kidney_cyst_paren.nii.gz"))
+        pelvis_data = (whole_data.astype(np.int8) - cyst_paren_data.astype(np.int8)) > 0
+        whole.save_derived(pelvis_data, self.outfile("seg_kidney_pelvis_raw.nii.gz"))
+        left_data = self.split_lr(pelvis_data, whole.affine, "left")
+        right_data = self.split_lr(pelvis_data, whole.affine, "right")
+        left_data = self.blobs_by_size(left_data, min_size=10)[0]
+        right_data = self.blobs_by_size(right_data, min_size=10)[0]
+
+        pelvis_data = left_data + right_data
+        pelvis = whole.save_derived(pelvis_data, self.outfile("seg_kidney_pelvis.nii.gz"))
+        whole.save_derived(left_data.astype(np.int8), self.outfile("seg_kidney_pelvis_left.nii.gz"))
+        whole.save_derived(right_data.astype(np.int8), self.outfile("seg_kidney_pelvis_right.nii.gz"))
+
+        t2w_map_dir = self.kwargs.get("t2w_map_dir", "t2w")
+        t2w_map_glob = self.kwargs.get("t2w_map_glob", "t2w.nii.gz")
+        t2w_map = self.single_inimg(t2w_map_dir, t2w_map_glob)
+        if t2w_map is not None:
+            self.lightbox(t2w_map, pelvis, name="kidney_pelvis_lightbox", tight=True) 
+        else:
+            LOG.warn("No T2w map found - will not create lightbox image")
+
+
 class KidneyFat(Module):
     def __init__(self, name="seg_kidney_fat", **kwargs):
         Module.__init__(self, name, **kwargs)
@@ -676,19 +723,19 @@ class TraceSeg(Module):
         LOG.info(f" - Running Trace Seg using {img.fname}")
 
         self.runcmd([
-            'trace_seg',
+            'trace_segment',
             img.fpath,
-            '-o', self.outfile(img.fname.replace('.nii.gz', '_seg.nii.gz')),
+            self.outfile(img.fname.replace('.nii.gz', '_seg.nii.gz')),
             ],
             logfile=f'trace_seg.log'
         )
         seg_img = ImageFile(self.outfile(img.fname.replace('.nii.gz', '_seg.nii.gz')), warn_json=False)
-        with open(self.outfile("volumes.csv", "w")) as f:
+        with open(self.outfile("volumes.csv"), "w") as f:
             for idx, name in {
-                1 : "kidney_right",
-                2 : "kidney_left",
-                3 : "spleen",
-                4 : "liver", 
+                1 : "trace_kidney_r",
+                2 : "trace_kidney_l",
+                3 : "trace_spleen",
+                4 : "trace_liver", 
             }.items():
                 roi = (seg_img.data == idx).astype(np.int8)
                 organ_img = seg_img.save_derived(roi, self.outfile(f"{name}.nii.gz"))
@@ -696,9 +743,9 @@ class TraceSeg(Module):
                 volume = np.count_nonzero(roi) * seg_img.voxel_volume
                 LOG.info(f" - {name}: volume = {volume} mL")
                 f.write(f"{name},{volume}\n")
-            tkv = (seg_img.data in (1, 2))
-            tvk_img = seg_img.save_derived(tkv.astype(np.int8), self.outfile("kidney_total.nii.gz"))
-            self.lightbox(img, tvk_img, name="kidney_total_overlay", tight=True)
+            tkv = np.logical_or(seg_img.data == 1, seg_img.data == 2)
+            tvk_img = seg_img.save_derived(tkv.astype(np.int8), self.outfile("trace_kidney_all.nii.gz"))
+            self.lightbox(img, tvk_img, name="trace_kidney_all_overlay", tight=True)
             tkv_volume = np.count_nonzero(tkv) * seg_img.voxel_volume
             LOG.info(f" - Total kidney volume: {tkv_volume} mL")
-            f.write(f"kidney_total,{tkv_volume}\n")
+            f.write(f"trace_kidney_all,{tkv_volume}\n")
