@@ -158,11 +158,28 @@ class CsiAlign(Module):
     based on series number
     """
 
-    def __init__(self):
-        Module.__init__(self, "csi_align")
+    def __init__(self, name="csi_align", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def _get_series_number(self, img):
+        """
+        Extract series number from ImageFile metadata or from leading digits in filename
+        """
+        sn = img.seriesnumber
+        if sn is None:
+            # Fall back on extracting from filename - look for leading digits
+            fname = os.path.basename(img.fname)
+            import re
+
+            match = re.match(r"^(\d+)", fname)
+            if match:
+                sn = int(match.group(1))
+        return sn
 
     def process(self):
-        csi_imgs = self.inimgs("csi", "csi*.nii.gz")
+        csi_dir = self.kwargs.get("csi_dir", "csi")
+        csi_glob = self.kwargs.get("csi_glob", "csi*.nii.gz")
+        csi_imgs = self.inimgs(csi_dir, csi_glob)
         if not csi_imgs:
             self.no_data("No CSI images found")
 
@@ -175,12 +192,17 @@ class CsiAlign(Module):
             raise RuntimeError("FSLDIR environment variable not set")
 
         for csi_img in csi_imgs:
-            LOG.info(
-                f" - Found CSI image: {csi_img.fname}, series number: {csi_img.seriesnumber}"
-            )
+            sn = self._get_series_number(csi_img)
+            if sn is None:
+                LOG.warning(
+                    f"Could not determine series number for CSI image: {csi_img.fname}"
+                )
+                continue
+
+            LOG.info(f" - Found CSI image: {csi_img.fname}, series number: {sn}")
             matched_struc_img = None
             for struc_img in struc_imgs:
-                if struc_img.seriesnumber < csi_img.seriesnumber:
+                if struc_img.seriesnumber < sn:
                     if (
                         matched_struc_img is None
                         or matched_struc_img.seriesnumber < struc_img.seriesnumber
@@ -194,6 +216,9 @@ class CsiAlign(Module):
 
             LOG.info("   - Resampling spectroscopy data to MPRAGE")
             voxel_data = csi_img.data
+            while voxel_data.ndim < 4:
+                voxel_data = voxel_data[..., np.newaxis]
+
             # Resample each spectral sample (4th dimension) separately
             resampled_samples = []
             for sample_idx in range(voxel_data.shape[3]):
@@ -304,4 +329,5 @@ MODULES = [
     StrucPreproc(),
     StrucReg(),
     CsiAlign(),
+    CsiAlign(name="metabolite_align", csi_dir="MetaboliteNIFTIs", csi_glob="*.nii.gz"),
 ]
