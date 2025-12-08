@@ -2,6 +2,7 @@
 FPROC: Combine stats output from previous runs
 """
 from collections import OrderedDict
+import dateutil.parser
 import glob
 import logging
 import os
@@ -92,8 +93,14 @@ def add_kv_stats(subjid, subjdir, paths, subj_stats):
                     try:
                         subj_stats[parts[0]] = float(parts[1])
                     except ValueError:
-                        if parts[1].strip() != "" and parts[0].strip().lower() != "subjid":
-                           LOG.warn(f" - {fname}: Ignoring line: {line}, value was not numeric")
+                        try:
+                            # Allow blanks or valid dates
+                            if parts[1]:
+                                dateutil.parser.parse(parts[1])
+                            subj_stats[parts[0]] = parts[1]
+                        except ValueError:
+                            if parts[1].strip() != "" and parts[0].strip().lower() != "subjid":
+                                LOG.warn(f" - {fname}: Ignoring line: {line}, value was not blank, date or numeric")
 
 def add_csv_stats(subjid, subjdir, paths, subj_stats):
     for rel_path in paths:
