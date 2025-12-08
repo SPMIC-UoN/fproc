@@ -44,6 +44,7 @@ def main():
     try:
         LOG.info(f" - Loading configuration from {options.pipeline}")
         pipeline = importlib.import_module(options.pipeline)
+        pipeline_config_fname = pipeline.__name__
     except ImportError:
         pipeline_config_fpath = os.path.abspath(os.path.normpath(options.pipeline))
         pipeline_config_dirname, pipeline_config_fname = os.path.split(pipeline_config_fpath)
