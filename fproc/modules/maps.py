@@ -283,37 +283,41 @@ class T1Molli(Module):
                     LOG.warn(f"{img.nvols} volumes in raw MOLLI data, only using first {len(img_tis)} volumes")
                 from ukat.mapping.t1 import T1
                 mapper = T1(img.data[..., :len(img_tis)], np.array(img_tis), img.affine, parameters=parameters, tss=tss, molli=molli, mdr=mdr)
-                mapper.to_nifti(self.outdir, base_file_name=img.fname_noext)
-                if mdr:
-                    # Save out registered data
-                    reg_data = mapper.pixel_array
-                    img.save_derived(reg_data, self.outfile(img.fname.replace(".nii.gz", "_reg.nii.gz")))
+                try:
+                    mapper.to_nifti(self.outdir, base_file_name=img.fname_noext)
+                    if mdr:
+                        # Save out registered data
+                        reg_data = mapper.pixel_array
+                        img.save_derived(reg_data, self.outfile(img.fname.replace(".nii.gz", "_reg.nii.gz")))
 
-                t1_map_data = np.copy(mapper.t1_map)
-                r2_thresh = self.kwargs.get("r2_thresh", 0.0)
-                if r2_thresh > 0:
-                    LOG.info(f" - Applying R2 threshold of {r2_thresh} to T1 map")
-                    r2_map = self.single_inimg(self.name, img.fname_noext + "_r2.nii.gz", src=self.OUTPUT)
-                    t1_map_data[np.abs(r2_map.data) < r2_thresh] = 0
+                    t1_map_data = np.copy(mapper.t1_map)
+                    r2_thresh = self.kwargs.get("r2_thresh", 0.0)
+                    if r2_thresh > 0:
+                        LOG.info(f" - Applying R2 threshold of {r2_thresh} to T1 map")
+                        r2_map = self.single_inimg(self.name, img.fname_noext + "_r2.nii.gz", src=self.OUTPUT)
+                        t1_map_data[np.abs(r2_map.data) < r2_thresh] = 0
 
-                t1_thresh = self.kwargs.get("t1_thresh", None)
-                if t1_thresh is not None:
-                    LOG.info(f" - Applying threshold of {t1_thresh} to T1 map")
-                    if isinstance(t1_thresh, (int, float)):
-                        t1_thresh = (None, t1_thresh)
-                    t1_min, t1_max = tuple(t1_thresh)
-                    thresh_mode = self.kwargs.get("t1_thresh_mode", "zero")
-                    if thresh_mode == "zero":
-                        t1_map_data[t1_map_data > t1_max] = 0
-                        t1_map_data[t1_map_data < t1_min] = 0
-                    elif thresh_mode == "clip":
-                        t1_map_data[t1_map_data > t1_max] = t1_max
-                        t1_map_data[t1_map_data < t1_min] = t1_min
-                    else:
-                        raise ValueError(f"Unrecognized threshold mode: {thresh_mode}")
-                fname = img.fname.replace(".nii.gz", "_t1_map.nii.gz")
-                img.save_derived(t1_map_data, self.outfile(fname))
-                LOG.info(f" - Final T1 map saved to {fname}")
+                    t1_thresh = self.kwargs.get("t1_thresh", None)
+                    if t1_thresh is not None:
+                        LOG.info(f" - Applying threshold of {t1_thresh} to T1 map")
+                        if isinstance(t1_thresh, (int, float)):
+                            t1_thresh = (None, t1_thresh)
+                        t1_min, t1_max = tuple(t1_thresh)
+                        thresh_mode = self.kwargs.get("t1_thresh_mode", "zero")
+                        if thresh_mode == "zero":
+                            t1_map_data[t1_map_data > t1_max] = 0
+                            t1_map_data[t1_map_data < t1_min] = 0
+                        elif thresh_mode == "clip":
+                            t1_map_data[t1_map_data > t1_max] = t1_max
+                            t1_map_data[t1_map_data < t1_min] = t1_min
+                        else:
+                            raise ValueError(f"Unrecognized threshold mode: {thresh_mode}")
+                    fname = img.fname.replace(".nii.gz", "_t1_map.nii.gz")
+                    img.save_derived(t1_map_data, self.outfile(fname))
+                    LOG.info(f" - Final T1 map saved to {fname}")
+                except Exception as e:
+                    LOG.warn(f" - Error saving MOLLI T1 map for {img.fname}: {e}")
+
 
         elif self.kwargs.get("use_scanner_maps", True):
             LOG.info(f" - No raw MOLLI data found in {molli_dir}/{molli_glob} - looking for scanner T1 map/confidence images")
@@ -408,10 +412,13 @@ class T1SE(Module):
             acq_order = "centric" if mag.manufacturer.lower() == "siemens" else "ascend"
             LOG.info(f" - Using acquisition order: {acq_order} for vendor {mag.manufacturer}")
             mapper = T1(magnitude_corrected[..., :len(img_tis)], np.array(img_tis), mag.affine, tss=tss, mag_corr=not mag_only, parameters=parameters, mdr=mdr, acq_order=acq_order)
-            mapper.to_nifti(self.outdir, base_file_name=mag.fname_noext.replace("_mag", ""))
-            if mdr:
-                # Save out registered data
-                mag.save_derived(mapper.pixel_array, self.outfile(mag.fname.replace(".nii.gz", "_reg.nii.gz")))
+            try:
+                mapper.to_nifti(self.outdir, base_file_name=mag.fname_noext.replace("_mag", ""))
+                if mdr:
+                    # Save out registered data
+                    mag.save_derived(mapper.pixel_array, self.outfile(mag.fname.replace(".nii.gz", "_reg.nii.gz")))
+            except Exception as e:
+                LOG.warn(f" - Error saving SE T1 map for {mag.fname}: {e}")
 
             #r2_thresh = self.kwargs.get("r2_thresh", 0.0)
             #if r2_thresh > 0:
