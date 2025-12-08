@@ -107,6 +107,14 @@ class Pipeline:
                 last_done = module.timestamp(self.options.output)
                 if name in noskip:
                     LOG.info(f"FORCING {module.name.upper()}")
+                elif name in skip:
+                    LOG.info(f"SKIPPING {module.name.upper()} - REQUESTED BY USER")
+                    # Temporary to introduce the done.txt file retrospectively
+                    module.outdir = os.path.abspath(
+                        os.path.normpath(os.path.join(self.options.output, module.name))
+                    )
+                    self._write_done_file(module)
+                    continue
                 elif not last_done:
                     pass
                 elif self.options.autoskip:
@@ -124,14 +132,6 @@ class Pipeline:
                         continue
                     else:
                         LOG.info(f"OUT OF DATE {module.name.upper()}: {last_done} < {out_of_date}")
-                elif name in skip:
-                    LOG.info(f"SKIPPING {module.name.upper()}")
-                    # Temporary to introduce the done.txt file retrospectively
-                    module.outdir = os.path.abspath(
-                        os.path.normpath(os.path.join(self.options.output, module.name))
-                    )
-                    self._write_done_file(module)
-                    continue
                 elif (
                     (name in skipdone or "*" in skipdone)
                     and last_done is not None
