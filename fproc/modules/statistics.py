@@ -134,6 +134,8 @@ class SegStats(Module):
 
         voxel_volume = 1.0  # In case there are no parameter images
         param_imgs = self._imgs(param_spec)
+        if not param_imgs:
+            LOG.warn(f" - No parameter images found for param {param}")
         for param_img in param_imgs:
             voxel_volume = param_img.voxel_volume
             for seg_img in self._imgs(seg_spec):
@@ -509,7 +511,7 @@ class ISNR(Module):
 #             f.write(f"t1_molli_ti_spacing,{spacing}\n")
 
 class KidneyCystStats(Module):
-    def __init__(self, name="seg_kidney_cyst_t2w_stats", **kwargs):
+    def __init__(self, name="kidney_cyst_stats", **kwargs):
         Module.__init__(self, name, **kwargs)
 
     def process(self):
@@ -532,13 +534,19 @@ class KidneyCystStats(Module):
             vol_mean = total_volume / num_cysts
             vol_min, vol_max = min(blob_sizes) * cyst_seg.voxel_volume, max(blob_sizes) * cyst_seg.voxel_volume
 
+        suffix = self.kwargs.get("suffix", "")
+        if suffix:
+            prefix = f"kidney_cyst_{suffix}"
+        else:
+            prefix = f"kidney_cyst"
+
         vol_cats = self.kwargs.get("vol_cats", [1.2, 0.56, 0.45, 0.34, 0.23, 0.12, 0.045, 0])
         with open(self.outfile("kidney_cyst.csv"), "w") as f:
-            f.write(f"kidney_cyst_vol,{total_volume}\n")
-            f.write(f"kidney_cyst_n,{num_cysts}\n")
-            f.write(f"kidney_cyst_vol_mean,{vol_mean}\n")
-            f.write(f"kidney_cyst_vol_min,{vol_min}\n")
-            f.write(f"kidney_cyst_vol_max,{vol_max}\n")
+            f.write(f"{prefix}_vol,{total_volume}\n")
+            f.write(f"{prefix}_n,{num_cysts}\n")
+            f.write(f"{prefix}_vol_mean,{vol_mean}\n")
+            f.write(f"{prefix}_vol_min,{vol_min}\n")
+            f.write(f"{prefix}_vol_max,{vol_max}\n")
 
             cyst_cats = []
             for blob_size in blob_sizes:
@@ -550,7 +558,45 @@ class KidneyCystStats(Module):
             for cat_id, min_vol in enumerate(vol_cats):
                 num_cat = cyst_cats.count(cat_id)
                 if prev_min_vol:
-                    f.write(f"kidney_cyst_vol_gt_{min_vol}_lt_{prev_min_vol},{num_cat}\n")
+                    f.write(f"{prefix}_vol_gt_{min_vol}_lt_{prev_min_vol},{num_cat}\n")
                 else:
-                    f.write(f"kidney_cyst_vol_gt_{min_vol},{num_cat}\n")
+                    f.write(f"{prefix}_vol_gt_{min_vol},{num_cat}\n")
                 prev_min_vol = min_vol
+
+class SegVolumeDiffs(Module):
+    def __init__(self, name="seg_volume_diffs", **kwargs):
+        Module.__init__(self, name, deps=ALL_MODULES, **kwargs)
+
+    def process(self):
+        stats_files = self.kwargs.get("stats_files", "stats/stats.csv")
+        if not isinstance(stats_files, list):
+            stats_files = [stats_files]
+        volumes = {}
+        for stats_file in stats_files:
+            stats_file = os.path.join(self.pipeline.options.output, stats_file)
+            if not os.path.isfile(stats_file):
+                LOG.warn(f" - Not a file: {stats_file}")
+                continue
+            with open(stats_file) as f:
+                for line in f:
+                    try:
+                        key, value = line.split(",")
+                        value = float(value)
+                        if key in volumes:
+                            LOG.warn(f" - Duplicate volume entry for {key} in {stats_file} - ignoring")
+                            continue
+                        volumes[key] = value
+                    except:
+                        LOG.warn(f"Error parsing stats file {stats_file} line {line}")
+
+        out_path = self.outfile(self.kwargs.get("csv_file", "diffs.csv"))
+        diffs = self.kwargs.get("diffs", {})
+        with open(out_path, "w") as f:
+            for output_name, input_segs in diffs.items():
+                first, second = input_segs
+                if first not in volumes or second not in volumes:
+                    LOG.warn(f" - Could not find volumes for diff {output_name}: {first}, {second}")
+                    continue
+                diff = volumes[first] - volumes[second]
+                f.write(f"{output_name},{diff}\n")
+
