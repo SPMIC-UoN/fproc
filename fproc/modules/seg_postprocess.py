@@ -22,8 +22,8 @@ class SegFix(Module):
     def __init__(self, seg_dir, name=None, **kwargs):
         if name is None:
             name = seg_dir + "_fix"
-        Module.__init__(self, name, **kwargs)
         self._seg_dir = seg_dir
+        Module.__init__(self, name, deps=[self._seg_dir], **kwargs)
 
     def process(self):
         fix_dir_option = self.kwargs.get("fix_dir_option", self.name + "_fix")
@@ -272,11 +272,11 @@ class KidneyT1Clean(Module):
 
 class LargestBlob(Module):
     def __init__(self, srcdir, seg_glob, overlay_srcdir=None, overlay_glob=None):
-        Module.__init__(self, f"{srcdir}_largestblob")
         self._srcdir = srcdir
         self._seg_glob = seg_glob
         self._overlay_srcdir = overlay_srcdir
         self._overlay_glob = overlay_glob
+        Module.__init__(self, f"{srcdir}_largestblob", deps=[srcdir])
 
     def process(self):
         segs = self.inimgs(self._srcdir, self._seg_glob, src=self.OUTPUT)
@@ -298,7 +298,7 @@ class LargestBlob(Module):
 
 class SplitLR(Module):
     def __init__(self, srcdir, seg_glob):
-        Module.__init__(self, f"{srcdir}_splitlr")
+        Module.__init__(self, f"{srcdir}_splitlr", deps=[srcdir])
         self._srcdir = srcdir
         self._seg_glob = seg_glob
 
@@ -310,34 +310,43 @@ class SplitLR(Module):
                 split_data = self.split_lr(seg.data, seg.affine, side)
                 LOG.info(f" - Saving {out_fname}")
                 seg.save_derived(split_data, out_fname)
+            if self.kwargs.get("save_orig", False):
+                out_fname = self.outfile(seg.fname)
+                LOG.info(f" - Saving original segmentation to {out_fname}")
+                seg.save(out_fname)
 
 
 class SegVolumes(Module):
     def __init__(self, name="seg_volumes", **kwargs):
-        Module.__init__(self, name, **kwargs)
+        self._seg_dir = kwargs.get("seg_dir", "seg_kidney_t2w")
+        Module.__init__(self, name, deps=[self._seg_dir], **kwargs)
 
     def process(self):
-        seg_dir = self.kwargs.get("seg_dir", "seg_kidney_t2w")
         segs = self.kwargs.get("segs", {})
         vol_fname = self.kwargs.get("vol_fname", "volumes.csv")
 
-        LOG.info(f" - Saving volumes from {seg_dir} to {vol_fname}")
+        LOG.info(f" - Saving volumes from {self._seg_dir} to {vol_fname}")
         with open(self.outfile(vol_fname), "w") as f:
             for name, seg in segs.items():
-                seg_img = self.single_inimg(seg_dir, seg, src=self.OUTPUT)
+                seg_img = self.single_inimg(self._seg_dir, seg, src=self.OUTPUT)
                 if seg_img is None:
                     LOG.warn(f"Segmentation not found: {seg}")
                 else:
                     f.write("%s,%.2f\n" % (name, seg_img.voxel_volume * np.count_nonzero(seg_img.data)))
+                    if self.kwargs.get("split_lr", False):
+                        left_data = self.split_lr(seg_img.data, seg_img.affine, "l")
+                        right_data = self.split_lr(seg_img.data, seg_img.affine, "r")
+                        f.write("%s_l,%.2f\n" % (name, seg_img.voxel_volume * np.count_nonzero(left_data)))
+                        f.write("%s_r,%.2f\n" % (name, seg_img.voxel_volume * np.count_nonzero(right_data)))
 
 
 class Dilate(Module):
     def __init__(self, **kwargs):
-        name = kwargs.get("name", kwargs.get("seg_dir", "seg") + "_dil")
-        Module.__init__(self, name, **kwargs)
+        self._seg_dir = kwargs.get("seg_dir", "seg")
+        name = kwargs.get("name", self._seg_dir + "_dil")
+        Module.__init__(self, name, deps=[self._seg_dir], **kwargs)
 
     def process(self):
-        seg_dir = self.kwargs.get("seg_dir", "seg")
         segs = self.kwargs.get("segs", [])
         dil_voxels = self.kwargs.get("dil_voxels", 1)
         slice_axis = self.kwargs.get("slice_axis", None)
@@ -347,7 +356,7 @@ class Dilate(Module):
             "S" : "LR",
         }
         for seg in segs:
-            seg_img = self.single_inimg(seg_dir, seg, src=self.OUTPUT)
+            seg_img = self.single_inimg(self._seg_dir, seg, src=self.OUTPUT)
             if seg_img is None:
                 LOG.warn(f"Segmentation not found: {seg}")
             else:
@@ -396,6 +405,7 @@ class KidneyCystClean(Module):
         cyst_seg = self.single_inimg(cyst_dir, cyst_glob, src=cyst_src)
         if cyst_seg is None:
             self.no_data("No T2w kidney cyst segmentation found to clean")
+        cyst_seg.reorient2std()
 
         if t2w_mask is not None:
             LOG.info(f" - Cleaning {cyst_seg.fname} using T2w mask {t2w_mask.fname}")
@@ -425,38 +435,3 @@ class KidneyCystClean(Module):
             self.lightbox(t2w_map, cleaned_mask, name="kidney_cyst_t2w_lightbox", tight=True) 
         else:
             LOG.warn("No T2w map found - will not create lightbox image")
-
-        # Count number of cysts and volume
-        cyst_blobs = [b for b in self.blobs_by_size(cleaned_mask.data) if np.count_nonzero(b) > 1]
-        num_cysts = len(cyst_blobs)
-        blob_sizes = [np.count_nonzero(b) for b in cyst_blobs]
-        if num_cysts == 0:
-            LOG.info(" - No cysts found with size > 1 voxel")
-            total_volume, vol_mean, vol_min, vol_max = 0, 0, 0, 0
-        else:
-            total_volume = sum(blob_sizes) * cleaned_mask.voxel_volume
-            vol_mean = total_volume / num_cysts
-            vol_min, vol_max = min(blob_sizes) * cleaned_mask.voxel_volume, max(blob_sizes) * cleaned_mask.voxel_volume
-
-        with open(self.outfile("kidney_cyst.csv"), "w") as f:
-            f.write(f"kidney_cyst_vol,{total_volume}\n")
-            f.write(f"kidney_cyst_n,{num_cysts}\n")
-            f.write(f"kidney_cyst_vol_mean,{vol_mean}\n")
-            f.write(f"kidney_cyst_vol_min,{vol_min}\n")
-            f.write(f"kidney_cyst_vol_max,{vol_max}\n")
-
-            vol_cats = [1.2, 0.56, 0.45, 0.34, 0.23, 0.12, 0.045, 0]
-            cyst_cats = []
-            for blob_size in blob_sizes:
-                for cat_id, min_vol in enumerate(vol_cats):
-                    if blob_size * cleaned_mask.voxel_volume > min_vol:
-                        cyst_cats.append(cat_id)
-                        break
-            prev_min_vol = None
-            for cat_id, min_vol in enumerate(vol_cats):
-                num_cat = cyst_cats.count(cat_id)
-                if prev_min_vol:
-                    f.write(f"kidney_cyst_vol_gt_{min_vol}_lt_{prev_min_vol},{num_cat}\n")
-                else:
-                    f.write(f"kidney_cyst_vol_gt_{min_vol},{num_cat}\n")
-                prev_min_vol = min_vol
