@@ -353,7 +353,8 @@ class CMD(Module):
 
 class ShapeMetrics(Module):
     def __init__(self, name="shape_metrics", **kwargs):
-        Module.__init__(self, name, **kwargs)
+        self._seg_dir = kwargs.get("seg_dir", None)
+        Module.__init__(self, name, deps=[self._seg_dir], **kwargs)
 
     def process(self):
         METRICS_MAPPING = {
@@ -379,8 +380,7 @@ class ShapeMetrics(Module):
             'QC - Volume check': "volcheck",
         }
 
-        seg_dir = self.kwargs.get("seg_dir", None)
-        if seg_dir is None:
+        if self._seg_dir is None:
             raise RuntimeError("Must provide seg_dir for shape metrics")
 
         segs = self.kwargs.get("segs", {})
@@ -393,9 +393,9 @@ class ShapeMetrics(Module):
         LOG.info(f" - Saving shape metrics to {csv_fname}")
         with open(self.outfile(csv_fname), "w") as f:
             for name, glob in segs.items():
-                img = self.single_inimg(seg_dir, glob, src=self.OUTPUT)
+                img = self.single_inimg(self._seg_dir, glob, src=self.OUTPUT)
                 if img is None:
-                    LOG.warn(f" - No segmentation found for {name} matching {seg_dir}/{glob}")
+                    LOG.warn(f" - No segmentation found for {name} matching {self._seg_dir}/{glob}")
                     continue
                 LOG.info(f" - Calculating shape metrics from {img.fname}")
                 try:
@@ -512,13 +512,14 @@ class ISNR(Module):
 
 class KidneyCystStats(Module):
     def __init__(self, name="kidney_cyst_stats", **kwargs):
-        Module.__init__(self, name, **kwargs)
+        self._cyst_dir = kwargs.get("cyst_dir", "seg_kidney_cyst_t2w")
+        deps = kwargs.pop("deps", [self._cyst_dir])
+        Module.__init__(self, name, deps=deps, **kwargs)
 
     def process(self):
         cyst_glob = self.kwargs.get("cyst_glob", "kidney_cyst_mask.nii.gz")
-        cyst_dir = self.kwargs.get("cyst_dir", "seg_kidney_cyst_t2w")
         cyst_src = self.kwargs.get("cyst_src", self.OUTPUT)
-        cyst_seg = self.single_inimg(cyst_dir, cyst_glob, src=cyst_src)
+        cyst_seg = self.single_inimg(self._cyst_dir, cyst_glob, src=cyst_src)
         if cyst_seg is None:
             self.no_data("No T2w kidney cyst segmentation found to clean")
 
@@ -540,7 +541,8 @@ class KidneyCystStats(Module):
         else:
             prefix = f"kidney_cyst"
 
-        vol_cats = self.kwargs.get("vol_cats", [1.2, 0.56, 0.45, 0.34, 0.23, 0.12, 0.045, 0])
+        vol_cats = self.kwargs.get("vol_cats", [300, 200, 100, 50, 40, 30, 20, 10, 4.8, 3.6, 2.4, 1.2, 0.56, 0.45, 0.34, 0.23, 0.12, 0.045, 0])
+        gt_vol_cats= self.kwargs.get("gt_vol_cats", [0.23, 0.12, 0.045])
         with open(self.outfile("kidney_cyst.csv"), "w") as f:
             f.write(f"{prefix}_vol,{total_volume}\n")
             f.write(f"{prefix}_n,{num_cysts}\n")
@@ -554,6 +556,7 @@ class KidneyCystStats(Module):
                     if blob_size * cyst_seg.voxel_volume > min_vol:
                         cyst_cats.append(cat_id)
                         break
+
             prev_min_vol = None
             for cat_id, min_vol in enumerate(vol_cats):
                 num_cat = cyst_cats.count(cat_id)
@@ -562,6 +565,24 @@ class KidneyCystStats(Module):
                 else:
                     f.write(f"{prefix}_vol_gt_{min_vol},{num_cat}\n")
                 prev_min_vol = min_vol
+
+            for min_vol in gt_vol_cats:
+                total_vol, total_num = 0, 0
+                for blob_size in blob_sizes:
+                    cyst_vol = blob_size * cyst_seg.voxel_volume
+                    if cyst_vol > min_vol:
+                        total_vol += cyst_vol
+                        total_num += 1
+                f.write(f"{prefix}_n_gt_{min_vol},{total_num}\n")
+                f.write(f"{prefix}_vol_gt_{min_vol},{total_vol}\n")
+
+        self.runcmd([
+            "cluster",
+            f"--in={cyst_seg.fpath}",
+            f"--thresh=1",
+            f"--oindex={self.outfile('clusterindex')}",
+            f"--minextent=2",
+        ], logfile="cluster.log")
 
 class SegVolumeDiffs(Module):
     def __init__(self, name="seg_volume_diffs", **kwargs):
