@@ -104,16 +104,12 @@ class Pipeline:
 
             for module in self.modules:
                 name = module.name.lower()
-                last_done = module.timestamp(self.options.output)
+                last_done = module.last_done(self.options.output)
+                lastdone_timestamp = str(datetime.datetime.fromtimestamp(last_done)) if last_done else "Never"
                 if name in noskip:
                     LOG.info(f"FORCING {module.name.upper()}")
                 elif name in skip:
                     LOG.info(f"SKIPPING {module.name.upper()} - REQUESTED BY USER")
-                    # Temporary to introduce the done.txt file retrospectively
-                    module.outdir = os.path.abspath(
-                        os.path.normpath(os.path.join(self.options.output, module.name))
-                    )
-                    self._write_done_file(module)
                     continue
                 elif not last_done:
                     pass
@@ -125,13 +121,17 @@ class Pipeline:
                     if not deps:
                         LOG.info(f"SKIPPING {module.name.upper()} - ALREADY DONE")
                         continue
-                    last_done_deps = [(d.name, d.timestamp(self.options.output)) for d in deps if d is not None]
-                    out_of_date = [d for d in last_done_deps if d[1] is None or (last_done is not None and d[1] > last_done)]
+                    last_done_deps = [(d.name, d.last_done(self.options.output)) for d in deps if d is not None]
+                    out_of_date = [
+                        (d[0], str(datetime.datetime.fromtimestamp(d[1]))) if d[1] else (d[0], "Never")
+                        for d in last_done_deps 
+                        if d[1] is None or (last_done is not None and d[1] > last_done)
+                    ]
                     if not out_of_date:
                         LOG.info(f"SKIPPING {module.name.upper()} - NOT OUT OF DATE")
                         continue
                     else:
-                        LOG.info(f"OUT OF DATE {module.name.upper()}: {last_done} < {out_of_date}")
+                        LOG.info(f"OUT OF DATE {module.name.upper()}: {lastdone_timestamp} < {out_of_date}")
                 elif (
                     (name in skipdone or "*" in skipdone)
                     and last_done is not None
@@ -140,7 +140,7 @@ class Pipeline:
                     continue
 
                 timestamp = self.timestamp()
-                LOG.info(f"RUNNING {module.name.upper()} : last done {last_done} start time {timestamp}")
+                LOG.info(f"RUNNING {module.name.upper()} : last done {lastdone_timestamp} start time {timestamp}")
                 try:
                     module.run(self)
                     timestamp = self._write_done_file(module)
@@ -159,10 +159,10 @@ class Pipeline:
 
     def _write_done_file(self, module):
         timestamp = self.timestamp()
+        os.makedirs(module.outdir, exist_ok=True)
         done_file = os.path.join(module.outdir, "done.txt")
         with open(done_file, "w") as f:
             f.write(f"{module.name} completed at {timestamp}\n")
-        LOG.info(f"Done file written: {done_file}")
         return timestamp
 
     def _get_module(self, name):

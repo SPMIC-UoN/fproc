@@ -60,14 +60,14 @@ class Module:
             os.path.normpath(os.path.join(self.pipeline.options.input, name))
         )
 
-    def timestamp(self, pipeline_outdir):
+    def last_done(self, pipeline_outdir):
         outdir = os.path.join(pipeline_outdir, self.name)
         donefile = os.path.join(outdir, "done.txt")
         if os.path.isfile(donefile):
             try:
                 return os.path.getmtime(donefile)
             except Exception as e:
-                LOG.warning(f"Error getting timestamp for {donefile}: {e}")
+                LOG.warning(f"Error getting last done time from {donefile}: {e}")
                 return None
         else:
             return None
