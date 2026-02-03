@@ -21,11 +21,11 @@ class FlirtAlignOnly(Module):
     def __init__(self, in_dir, in_glob, ref_dir, ref_glob, name=None, **kwargs):
         if not name:
             name = f"{in_dir}_to_{ref_dir}_flirt"
-        Module.__init__(self, name, **kwargs)
         self._in_dir = in_dir
         self._in_glob = in_glob
         self._ref_dir = ref_dir
         self._ref_glob = ref_glob
+        Module.__init__(self, name, deps=[self._in_dir, self._ref_dir], **kwargs)
 
     def process(self):
         imgs_to_align = self.inimgs(self._in_dir, self._in_glob, src=self.OUTPUT)
