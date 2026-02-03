@@ -82,6 +82,13 @@ def max(arr):
 def min(arr):
     return np.nanmin(arr)
 
+def perc90(arr):
+    return np.nanpercentile(arr, 90)
+
+def totalenergy(arr):
+    arr_no_nan = arr[np.isfinite(arr)]
+    return np.sum(arr_no_nan**2)
+
 STAT_IMPLS = {
     "mean" : mean,
     "std" : std,
@@ -103,6 +110,8 @@ STAT_IMPLS = {
     "voldata" : n,
     "iqn" : iqn,
     "iqvol" : iqn,
+    "perc90" : perc90,
+    "te" : totalenergy,
 }
 
 DEFAULT_STATS = ["mean", "median", "std", "min", "max"]
