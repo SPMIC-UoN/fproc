@@ -125,23 +125,24 @@ class SegFix(Module):
 
 class KidneyT1Clean(Module):
     def __init__(self, name="seg_kidney_t1_clean", **kwargs):
-        Module.__init__(self, name, **kwargs)
+        self._seg_t1_srcdir = kwargs.get("srcdir", "seg_kidney_t1")
+        self._t1_map_srcdir = kwargs.get("t1_map_srcdir", "t1_kidney")
+        self._seg_t2w_srcdir = kwargs.get("seg_t2w_srcdir", "seg_kidney_t2w")
+        deps = [self._seg_t1_srcdir, self._t1_map_srcdir, self._seg_t2w_srcdir]
+        Module.__init__(self, name, deps=deps, **kwargs)
 
     def process(self):
-        seg_t1_srcdir = self.kwargs.get("srcdir", "seg_kidney_t1")
         seg_t1_glob = self.kwargs.get("seg_t1_glob", "kidney_*.nii.gz")
-        t1_map_srcdir = self.kwargs.get("t1_map_srcdir", "t1_kidney")
         t1_map_glob = self.kwargs.get("t1_map_glob", "t1_map*.nii.gz")
         generic = self.kwargs.get("generic", True)
         t2w = self.kwargs.get("t2w", True)
         t2w_masks_glob = self.kwargs.get("t2w_masks_glob", "kidney_mask.nii.gz")
-        seg_t2w_srcdir = self.kwargs.get("seg_t2w_srcdir", "seg_kidney_t2w")
-        t1_segs = self.inimgs(seg_t1_srcdir, seg_t1_glob, src=self.OUTPUT)
+        t1_segs = self.inimgs(self._seg_t1_srcdir, seg_t1_glob, src=self.OUTPUT)
         if not t1_segs:
-            self.no_data(f" - No T1 segmentations found to clean in {seg_t1_srcdir}/{seg_t1_glob}")
+            self.no_data(f" - No T1 segmentations found to clean in {self._seg_t1_srcdir}/{seg_t1_glob}")
 
-        t1_maps = self.inimgs(t1_map_srcdir, t1_map_glob, src=self.OUTPUT)
-        t2w_masks = self.inimgs(seg_t2w_srcdir, t2w_masks_glob, src=self.OUTPUT)
+        t1_maps = self.inimgs(self._t1_map_srcdir, t1_map_glob, src=self.OUTPUT)
+        t2w_masks = self.inimgs(self._seg_t2w_srcdir, t2w_masks_glob, src=self.OUTPUT)
         if not t2w_masks:
             t2w_masks = [None]
         elif len(t2w_masks) > 1 and t2w:
@@ -164,10 +165,10 @@ class KidneyT1Clean(Module):
                     else:
                         cleaned_data_t1_seg = self._clean_t2w(t1_seg.data, t2w_mask_res.get_fdata())
                 elif generic:
-                    LOG.warn(f" - Could not find T2w mask in {seg_t2w_srcdir}/{t2w_masks_glob} - using generic cleaning")
+                    LOG.warn(f" - Could not find T2w mask in {self._seg_t2w_srcdir}/{t2w_masks_glob} - using generic cleaning")
                     cleaned_data_t1_seg = self._clean_generic(t1_seg, t1_segs)
                 else:
-                    LOG.warn(f" - Could not find T2w mask in {seg_t2w_srcdir}/{t2w_masks_glob} - not cleaning")
+                    LOG.warn(f" - Could not find T2w mask in {self._seg_t2w_srcdir}/{t2w_masks_glob} - not cleaning")
                     cleaned_data_t1_seg = t1_seg
             elif generic:
                 LOG.info(f" - Cleaning {t1_seg.fname} using generic algorithm")
@@ -179,7 +180,7 @@ class KidneyT1Clean(Module):
             t1_seg.save_derived(cleaned_data_t1_seg, self.outfile(t1_seg.fname))
 
             # Find matching T1 map and resample T2w mask for this segmentation
-            t1_map = self._matching_t1_map(t1_seg, seg_t1_srcdir, t1_maps)
+            t1_map = self._matching_t1_map(t1_seg, self._seg_t1_srcdir, t1_maps)
             #t1_map = self.inimg(seg_t1_srcdir, t1_seg.fname.replace("kidney", "t1_map"), src=self.OUTPUT)
             if t1_map is None:
                 LOG.warn(f" - Could not find matching T1 map for {t1_seg.fname} - no overlay will be generated")
@@ -276,8 +277,9 @@ class LargestBlob(Module):
         self._seg_glob = seg_glob
         self._overlay_srcdir = overlay_srcdir
         self._overlay_glob = overlay_glob
-        Module.__init__(self, f"{srcdir}_largestblob", deps=[srcdir])
-
+        deps = [self._srcdir]
+        Module.__init__(self, f"{srcdir}_largestblob", deps=deps)
+    
     def process(self):
         segs = self.inimgs(self._srcdir, self._seg_glob, src=self.OUTPUT)
         for seg in segs:
@@ -298,9 +300,10 @@ class LargestBlob(Module):
 
 class SplitLR(Module):
     def __init__(self, srcdir, seg_glob):
-        Module.__init__(self, f"{srcdir}_splitlr", deps=[srcdir])
         self._srcdir = srcdir
         self._seg_glob = seg_glob
+        deps = [self._srcdir]
+        Module.__init__(self, f"{srcdir}_splitlr", deps=deps)
 
     def process(self):
         segs = self.inimgs(self._srcdir, self._seg_glob, src=self.OUTPUT)
@@ -388,21 +391,22 @@ class Dilate(Module):
 
 class KidneyCystClean(Module):
     def __init__(self, name="seg_kidney_cyst_t2w_clean", **kwargs):
-        Module.__init__(self, name, **kwargs)
+        self._t2w_dir = kwargs.get("seg_t2w_dir", "seg_kidney_t2w")
+        self._t2w_map_dir = kwargs.get("t2w_dir", "t2w")
+        self._cyst_dir = kwargs.get("cyst_dir", "seg_kidney_cyst_t2w")
+        deps = [self._t2w_dir, self._t2w_map_dir, self._cyst_dir]
+        Module.__init__(self, name, deps=deps, **kwargs)
 
     def process(self):
         t2w_glob = self.kwargs.get("seg_t2w_glob", "*mask*.nii.gz")
-        t2w_dir = self.kwargs.get("seg_t2w_dir", "seg_kidney_t2w")
         t2w_map_glob = self.kwargs.get("t2w_glob", "map_t2w.nii.gz")
-        t2w_map_dir = self.kwargs.get("t2w_dir", "t2w")
         t2w_src = self.kwargs.get("t2w_src", self.OUTPUT)
         seg_t2w_src = self.kwargs.get("seg_t2w_src", self.OUTPUT)
-        t2w_mask = self.single_inimg(t2w_dir, t2w_glob, src=seg_t2w_src)
+        t2w_mask = self.single_inimg(self._t2w_dir, t2w_glob, src=seg_t2w_src)
 
         cyst_glob = self.kwargs.get("cyst_glob", "kidney_cyst_mask.nii.gz")
-        cyst_dir = self.kwargs.get("cyst_dir", "seg_kidney_cyst_t2w")
         cyst_src = self.kwargs.get("cyst_src", self.OUTPUT)
-        cyst_seg = self.single_inimg(cyst_dir, cyst_glob, src=cyst_src)
+        cyst_seg = self.single_inimg(self._cyst_dir, cyst_glob, src=cyst_src)
         if cyst_seg is None:
             self.no_data("No T2w kidney cyst segmentation found to clean")
         cyst_seg.reorient2std()
@@ -430,7 +434,7 @@ class KidneyCystClean(Module):
         cyst_seg.save_derived(cleaned_data, self.outfile("kidney_cyst_mask.nii.gz"))
         cleaned_mask = self.inimg(self.name, "kidney_cyst_mask.nii.gz", src=self.OUTPUT)
 
-        t2w_map = self.single_inimg(t2w_map_dir, t2w_map_glob, src=t2w_src)
+        t2w_map = self.single_inimg(self._t2w_map_dir, t2w_map_glob, src=t2w_src)
         if t2w_map is not None:
             self.lightbox(t2w_map, cleaned_mask, name="kidney_cyst_t2w_lightbox", tight=True) 
         else:
