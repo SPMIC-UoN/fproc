@@ -506,12 +506,22 @@ class T2starDixon(Module):
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         t2star_name = self.kwargs.get("t2star_name", "t2star")
         imgs = self.copyinput(dixon_dir, f"{t2star_name}.nii.gz")
+        
         if imgs:
+            LOG.info(" - Saving R2* map")
+            r2star_data = 1000.0 / imgs[0].data
+            r2star_data[np.isclose(imgs[0].data, 0)] = 0
+            imgs[0].save_derived(r2star_data, self.outfile(f"r2star_{t2star_name}.nii.gz"))
+
             # 100 is a fill value - replace with something easier to exclude in stats
             LOG.info(" - Saving T2* map with excluded fill value")
             exclude_fill = np.copy(imgs[0].data)
             exclude_fill[np.isclose(exclude_fill, 100)] = -9999
             imgs[0].save_derived(exclude_fill, self.outfile(f"{t2star_name}_exclude_fill.nii.gz"))
+            LOG.info(" - Saving R2* map with excluded fill value")
+            r2star_data = 1000.0 / exclude_fill
+            r2star_data[np.isclose(exclude_fill, 0)] = 0
+            imgs[0].save_derived(r2star_data, self.outfile(f"r2star_{t2star_name}_exclude_fill.nii.gz"))
 
 class DixonDerived(Module):
     """
@@ -719,7 +729,10 @@ class DwiMoco(Module):
         # Motion correct all bvals
         LOG.info(f" - Processing DWI data from {dwi.fname}")
         from ukat.mapping.diffusion import ADC
-        adc_moco_mapper = ADC(dwi.data, dwi.affine, dwi.bval, ukrin_b=False, moco=True)
+        if dwi.nvols != dwi.bval.shape[0]:
+            LOG.warn(f" - Number of volumes ({dwi.nvols}) does not match number of bvals ({dwi.bval.shape[0]}) - truncating to match")
+        bval = dwi.bval[:dwi.nvols]
+        adc_moco_mapper = ADC(dwi.data, dwi.affine, bval, ukrin_b=False, moco=True)
         moco_data = adc_moco_mapper.pixel_array_mean
         dwi.save_derived(moco_data, self.outfile("dwi_moco.nii.gz"), copy_bdata=False)
         bval_moco = np.unique(dwi.bval)
