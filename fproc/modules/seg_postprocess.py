@@ -133,7 +133,6 @@ class KidneyT1Clean(Module):
 
     def process(self):
         seg_t1_glob = self.kwargs.get("seg_t1_glob", "kidney_*.nii.gz")
-        t1_map_glob = self.kwargs.get("t1_map_glob", "t1_map*.nii.gz")
         generic = self.kwargs.get("generic", True)
         t2w = self.kwargs.get("t2w", True)
         t2w_masks_glob = self.kwargs.get("t2w_masks_glob", "kidney_mask.nii.gz")
@@ -141,7 +140,6 @@ class KidneyT1Clean(Module):
         if not t1_segs:
             self.no_data(f" - No T1 segmentations found to clean in {self._seg_t1_srcdir}/{seg_t1_glob}")
 
-        t1_maps = self.inimgs(self._t1_map_srcdir, t1_map_glob, src=self.OUTPUT)
         t2w_masks = self.inimgs(self._seg_t2w_srcdir, t2w_masks_glob, src=self.OUTPUT)
         if not t2w_masks:
             t2w_masks = [None]
@@ -179,9 +177,10 @@ class KidneyT1Clean(Module):
 
             t1_seg.save_derived(cleaned_data_t1_seg, self.outfile(t1_seg.fname))
 
-            # Find matching T1 map and resample T2w mask for this segmentation
+            # Find matching T1 map and generate overlay
+            t1_map_glob = self.kwargs.get("t1_map_glob", "t1_map*.nii.gz")
+            t1_maps = self.inimgs(self._t1_map_srcdir, t1_map_glob, src=self.OUTPUT)
             t1_map = self._matching_t1_map(t1_seg, self._seg_t1_srcdir, t1_maps)
-            #t1_map = self.inimg(seg_t1_srcdir, t1_seg.fname.replace("kidney", "t1_map"), src=self.OUTPUT)
             if t1_map is None:
                 LOG.warn(f" - Could not find matching T1 map for {t1_seg.fname} - no overlay will be generated")
             else:
