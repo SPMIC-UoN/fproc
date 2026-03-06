@@ -1,20 +1,29 @@
 """
 FPROC: Segmentations of various body parts
 """
+
 import logging
 import validators
 import wget
 import glob
+import os
 
 import numpy as np
+import nibabel as nib
 import skimage
-from scipy.ndimage import binary_fill_holes, binary_erosion, generate_binary_structure, binary_dilation
+from scipy.ndimage import (
+    binary_fill_holes,
+    binary_erosion,
+    generate_binary_structure,
+    binary_dilation,
+)
 import radiomics
 
 from fsort import ImageFile
 from fproc.module import Module
 
 LOG = logging.getLogger(__name__)
+
 
 class KneeToNeckDixon(Module):
     def __init__(self, name="seg_knee_to_neck_dixon", **kwargs):
@@ -36,19 +45,32 @@ class KneeToNeckDixon(Module):
         water.save_derived(ip_data, self.outfile("ip.nii.gz"))
         water.save_derived(op_data, self.outfile("op.nii.gz"))
         water.save_derived(mask_data, self.outfile("mask.nii.gz"))
-        self.runcmd([
-            'infer_knee_to_neck_dixon',
-            '--output_folder', self.outdir,
-            '--reference_header_nifti', water.fpath,
-            '--save_what', 'prob'
-            '--threshold_method', 'fg',
-            '--fat', fat.fpath,
-            '--water', water.fpath,
-            '--inphase', self.outfile("ip.nii.gz"),
-            '--outphase', self.outfile("op.nii.gz"),
-            '--mask', self.outfile("mask.nii.gz"),
-            '--restore_string', knee_to_neck_model,
-        ], logfile=f'seg.log')
+        self.runcmd(
+            [
+                "infer_knee_to_neck_dixon",
+                "--output_folder",
+                self.outdir,
+                "--reference_header_nifti",
+                water.fpath,
+                "--save_what",
+                "prob" "--threshold_method",
+                "fg",
+                "--fat",
+                fat.fpath,
+                "--water",
+                water.fpath,
+                "--inphase",
+                self.outfile("ip.nii.gz"),
+                "--outphase",
+                self.outfile("op.nii.gz"),
+                "--mask",
+                self.outfile("mask.nii.gz"),
+                "--restore_string",
+                knee_to_neck_model,
+            ],
+            logfile=f"seg.log",
+        )
+
 
 class LiverDixon(Module):
     def __init__(self, name="seg_liver_dixon", **kwargs):
@@ -75,7 +97,10 @@ class SpleenDixon(Module):
         fat = self.inimg(self._dixon_dir, "fat.nii.gz", src=src)
         t2star = self.inimg(self._dixon_dir, "t2star.nii.gz", src=src)
         water = self.inimg(self._dixon_dir, "water.nii.gz", src=src)
-        self.run_nnunetv2("102", [fat, t2star, water], "spleen", "DIXON", water, "water")
+        self.run_nnunetv2(
+            "102", [fat, t2star, water], "spleen", "DIXON", water, "water"
+        )
+
 
 class PancreasEthrive(Module):
     def __init__(self, name="seg_pancreas_ethrive", **kwargs):
@@ -87,6 +112,7 @@ class PancreasEthrive(Module):
         ethrive_glob = self.kwargs.get("ethrive_glob", "ethrive.nii.gz")
         ethrive = self.inimg(self._ethrive_dir, ethrive_glob)
         self.run_nnunetv2("234", [ethrive], "pancreas", "eTHRIVE", ethrive, "ethrive")
+
 
 class KidneyCystT2w(Module):
     def __init__(self, name="seg_kidney_cyst_t2w", **kwargs):
@@ -109,7 +135,7 @@ class KidneyCystT2w(Module):
 
         mask = self.inimg(self.name, "kidney_cyst_mask.nii.gz", src=self.OUTPUT)
         self.lightbox(t2w_map, mask, name="kidney_cyst_t2w_lightbox", tight=True)
-        
+
         # Count number of cysts and volume
         total_volume = np.count_nonzero(mask.data) * mask.voxel_volume
         labelled = skimage.measure.label(mask.data)
@@ -122,14 +148,22 @@ class KidneyCystT2w(Module):
 
 
 class KidneyT1(Module):
-    def __init__(self, name="seg_kidney_t1", map_dir="t1_kidney", map_glob="t1_map*.nii.gz", **kwargs):
+    def __init__(
+        self,
+        name="seg_kidney_t1",
+        map_dir="t1_kidney",
+        map_glob="t1_map*.nii.gz",
+        **kwargs,
+    ):
         self._dir = map_dir
         self._glob = map_glob
         deps = [self._dir]
         Module.__init__(self, name, deps=deps, **kwargs)
 
     def process(self):
-        t1_maps = self.inimgs(self._dir, self._glob, src=self.kwargs.get("map_src", self.OUTPUT))
+        t1_maps = self.inimgs(
+            self._dir, self._glob, src=self.kwargs.get("map_src", self.OUTPUT)
+        )
         if not t1_maps:
             self.no_data(f"No T1 maps found to segment in {self._dir}/{self._glob}")
         t1_limits = self.kwargs.get("t1_limits", None)
@@ -139,9 +173,17 @@ class KidneyT1(Module):
             LOG.info(f" - Segmenting KIDNEY using T1 data: {t1_map.fname}")
             t1_data = t1_map.data
             if t1_limits is not None:
-                if len(t1_limits) != 2 or len(t1_limits[0]) != 2 or len(t1_limits[1]) != 2:
-                    self.bad_data("Invalid T1 limits format - should be sequence of two tuples ((min, replace), (max, replace)) - ignoring")
-                LOG.info(f" - Replacing T1 < {t1_limits[0][0]} with {t1_limits[0][1]} and T1 > {t1_limits[1][0]} with {t1_limits[1][1]}") 
+                if (
+                    len(t1_limits) != 2
+                    or len(t1_limits[0]) != 2
+                    or len(t1_limits[1]) != 2
+                ):
+                    self.bad_data(
+                        "Invalid T1 limits format - should be sequence of two tuples ((min, replace), (max, replace)) - ignoring"
+                    )
+                LOG.info(
+                    f" - Replacing T1 < {t1_limits[0][0]} with {t1_limits[0][1]} and T1 > {t1_limits[1][0]} with {t1_limits[1][1]}"
+                )
                 t1_data[t1_data < t1_limits[0][0]] = t1_limits[0][1]
                 t1_data[t1_data > t1_limits[1][0]] = t1_limits[1][1]
 
@@ -149,24 +191,34 @@ class KidneyT1(Module):
                 out_prefix = "kidney"
                 t1_map = t1_map.save_derived(t1_data, self.outfile("t1_map.nii.gz"))
             else:
-                out_prefix = f'kidney_{t1_map.fname_noext}'
+                out_prefix = f"kidney_{t1_map.fname_noext}"
                 t1_map = t1_map.save_derived(t1_data, self.outfile(t1_map.fname))
- 
-            self.runcmd([
-                'kidney_t1_seg',
-                '--input', t1_map.dirname,
-                '--subjid', '',
-                '--display-id', self.pipeline.options.subjid,
-                '--t1', t1_map.fname,
-                '--model', self.pipeline.options.kidney_t1_model,
-                '--noclean',
-                '--output', self.outdir,
-                '--outprefix', out_prefix],
-                logfile=f'seg.log'
+
+            self.runcmd(
+                [
+                    "kidney_t1_seg",
+                    "--input",
+                    t1_map.dirname,
+                    "--subjid",
+                    "",
+                    "--display-id",
+                    self.pipeline.options.subjid,
+                    "--t1",
+                    t1_map.fname,
+                    "--model",
+                    self.pipeline.options.kidney_t1_model,
+                    "--noclean",
+                    "--output",
+                    self.outdir,
+                    "--outprefix",
+                    out_prefix,
+                ],
+                logfile=f"seg.log",
             )
 
             seg = self.inimg(self.name, f"{out_prefix}_all_t1.nii.gz", src=self.OUTPUT)
             self.lightbox(t1_map, seg, name=f"{out_prefix}_t1_lightbox", tight=True)
+
 
 class KidneyT2w(Module):
     def __init__(self, name="seg_kidney_t2w", **kwargs):
@@ -191,10 +243,23 @@ class KidneyT2w(Module):
         # the largest two areas in the mask e.g. removes small areas of incorrectly categorised tissue. This can cause issues if the
         # subject has more or less than two kidneys though.
         from ukat.segmentation import whole_kidney
-        segmentation = whole_kidney.Segmentation(t2w_map.data, t2w_map.affine, post_process=True, binary=True, weights=model_weights)
-        segmentation.to_nifti(output_directory=self.outdir, base_file_name=f"kidney", maps=['mask', 'left', 'right', 'individual'])
 
-        LOG.info(f" - Generating overlay image for T2w segmentation using {t2w_map.fname}")
+        segmentation = whole_kidney.Segmentation(
+            t2w_map.data,
+            t2w_map.affine,
+            post_process=True,
+            binary=True,
+            weights=model_weights,
+        )
+        segmentation.to_nifti(
+            output_directory=self.outdir,
+            base_file_name=f"kidney",
+            maps=["mask", "left", "right", "individual"],
+        )
+
+        LOG.info(
+            f" - Generating overlay image for T2w segmentation using {t2w_map.fname}"
+        )
         mask_img = ImageFile(self.outfile("kidney_mask.nii.gz"), warn_json=False)
         self.lightbox(t2w_map, mask_img, "kidney_t2w_lightbox")
 
@@ -218,18 +283,29 @@ class KidneyT2wRenalSegmentor(Module):
 
     def process(self):
         t2w_map = self.inimg(self._t2w_dir, "t2w.nii.gz")
-        LOG.info(f" - Segmenting KIDNEY using renal segmentor - T2w data: {t2w_map.fname}")
+        LOG.info(
+            f" - Segmenting KIDNEY using renal segmentor - T2w data: {t2w_map.fname}"
+        )
 
         from segment import Tkv
+
         segmentation = Tkv(t2w_map.fpath)
         mask = segmentation.get_mask()
-        mask_img = t2w_map.save_derived(mask.astype(np.int8), self.outfile("kidney_mask.nii.gz"))
-        mask_left = self.split_lr(mask, affine=t2w_map.affine, side='left')
-        mask_right = self.split_lr(mask, affine=t2w_map.affine, side='right')
-        t2w_map.save_derived(mask_left.astype(np.int8), self.outfile("kidney_left.nii.gz"))
-        t2w_map.save_derived(mask_right.astype(np.int8), self.outfile("kidney_right.nii.gz"))
+        mask_img = t2w_map.save_derived(
+            mask.astype(np.int8), self.outfile("kidney_mask.nii.gz")
+        )
+        mask_left = self.split_lr(mask, affine=t2w_map.affine, side="left")
+        mask_right = self.split_lr(mask, affine=t2w_map.affine, side="right")
+        t2w_map.save_derived(
+            mask_left.astype(np.int8), self.outfile("kidney_left.nii.gz")
+        )
+        t2w_map.save_derived(
+            mask_right.astype(np.int8), self.outfile("kidney_right.nii.gz")
+        )
 
-        LOG.info(f" - Generating overlay image for T2w segmentation using {t2w_map.fname}")
+        LOG.info(
+            f" - Generating overlay image for T2w segmentation using {t2w_map.fname}"
+        )
         self.lightbox(t2w_map, mask_img, "kidney_t2w_lightbox")
 
         vols_fname = self.kwargs.get("vols_fname", "tkv.csv")
@@ -261,28 +337,71 @@ class KidneyT1SE(Module):
 
         t1_ref_data = self.inimgs(self._ref_dir, t1_ref_glob)
         if not t1_ref_data:
-            self.no_data(f"No T1 SE reference data found in {self._ref_dir}/{t1_ref_glob}")
+            self.no_data(
+                f"No T1 SE reference data found in {self._ref_dir}/{t1_ref_glob}"
+            )
         vendor = t1_ref_data[0].vendor
 
         single_map = len(t1_se_data) == 1
         for t1_se_img in t1_se_data:
-            LOG.info(f" - Segmenting KIDNEY using T1 SE data: {t1_se_img.fname} from vendor {vendor}")
+            LOG.info(
+                f" - Segmenting KIDNEY using T1 SE data: {t1_se_img.fname} from vendor {vendor}"
+            )
             if single_map:
                 out_prefix = "kidney"
             else:
-                out_prefix = f'kidney_{t1_se_img.fname_noext}'
-            self.runcmd([
-                'seg_kidney_t1_se',
-                '--data', t1_se_img.fpath,
-                '--model', "minmax",
-                '--output', self.outdir,
-                '--output-prefix', out_prefix,
-                '--vendor', vendor],
-                logfile=f'seg.log'
+                out_prefix = f"kidney_{t1_se_img.fname_noext}"
+            self.runcmd(
+                [
+                    "seg_kidney_t1_se",
+                    "--data",
+                    t1_se_img.fpath,
+                    "--model",
+                    "minmax",
+                    "--output",
+                    self.outdir,
+                    "--output-prefix",
+                    out_prefix,
+                    "--vendor",
+                    vendor,
+                ],
+                logfile=f"seg.log",
             )
 
-            #medulla = ImageFile(self.outfile(f"{out_prefix}_medulla.nii.gz"))
-            #self.lightbox(t1_se_img, medulla, name=f"{out_prefix}_t1_lightbox", tight=True)
+            medulla = ImageFile(self.outfile(f"{out_prefix}_medulla.nii.gz"))
+            cortex = ImageFile(self.outfile(f"{out_prefix}_cortex.nii.gz"))
+            medulla.save_derived(
+                (medulla.data > 0).astype(np.int8),
+                self.outfile(f"{out_prefix}_medulla.nii.gz"),
+            )
+            cortex.save_derived(
+                (cortex.data > 0).astype(np.int8),
+                self.outfile(f"{out_prefix}_cortex.nii.gz"),
+            )
+
+            medulla_l = self.split_lr(medulla.data, affine=medulla.affine, side="left")
+            medulla_r = self.split_lr(medulla.data, affine=medulla.affine, side="right")
+            cortex_l = self.split_lr(cortex.data, affine=cortex.affine, side="left")
+            cortex_r = self.split_lr(cortex.data, affine=cortex.affine, side="right")
+            medulla.save_derived(
+                medulla_l.astype(np.int8),
+                self.outfile(f"{out_prefix}_medulla_left.nii.gz"),
+            )
+            medulla.save_derived(
+                medulla_r.astype(np.int8),
+                self.outfile(f"{out_prefix}_medulla_right.nii.gz"),
+            )
+            cortex.save_derived(
+                cortex_l.astype(np.int8),
+                self.outfile(f"{out_prefix}_cortex_left.nii.gz"),
+            )
+            cortex.save_derived(
+                cortex_r.astype(np.int8),
+                self.outfile(f"{out_prefix}_cortex_right.nii.gz"),
+            )
+
+            # self.lightbox(t1_se_img, medulla, name=f"{out_prefix}_t1_lightbox", tight=True)
+
 
 class SatDixon(Module):
     def __init__(self, name="seg_sat_dixon", **kwargs):
@@ -295,6 +414,7 @@ class SatDixon(Module):
         fat = self.inimg(self._dixon_dir, "fat.nii.gz", src=src)
         water = self.inimg(self._dixon_dir, "water.nii.gz", src=src)
         self.run_nnunetv2("141", [fat], "sat", "DIXON", water, "water")
+
 
 class BodyDixon(Module):
     def __init__(self, name="seg_body_dixon", **kwargs):
@@ -309,7 +429,9 @@ class BodyDixon(Module):
         src = self.kwargs.get("dixon_src", self.INPUT)
         water_thresh = self.kwargs.get("water_thresh", 20)
         water = self.inimg(self._dixon_dir, "water.nii.gz", src=src)
-        LOG.info(f" - Segmenting body by thresholding water map {water.fname} at level {water_thresh}")
+        LOG.info(
+            f" - Segmenting body by thresholding water map {water.fname} at level {water_thresh}"
+        )
 
         # Work slicewise and try to segment the body by thresholding, filling holes and
         # selecting the largest contiguous region (blob)
@@ -331,6 +453,7 @@ class BodyDixon(Module):
         water.save_derived(body_mask, self.outfile("body.nii.gz"))
         seg = self.inimg(self.name, "body.nii.gz", src=self.OUTPUT)
         self.lightbox(water, seg, name="body_water_lightbox", tight=True)
+
 
 class VatDixon(Module):
     def __init__(self, name="seg_vat_dixon", **kwargs):
@@ -370,12 +493,18 @@ class VatDixon(Module):
                     LOG.warn(msg)
             else:
                 LOG.info(f" - Removing organ {organ_dir}/{fname} from VAT")
-                res_data = self.resample(organ_seg, ff, is_roi=True, allow_rotated=True).get_fdata().astype(np.int8)
+                res_data = (
+                    self.resample(organ_seg, ff, is_roi=True, allow_rotated=True)
+                    .get_fdata()
+                    .astype(np.int8)
+                )
                 vat_data[res_data > 0] = 0
-                ff.save_derived(res_data, self.outfile(fname.replace(".nii.gz", "_res.nii.gz")))
+                ff.save_derived(
+                    res_data, self.outfile(fname.replace(".nii.gz", "_res.nii.gz"))
+                )
 
         if self.kwargs.get("prune_slices", True):
-           # FIXME temporary remove top/bottom slices to avoid problem with SAT segmentor
+            # FIXME temporary remove top/bottom slices to avoid problem with SAT segmentor
             vat_data[..., 0] = 0
             vat_data[..., -1] = 0
 
@@ -389,28 +518,79 @@ class VatDixon(Module):
         else:
             LOG.warn(" - No water map found to overlay with VAT")
 
+
 class LegDixon(Module):
     def __init__(self, name="seg_leg_dixon", **kwargs):
         self._dixon_dir = kwargs.get("dixon_dir", "dixon")
-        deps = [self._dixon_dir]
-        Module.__init__(self, name, deps=deps, **kwargs)
+        Module.__init__(self, name, deps=[self._dixon_dir], **kwargs)
 
     def process(self):
-        src = self.kwargs.get("dixon_src", self.INPUT)
-        water = self.inimg(self._dixon_dir, "water.nii.gz", src=src)
-        fat = self.inimg(self._dixon_dir, "fat.nii.gz", src=src)
+        fat_glob = self.kwargs.get("fat_glob", "fat.nii.gz")
+        water_glob = self.kwargs.get("water_glob", "water.nii.gz")
 
-        LOG.info(f" - Segmenting LEG using water: {water.fpath}, fat: {fat.fpath}")
-        self.runcmd([
-            'leg_dixon_seg',
-            '--water', water.fpath,
-            '--fat', fat.fpath,
-            '--model', self.pipeline.options.leg_dixon_model,
-            '--output', self.outfile("leg.nii.gz")
-        ], logfile=f'seg.log')
+        fat = self.single_inimg(self._dixon_dir, fat_glob, src=self.INPUT)
+        water = self.single_inimg(self._dixon_dir, water_glob, src=self.INPUT)
+        if fat is None or water is None:
+            self.no_data(f"Could not find fat/water matching {fat_glob} {water_glob}")
 
-        seg = self.inimg(self.name, "leg.nii.gz", src=self.OUTPUT)
-        self.lightbox(water, seg, name="leg_water_lightbox", tight=True)
+        fat_reorient_nii = nib.as_closest_canonical(fat.nii).as_reoriented(
+            np.array([[0, 1], [1, 1], [2, 1]])
+        )
+        fat_reorient_nii.to_filename(self.outfile("fat.nii.gz"))
+        water_reorient_nii = nib.as_closest_canonical(water.nii).as_reoriented(
+            np.array([[0, 1], [1, 1], [2, 1]])
+        )
+        water_reorient_nii.to_filename(self.outfile("water.nii.gz"))
+        fat = ImageFile(self.outfile("fat.nii.gz"), warn_json=False)
+        water = ImageFile(self.outfile("water.nii.gz"), warn_json=False)
+
+        outfile = self.outfile("leg.nii.gz")
+        retval = self.runcmd(
+            [
+                "leg_seg_dixon",
+                fat.fpath,
+                water.fpath,
+                outfile,
+            ],
+            logfile=self.outfile("seg.log"),
+        )
+
+        if retval == 0:
+            seg = ImageFile(outfile, warn_json=False)
+            regions = {
+                "calf_muscle_r": [1],
+                "calf_sat_r": [2],
+                "calf_muscle_l": [3],
+                "calf_sat_l": [4],
+                "thigh_muscle_r": [5],
+                "thigh_sat_r": [6],
+                "thigh_muscle_l": [7],
+                "thigh_sat_l": [8],
+                "calf_muscle": [1, 3],
+                "calf_sat": [2, 4],
+                "thigh_muscle": [5, 7],
+                "thigh_sat": [6, 8],
+                "muscle_r": [1, 5],
+                "sat_r": [2, 6],
+                "muscle_l": [3, 7],
+                "sat_l": [4, 8],
+                "total": [2, 4, 6, 8],
+            }
+            for name, regions in regions.items():
+                mask = np.zeros_like(seg.data, dtype=np.int8)
+                for idx in regions:
+                    mask[seg.data == idx] = 1
+                if "muscle" in name:  # Apply dilation only to muscle masks
+                    LOG.info(f"Applying dilation to {name}")
+                    seg.save_derived(mask, self.outfile(f"{name}_nodil.nii.gz"))
+                    mask = binary_dilation(mask)
+                fname = self.outfile(f"{name}.nii.gz")
+                seg.save_derived(mask, fname)
+                mask = ImageFile(fname, warn_json=False)
+                if "sat" in name:
+                    self.lightbox(fat, mask, f"{name}_fat")
+                else:
+                    self.lightbox(water, mask, f"{name}_water")
 
 
 class OrganDixon(Module):
@@ -438,14 +618,17 @@ class OrganDixon(Module):
             organ_img.save_derived(left, self.outfile("kidney_left.nii.gz"))
             organ_img.save_derived(right, self.outfile("kidney_right.nii.gz"))
 
+
 class KidneyDixon(OrganDixon):
     def __init__(self, **kwargs):
         OrganDixon.__init__(self, "kidney", **kwargs)
+
 
 class KidneyCortexMedullaT2w(Module):
     """
     Cortex/medulla masking using T2w whole kidney segmentation
     """
+
     def __init__(self, name="seg_kidney_cortex_medulla_t2w", **kwargs):
         self._t2w_seg_dir = kwargs.get("t2w_seg_dir", "seg_kidney_t2w")
         self._t2star_dir = kwargs.get("t2star_dir", "t2star")
@@ -458,16 +641,29 @@ class KidneyCortexMedullaT2w(Module):
         t2w_seg_fname = self.kwargs.get("t2w_seg_fname", "kidney_mask.nii.gz")
         t2w_seg = self.single_inimg(self._t2w_seg_dir, t2w_seg_fname, src=self.OUTPUT)
         if t2w_seg is None:
-            self.no_data(f"No T2w kidney segmentation found in {self._t2w_seg_dir}/{t2w_seg_fname}")
+            self.no_data(
+                f"No T2w kidney segmentation found in {self._t2w_seg_dir}/{t2w_seg_fname}"
+            )
         LOG.info(f" - T2w kidney segmentation shape: {t2w_seg.shape}")
 
         last_echo_glob = self.kwargs.get("t2star_last_echo_glob", "last_echo.nii.gz")
-        t2star_last_echo = self.single_inimg(self._t2star_dir, last_echo_glob, src=self.OUTPUT)
+        t2star_last_echo = self.single_inimg(
+            self._t2star_dir, last_echo_glob, src=self.OUTPUT
+        )
         if t2star_last_echo is None:
-            self.no_data(f"No T2* last echo found in {self._t2star_dir}/{last_echo_glob}")
+            self.no_data(
+                f"No T2* last echo found in {self._t2star_dir}/{last_echo_glob}"
+            )
         LOG.info(f" - last echo shape: {t2star_last_echo.shape}")
 
-        flirt_result = fsl.flirt(t2w_seg.nii, t2star_last_echo.nii, out=fsl.LOAD, omat=fsl.LOAD, usesqform=True, applyxfm=True)
+        flirt_result = fsl.flirt(
+            t2w_seg.nii,
+            t2star_last_echo.nii,
+            out=fsl.LOAD,
+            omat=fsl.LOAD,
+            usesqform=True,
+            applyxfm=True,
+        )
         masktot2star = flirt_result["out"].get_fdata().reshape(t2star_last_echo.shape)
         LOG.info(f" - masktot2star shape: {masktot2star.shape}")
         t2star_last_echo.save_derived(masktot2star, self.outfile("masktot2star.nii.gz"))
@@ -487,15 +683,25 @@ class KidneyCortexMedullaT2w(Module):
         struct[..., 0] = 0
         struct[..., -1] = 0
         masktot2star_bin = (masktot2star > 0).astype(np.int32)
-        t2star_last_echo.save_derived(masktot2star_bin, self.outfile("masktot2star_bin.nii.gz"))
+        t2star_last_echo.save_derived(
+            masktot2star_bin, self.outfile("masktot2star_bin.nii.gz")
+        )
 
-        masktot2star_ero = binary_erosion(masktot2star_bin, iterations=2, structure=struct).reshape(t2star_last_echo.shape)
-        LOG.info(f" - masktot2star_ero shape: {masktot2star_ero.shape}, {np.count_nonzero(masktot2star_ero)}")
-        t2star_last_echo.save_derived(masktot2star_ero, self.outfile("masktot2star_ero.nii.gz"))
+        masktot2star_ero = binary_erosion(
+            masktot2star_bin, iterations=2, structure=struct
+        ).reshape(t2star_last_echo.shape)
+        LOG.info(
+            f" - masktot2star_ero shape: {masktot2star_ero.shape}, {np.count_nonzero(masktot2star_ero)}"
+        )
+        t2star_last_echo.save_derived(
+            masktot2star_ero, self.outfile("masktot2star_ero.nii.gz")
+        )
 
         remainder_mask = masktot2star_ero - cortex_mask
         LOG.info(f" - remainder mask shape: {remainder_mask.shape}")
-        t2star_last_echo.save_derived(remainder_mask, self.outfile("remainder_mask.nii.gz"))
+        t2star_last_echo.save_derived(
+            remainder_mask, self.outfile("remainder_mask.nii.gz")
+        )
 
         final_echo_rest = np.copy(final_echo_masked)
         final_echo_rest[final_echo_rest < final_echo_masked_mean * 0.5] = 0
@@ -510,11 +716,21 @@ class KidneyCortexMedullaT2w(Module):
         medulla_mask_bin = (medulla_mask > 0).astype(np.int32)
 
         t2star_last_echo.save_derived(cortex_mask, self.outfile("cortex_mask.nii.gz"))
-        t2star_last_echo.save_derived(cortex_mask_stats, self.outfile("cortex_mask_stats.nii.gz"))
-        t2star_last_echo.save_derived(medulla_mask_bin, self.outfile("medulla_mask.nii.gz"))
+        t2star_last_echo.save_derived(
+            cortex_mask_stats, self.outfile("cortex_mask_stats.nii.gz")
+        )
+        t2star_last_echo.save_derived(
+            medulla_mask_bin, self.outfile("medulla_mask.nii.gz")
+        )
 
 
 class KidneyPelvisT2w(Module):
+    """
+    Generate kidney pelvis segmentation from T2w whole kidney segmentation
+    by removing cortex/medulla and selecting the largest blobs on left and right of
+    body
+    """
+
     def __init__(self, name="seg_kidney_pelvis_t2w", **kwargs):
         self._t2w_seg_dir = kwargs.get("t2w_seg_dir", "seg_kidney_t2w")
         self._t1_seg_dir = kwargs.get("t1_seg_dir", "seg_kidney_t1")
@@ -526,7 +742,9 @@ class KidneyPelvisT2w(Module):
         t2w_seg_fname = self.kwargs.get("t2w_seg_fname", "kidney_mask.nii.gz")
         t2w_seg = self.single_inimg(self._t2w_seg_dir, t2w_seg_fname, src=self.OUTPUT)
         if t2w_seg is None:
-            self.no_data(f"No T2w kidney segmentation found in {self._t2w_seg_dir}/{t2w_seg_fname}")
+            self.no_data(
+                f"No T2w kidney segmentation found in {self._t2w_seg_dir}/{t2w_seg_fname}"
+            )
         LOG.info(f" - T2w kidney segmentation shape: {t2w_seg.shape}")
 
         cortex_glob = self.kwargs.get("t1_seg_cortex", "*cortex*.nii.gz")
@@ -535,10 +753,24 @@ class KidneyPelvisT2w(Module):
         medulla = self.inimgs(self._t1_seg_dir, medulla_glob, src=self.OUTPUT)
         if not cortex or not medulla:
             self.no_data(f"No T1 kidney segmentation found in {self._t1_seg_dir}")
-        cortex_res = sum([self.resample(c, t2w_seg, is_roi=True, allow_rotated=True).get_fdata() for c in cortex])
-        medulla_res = sum([self.resample(m, t2w_seg, is_roi=True, allow_rotated=True).get_fdata() for m in medulla])
-        t2w_seg.save_derived(cortex_res.astype(np.int32), self.outfile("cortex_res.nii.gz"))
-        t2w_seg.save_derived(medulla_res.astype(np.int32), self.outfile("medulla_res.nii.gz"))
+        cortex_res = sum(
+            [
+                self.resample(c, t2w_seg, is_roi=True, allow_rotated=True).get_fdata()
+                for c in cortex
+            ]
+        )
+        medulla_res = sum(
+            [
+                self.resample(m, t2w_seg, is_roi=True, allow_rotated=True).get_fdata()
+                for m in medulla
+            ]
+        )
+        t2w_seg.save_derived(
+            cortex_res.astype(np.int32), self.outfile("cortex_res.nii.gz")
+        )
+        t2w_seg.save_derived(
+            medulla_res.astype(np.int32), self.outfile("medulla_res.nii.gz")
+        )
         t1_kidney = (cortex_res + medulla_res > 0).astype(np.int32)
         t2w_seg.save_derived(t1_kidney, self.outfile("t1_kidney.nii.gz"))
 
@@ -548,27 +780,39 @@ class KidneyPelvisT2w(Module):
         kidney_fill = binary_fill_holes(t2w_seg.data)
         t2w_seg.save_derived(kidney_fill, self.outfile("kidney_fill.nii.gz"))
         kidney_fill_ero = binary_erosion(kidney_fill, iterations=1, structure=struct)
-        t2w_seg.save_derived(kidney_fill_ero.astype(np.int32), self.outfile("kidney_fill_ero.nii.gz"))
+        t2w_seg.save_derived(
+            kidney_fill_ero.astype(np.int32), self.outfile("kidney_fill_ero.nii.gz")
+        )
 
         pelvis_data = (kidney_fill_ero - t1_kidney > 0).astype(np.int32)
         left_data = self.split_lr(pelvis_data, t2w_seg.affine, "left")
         right_data = self.split_lr(pelvis_data, t2w_seg.affine, "right")
         left_data = self.blobs_by_size(left_data, min_size=10)[0]
         right_data = self.blobs_by_size(right_data, min_size=10)[0]
-        t2w_seg.save_derived(left_data.astype(np.int8), self.outfile("kidney_pelvis_left.nii.gz"))
-        t2w_seg.save_derived(right_data.astype(np.int8), self.outfile("kidney_pelvis_right.nii.gz"))
+        t2w_seg.save_derived(
+            left_data.astype(np.int8), self.outfile("kidney_pelvis_left.nii.gz")
+        )
+        t2w_seg.save_derived(
+            right_data.astype(np.int8), self.outfile("kidney_pelvis_right.nii.gz")
+        )
         pelvis = t2w_seg.save_derived(pelvis_data, self.outfile("kidney_pelvis.nii.gz"))
 
         t2w_map_glob = self.kwargs.get("t2w_map_glob", "t2w.nii.gz")
         t2w_map = self.single_inimg(self._t2w_map_dir, t2w_map_glob)
         if t2w_map is not None:
             t2w_map.reorient2std()
-            self.lightbox(t2w_map, pelvis, name="kidney_pelvis_lightbox", tight=True) 
+            self.lightbox(t2w_map, pelvis, name="kidney_pelvis_lightbox", tight=True)
         else:
             LOG.warn("No T2w map found - will not create lightbox image")
 
 
 class KidneyPelvisTrace(Module):
+    """
+    Generate kidney pelvis segmentation from Trace whole kidney segmentation
+    by removing cysts and the parenchyma and selecting the largest blobs
+    on left and right of body. The t2w segmentation is used to define the parenchyma.
+    """
+
     def __init__(self, name="seg_kidney_pelvis_trace", **kwargs):
         self._paren_dir = kwargs.get("paren_dir", "seg_kidney_t2w")
         self._whole_dir = kwargs.get("whole_dir", "traceseg")
@@ -581,11 +825,13 @@ class KidneyPelvisTrace(Module):
         paren_glob = self.kwargs.get("paren_glob", "kidney_mask.nii.gz")
         paren = self.single_inimg(self._paren_dir, paren_glob, src=self.OUTPUT)
         if paren is None:
-            self.no_data("No kidney parenchyma segmentation found to define pelvis region")
+            self.no_data(
+                "No kidney parenchyma segmentation found to define pelvis region"
+            )
         paren.reorient2std()
         paren.save_derived(paren.data, self.outfile("kidney_paren.nii.gz"))
 
-        whole_glob = self.kwargs.get("whole_glob", "trace_kidney_all.nii.gz")
+        whole_glob = self.kwargs.get("whole_glob", "kidney_all.nii.gz")
         whole = self.single_inimg(self._whole_dir, whole_glob, src=self.OUTPUT)
         if whole is None:
             self.no_data("No whole kidney segmentation found to define pelvis region")
@@ -613,14 +859,18 @@ class KidneyPelvisTrace(Module):
 
         pelvis_data = left_data + right_data
         pelvis = whole.save_derived(pelvis_data, self.outfile("kidney_pelvis.nii.gz"))
-        whole.save_derived(left_data.astype(np.int8), self.outfile("kidney_pelvis_left.nii.gz"))
-        whole.save_derived(right_data.astype(np.int8), self.outfile("kidney_pelvis_right.nii.gz"))
+        whole.save_derived(
+            left_data.astype(np.int8), self.outfile("kidney_pelvis_left.nii.gz")
+        )
+        whole.save_derived(
+            right_data.astype(np.int8), self.outfile("kidney_pelvis_right.nii.gz")
+        )
 
         t2w_map_glob = self.kwargs.get("t2w_map_glob", "t2w.nii.gz")
         t2w_map = self.single_inimg(self._t2w_map_dir, t2w_map_glob)
         if t2w_map is not None:
             t2w_map.reorient2std()
-            self.lightbox(t2w_map, pelvis, name="kidney_pelvis_lightbox", tight=True) 
+            self.lightbox(t2w_map, pelvis, name="kidney_pelvis_lightbox", tight=True)
         else:
             LOG.warn("No T2w map found - will not create lightbox image")
 
@@ -637,18 +887,26 @@ class KidneyFat(Module):
         ff_glob = self.kwargs.get("ff_glob", "fat_fraction.nii.gz")
         ff_thresh = self.kwargs.get("ff_thresh", 15)
 
-        kidney = self.single_inimg(self._kidney_seg_dir, kidney_seg_glob, src=self.OUTPUT)
-        if kidney is None:  
-            self.no_data(f"No kidney segmentation found in {self._kidney_seg_dir}/{kidney_seg_glob}")
+        kidney = self.single_inimg(
+            self._kidney_seg_dir, kidney_seg_glob, src=self.OUTPUT
+        )
+        if kidney is None:
+            self.no_data(
+                f"No kidney segmentation found in {self._kidney_seg_dir}/{kidney_seg_glob}"
+            )
         kidney_filled = binary_fill_holes(kidney.data)
 
         ff = self.single_inimg(self._ff_dir, ff_glob, src=self.OUTPUT)
         if ff is None:
             self.no_data(f"No fat fraction data found in {self._ff_dir}/{ff_glob}")
-        ff_data = self.resample(ff, kidney, is_roi=False, allow_rotated=True).get_fdata()
+        ff_data = self.resample(
+            ff, kidney, is_roi=False, allow_rotated=True
+        ).get_fdata()
         fat_mask = ff_data > ff_thresh
 
-        LOG.info(f" - Segmenting kidney fat / parenchyma using {kidney.fname}, {ff.fname} with threshold {ff_thresh}")
+        LOG.info(
+            f" - Segmenting kidney fat / parenchyma using {kidney.fname}, {ff.fname} with threshold {ff_thresh}"
+        )
         kidney_parenchyma = np.copy(kidney_filled)
         kidney_parenchyma[fat_mask > 0] = 0
 
@@ -658,16 +916,27 @@ class KidneyFat(Module):
 
         kidney.save_derived(ff_data, self.outfile("ff_res.nii.gz"))
         kidney.save_derived(fat_mask.astype(np.int32), self.outfile("fat_mask.nii.gz"))
-        kidney.save_derived(kidney_filled.astype(np.int32), self.outfile("kidney_filled.nii.gz"))
-        kidney.save_derived(kidney_dil.astype(np.int32), self.outfile("kidney_dil.nii.gz"))
-        kidney.save_derived(kidney_parenchyma.astype(np.int32), self.outfile("kidney_parenchyma.nii.gz"))
-        kidney.save_derived(fat_pelvis.astype(np.int32), self.outfile("fat_pelvis.nii.gz"))
+        kidney.save_derived(
+            kidney_filled.astype(np.int32), self.outfile("kidney_filled.nii.gz")
+        )
+        kidney.save_derived(
+            kidney_dil.astype(np.int32), self.outfile("kidney_dil.nii.gz")
+        )
+        kidney.save_derived(
+            kidney_parenchyma.astype(np.int32), self.outfile("kidney_parenchyma.nii.gz")
+        )
+        kidney.save_derived(
+            fat_pelvis.astype(np.int32), self.outfile("fat_pelvis.nii.gz")
+        )
 
         for side in ["left", "right"]:
             side_mask = self.split_lr(fat_pelvis, kidney.affine, side)
             kidney.save_derived(side_mask, self.outfile(f"fat_pelvis_{side}.nii.gz"))
             side_mask = self.split_lr(kidney_parenchyma, kidney.affine, side)
-            kidney.save_derived(side_mask, self.outfile(f"kidney_parenchyma_{side}.nii.gz"))
+            kidney.save_derived(
+                side_mask, self.outfile(f"kidney_parenchyma_{side}.nii.gz")
+            )
+
 
 class TotalSeg(Module):
     def __init__(self, name="totalseg", **kwargs):
@@ -689,22 +958,29 @@ class TotalSeg(Module):
             zsize = water.shape[2]
             zmin = int(zsize * (1 - crop))
             water_data_cropped = water_data[:, :, zmin:]
-            LOG.info(f" - Cropping input image retaining {crop} (discarding {zmin} slices)")
-                    
+            LOG.info(
+                f" - Cropping input image retaining {crop} (discarding {zmin} slices)"
+            )
+
             import nibabel as nib
+
             affine_cropped = np.copy(water.affine)
             affine_cropped[:, 3] += zmin * water.affine[:, 2]
             nii = nib.Nifti1Image(water_data_cropped, affine_cropped, water.nii.header)
             nii.to_filename(self.outfile("water_cropped.nii.gz"))
 
-        self.runcmd([
-                'TotalSegmentator',
-                '-i', water.fpath,
-                '-o', self.outdir,
-                '--task', 'total_mr', 
+        self.runcmd(
+            [
+                "TotalSegmentator",
+                "-i",
+                water.fpath,
+                "-o",
+                self.outdir,
+                "--task",
+                "total_mr",
             ],
-            logfile='seg_water.log',
-            raise_on_error=True
+            logfile="seg_water.log",
+            raise_on_error=True,
         )
 
         fat_glob = self.kwargs.get("fat_glob", "fat.nii.gz")
@@ -717,32 +993,48 @@ class TotalSeg(Module):
             if crop:
                 fat = fat.reorient2std()
                 fat_data_cropped = fat.data[:, :, zmin:]
-                fat = fat.save_derived(fat_data_cropped, self.outfile("fat_cropped.nii.gz"))
+                fat = fat.save_derived(
+                    fat_data_cropped, self.outfile("fat_cropped.nii.gz")
+                )
 
             LOG.info(f" - Running TotalSeg for SAT using fat {fat.fname}")
-            self.runcmd([
-                    'TotalSegmentator',
-                    '-i', fat.fpath,
-                    '-o', self.outdir,
-                    '--task', 'tissue_types_mr',
+            self.runcmd(
+                [
+                    "TotalSegmentator",
+                    "-i",
+                    fat.fpath,
+                    "-o",
+                    self.outdir,
+                    "--task",
+                    "tissue_types_mr",
                 ],
-                logfile='seg_fat.log',
-                raise_on_error=True
+                logfile="seg_fat.log",
+                raise_on_error=True,
             )
 
         # Combined kidney mask
-        kidney_left = self.single_inimg(self.name, "kidney_left.nii.gz", src=self.OUTPUT)
-        kidney_right = self.single_inimg(self.name, "kidney_right.nii.gz", src=self.OUTPUT)
-        kidney_combined = ((kidney_left.data > 0) | (kidney_right.data > 0)).astype(np.int8)
+        kidney_left = self.single_inimg(
+            self.name, "kidney_left.nii.gz", src=self.OUTPUT
+        )
+        kidney_right = self.single_inimg(
+            self.name, "kidney_right.nii.gz", src=self.OUTPUT
+        )
+        kidney_combined = ((kidney_left.data > 0) | (kidney_right.data > 0)).astype(
+            np.int8
+        )
         kidney_left.save_derived(kidney_combined, self.outfile("kidneys.nii.gz"))
 
         # Generate overlays and calculate volumes
         segs_of_interest = self.kwargs.get("segs", None)
         nifti_files = glob.glob(self.outfile("*.nii.gz"))
         csv_path = self.outfile("volumes.csv")
-        LOG.info(f" - Found {len(nifti_files)} segmentation files. Generating overlays and CSV at {csv_path}")
+        LOG.info(
+            f" - Found {len(nifti_files)} segmentation files. Generating overlays and CSV at {csv_path}"
+        )
 
-        extractor = radiomics.featureextractor.RadiomicsFeatureExtractor(geometryTolerance=1e-3)
+        extractor = radiomics.featureextractor.RadiomicsFeatureExtractor(
+            geometryTolerance=1e-3
+        )
         extractor.disableAllFeatures()
         extractor.enableFeatureClassByName("shape")
 
@@ -751,7 +1043,9 @@ class TotalSeg(Module):
             for nifti_file in nifti_files:
                 seg_img = self.single_inimg(self.name, nifti_file, src=self.OUTPUT)
                 if segs_of_interest and seg_img.fname_noext not in segs_of_interest:
-                    LOG.info(f" - Skipping {seg_img.fname_noext} - not in requested list")
+                    LOG.info(
+                        f" - Skipping {seg_img.fname_noext} - not in requested list"
+                    )
                     continue
 
                 volume = np.count_nonzero(seg_img.data) * seg_img.voxel_volume
@@ -760,16 +1054,24 @@ class TotalSeg(Module):
 
                 if np.count_nonzero(seg_img.data) > 0:
                     try:
-                        radiomics_results = extractor.execute(water.fpath, seg_img.fpath)
+                        radiomics_results = extractor.execute(
+                            water.fpath, seg_img.fpath
+                        )
                         for k, v in radiomics_results.items():
                             if k.startswith("diagnostics"):
                                 continue
                             elif "SurfaceArea" in k:
-                                csv_file.write(f"{seg_img.fname_noext}{suffix}_sa,{v/100}\n")
+                                csv_file.write(
+                                    f"{seg_img.fname_noext}{suffix}_sa,{v/100}\n"
+                                )
                             elif "SurfaceVolumeRatio" in k:
-                                csv_file.write(f"{seg_img.fname_noext}{suffix}_svr,{v*10}\n")
+                                csv_file.write(
+                                    f"{seg_img.fname_noext}{suffix}_svr,{v*10}\n"
+                                )
                     except Exception:
-                        LOG.warn(f" - Radiomics extraction failed for {seg_img.fname_noext}, setting surface area and surface volume ratio to 0")
+                        LOG.warn(
+                            f" - Radiomics extraction failed for {seg_img.fname_noext}, setting surface area and surface volume ratio to 0"
+                        )
                         csv_file.write(f"{seg_img.fname_noext}{suffix}_sa,0\n")
                         csv_file.write(f"{seg_img.fname_noext}{suffix}_svr,0\n")
                 else:
@@ -783,32 +1085,51 @@ class TotalSeg(Module):
         dilate = self.kwargs.get("dilate", 0)
         if dilate:
             csv_dilated = csv_path.replace(".csv", "_dilated.csv")
-            LOG.info(f" - Dilating segmentations by {dilate} voxels and saving to {csv_dilated}")
+            LOG.info(
+                f" - Dilating segmentations by {dilate} voxels and saving to {csv_dilated}"
+            )
             with open(csv_dilated, "w") as csv_file:
                 for nifti_file in nifti_files:
                     seg_img = self.single_inimg(self.name, nifti_file, src=self.OUTPUT)
                     if segs_of_interest and seg_img.fname_noext not in segs_of_interest:
-                        LOG.info(f" - Skipping {seg_img.fname_noext} - not in requested list")
+                        LOG.info(
+                            f" - Skipping {seg_img.fname_noext} - not in requested list"
+                        )
                         continue
 
-                    dilated_data = binary_dilation(seg_img.data, iterations=dilate).astype(np.int8)
-                    dilated_img = seg_img.save_derived(dilated_data, self.outfile(f"{seg_img.fname_noext}_dilated.nii.gz"))
+                    dilated_data = binary_dilation(
+                        seg_img.data, iterations=dilate
+                    ).astype(np.int8)
+                    dilated_img = seg_img.save_derived(
+                        dilated_data,
+                        self.outfile(f"{seg_img.fname_noext}_dilated.nii.gz"),
+                    )
                     volume = np.count_nonzero(dilated_data) * dilated_img.voxel_volume
                     csv_file.write(f"{dilated_img.fname_noext}{suffix},{volume}\n")
-                    LOG.info(f" - {dilated_img.fname_noext}: dilated volume = {volume} mL")
+                    LOG.info(
+                        f" - {dilated_img.fname_noext}: dilated volume = {volume} mL"
+                    )
 
                     if np.count_nonzero(dilated_img.data) > 0:
                         try:
-                            radiomics_results = extractor.execute(water.fpath, dilated_img.fpath)
+                            radiomics_results = extractor.execute(
+                                water.fpath, dilated_img.fpath
+                            )
                             for k, v in radiomics_results.items():
                                 if k.startswith("diagnostics"):
                                     continue
                                 elif "SurfaceArea" in k:
-                                    csv_file.write(f"{dilated_img.fname_noext}{suffix}_sa,{v/100}\n")
+                                    csv_file.write(
+                                        f"{dilated_img.fname_noext}{suffix}_sa,{v/100}\n"
+                                    )
                                 elif "SurfaceVolumeRatio" in k:
-                                    csv_file.write(f"{dilated_img.fname_noext}{suffix}_svr,{v*10}\n")
+                                    csv_file.write(
+                                        f"{dilated_img.fname_noext}{suffix}_svr,{v*10}\n"
+                                    )
                         except Exception:
-                            LOG.warn(f" - Radiomics extraction failed for {dilated_img.fname_noext}, setting surface area and surface volume ratio to 0")
+                            LOG.warn(
+                                f" - Radiomics extraction failed for {dilated_img.fname_noext}, setting surface area and surface volume ratio to 0"
+                            )
                             csv_file.write(f"{dilated_img.fname_noext}{suffix}_sa,0\n")
                             csv_file.write(f"{dilated_img.fname_noext}{suffix}_svr,0\n")
                     else:
@@ -818,6 +1139,7 @@ class TotalSeg(Module):
                     # Generate overlay PNG for dilated segmentation
                     overlay_name = f"{dilated_img.fname_noext}_overlay"
                     self.lightbox(water, dilated_img, name=overlay_name, tight=True)
+
 
 class TraceSeg(Module):
     def __init__(self, name="traceseg", **kwargs):
@@ -832,20 +1154,23 @@ class TraceSeg(Module):
             self.no_data(f"No input image found in {self._src_dir}/{img_glob}")
         LOG.info(f" - Running Trace Seg using {img.fname}")
 
-        self.runcmd([
-            'trace_segment',
-            img.fpath,
-            self.outfile(img.fname.replace('.nii.gz', '_seg.nii.gz')),
+        self.runcmd(
+            [
+                "trace_segment",
+                img.fpath,
+                self.outfile(img.fname.replace(".nii.gz", "_seg.nii.gz")),
             ],
-            logfile=f'trace_seg.log'
+            logfile=f"trace_seg.log",
         )
-        seg_img = ImageFile(self.outfile(img.fname.replace('.nii.gz', '_seg.nii.gz')), warn_json=False)
+        seg_img = ImageFile(
+            self.outfile(img.fname.replace(".nii.gz", "_seg.nii.gz")), warn_json=False
+        )
         with open(self.outfile("volumes.csv"), "w") as f:
             for idx, name in {
-                1 : "trace_kidney_r",
-                2 : "trace_kidney_l",
-                3 : "trace_spleen",
-                4 : "trace_liver", 
+                1: "kidney_right",
+                2: "kidney_left",
+                3: "spleen",
+                4: "liver",
             }.items():
                 roi = (seg_img.data == idx).astype(np.int8)
                 organ_img = seg_img.save_derived(roi, self.outfile(f"{name}.nii.gz"))
@@ -854,17 +1179,20 @@ class TraceSeg(Module):
                 LOG.info(f" - {name}: volume = {volume} mL")
                 f.write(f"{name},{volume}\n")
             tkv = np.logical_or(seg_img.data == 1, seg_img.data == 2)
-            tvk_img = seg_img.save_derived(tkv.astype(np.int8), self.outfile("trace_kidney_all.nii.gz"))
-            self.lightbox(img, tvk_img, name="trace_kidney_all_overlay", tight=True)
+            tvk_img = seg_img.save_derived(
+                tkv.astype(np.int8), self.outfile("kidney_all.nii.gz")
+            )
+            self.lightbox(img, tvk_img, name="kidney_all_overlay", tight=True)
             tkv_volume = np.count_nonzero(tkv) * seg_img.voxel_volume
             LOG.info(f" - Total kidney volume: {tkv_volume} mL")
-            f.write(f"trace_kidney_all,{tkv_volume}\n")
+            f.write(f"kidney_all,{tkv_volume}\n")
 
 
 class OrganFat(Module):
     """
     Given organ segmentations split into fat/fat free portions
     """
+
     def __init__(self, name="seg_organ_fat", **kwargs):
         self._ff_dir = kwargs.get("ff_dir", "fat_fraction")
         self._seg_dir = kwargs.get("seg_dir", "seg_kidney_dixon")
@@ -886,10 +1214,14 @@ class OrganFat(Module):
         for seg in segs:
             seg_filled = binary_fill_holes(seg.data)
 
-            ff_data = self.resample(ff, seg, is_roi=False, allow_rotated=True).get_fdata()
+            ff_data = self.resample(
+                ff, seg, is_roi=False, allow_rotated=True
+            ).get_fdata()
             fat_mask = ff_data > ff_thresh
 
-            LOG.info(f" - Segmenting {seg.fname} between fat / nofat using {ff.fname} with threshold {ff_thresh}")
+            LOG.info(
+                f" - Segmenting {seg.fname} between fat / nofat using {ff.fname} with threshold {ff_thresh}"
+            )
             seg_nofat = np.copy(seg_filled)
             seg_nofat[fat_mask > 0] = 0
 
@@ -897,6 +1229,140 @@ class OrganFat(Module):
             seg_fat[fat_mask == 0] = 0
 
             seg.save_derived(ff_data, self.outfile(f"{seg.fname_noext}_ff_res.nii.gz"))
-            seg.save_derived(fat_mask.astype(np.int32), self.outfile(f"{seg.fname_noext}_fat_mask.nii.gz"))
-            seg.save_derived(seg_nofat.astype(np.int32), self.outfile(f"{seg.fname_noext}_nofat.nii.gz"))
-            seg.save_derived(seg_fat.astype(np.int32), self.outfile(f"{seg.fname_noext}_fat.nii.gz"))
+            seg.save_derived(
+                fat_mask.astype(np.int32),
+                self.outfile(f"{seg.fname_noext}_fat_mask.nii.gz"),
+            )
+            seg.save_derived(
+                seg_nofat.astype(np.int32),
+                self.outfile(f"{seg.fname_noext}_nofat.nii.gz"),
+            )
+            seg.save_derived(
+                seg_fat.astype(np.int32), self.outfile(f"{seg.fname_noext}_fat.nii.gz")
+            )
+
+
+class KidneyCystTraceData(Module):
+
+    def __init__(self, name="seg_kidney_cyst_trace", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        srcdir = self.kwargs.get("trace_cyst_data", None)
+        if not srcdir:
+            self.no_data("No source directory specified for TRACE cyst data")
+
+        orig_fpath = f"{srcdir}/{self.pipeline.options.subjid}_ORIG_mask.nii.gz"
+        if not os.path.exists(orig_fpath):
+            LOG.warn(
+                f"No original TRACE cyst seg found for {self.pipeline.options.subjid} in {orig_fpath}"
+            )
+            orig = None
+        else:
+            orig = ImageFile(orig_fpath, warn_json=False)
+            LOG.info(" - Saving original TRACE cyst seg to kidney_cyst_orig.nii.gz")
+            orig.save(self.outfile("kidney_cyst_orig.nii.gz"))
+            left = self.split_lr(orig.data, orig.affine, "l")
+            right = self.split_lr(orig.data, orig.affine, "r")
+            orig.save_derived(left, self.outfile("kidney_cyst_orig_left.nii.gz"))
+            orig.save_derived(right, self.outfile("kidney_cyst_orig_right.nii.gz"))
+
+        fixed_fpath = f"{srcdir}/{self.pipeline.options.subjid}_FIX_mask.nii.gz"
+        if not os.path.exists(fixed_fpath):
+            if orig is not None:
+                LOG.warn(
+                    f" - No fixed TRACE cyst seg found for {self.pipeline.options.subjid}, copying original"
+                )
+                orig.save(self.outfile("kidney_cyst_fixed.nii.gz"))
+            else:
+                LOG.warn(
+                    f"No fixed TRACE cyst seg found for {self.pipeline.options.subjid} in {fixed_fpath}"
+                )
+        else:
+            fixed = ImageFile(fixed_fpath, warn_json=False)
+            LOG.info(" - Saving fixed TRACE cyst seg to kidney_cyst_fixed.nii.gz")
+            fixed.save(self.outfile("kidney_cyst_fixed.nii.gz"))
+            left = self.split_lr(fixed.data, fixed.affine, "l")
+            right = self.split_lr(fixed.data, fixed.affine, "r")
+            fixed.save_derived(left, self.outfile("kidney_cyst_fixed_left.nii.gz"))
+            fixed.save_derived(right, self.outfile("kidney_cyst_fixed_right.nii.gz"))
+
+
+class OrgansTraceData(Module):
+
+    def __init__(self, name="seg_organs_trace", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        srcdir = self.kwargs.get("trace_organs_data", None)
+        if not srcdir:
+            self.no_data("No source directory specified for TRACE organs data")
+
+        fpath = f"{srcdir}/{self.pipeline.options.subjid}.nii.gz"
+        if not os.path.exists(fpath):
+            self.no_data(
+                f"No TRACE organs seg found for {self.pipeline.options.subjid} in {fpath}"
+            )
+
+        img = ImageFile(fpath, warn_json=False)
+        LOG.info(" - Saving TRACE organ seg to trace_organs.nii.gz")
+        img.save(self.outfile("trace_organs.nii.gz"))
+
+        with open(self.outfile("volumes.csv"), "w") as f:
+            for idx, name in {
+                1: "kidney_right",
+                2: "kidney_left",
+                3: "spleen",
+                4: "liver",
+            }.items():
+                roi = (img.data == idx).astype(np.int8)
+                organ_img = img.save_derived(roi, self.outfile(f"{name}.nii.gz"))
+                self.lightbox(img, organ_img, name=f"{name}_overlay", tight=True)
+                volume = np.count_nonzero(roi) * img.voxel_volume
+                LOG.info(f" - {name}: volume = {volume} mL")
+                f.write(f"{name},{volume}\n")
+            tkv = np.logical_or(img.data == 1, img.data == 2)
+            tkv_img = img.save_derived(
+                tkv.astype(np.int8), self.outfile("kidney_all.nii.gz")
+            )
+            self.lightbox(img, tkv_img, name="kidney_all_overlay", tight=True)
+            tkv_volume = np.count_nonzero(tkv) * img.voxel_volume
+            LOG.info(f" - Total kidney volume: {tkv_volume} mL")
+            f.write(f"kidney_all,{tkv_volume}\n")
+
+
+class KidneyWholeTrace(Module):
+
+    def __init__(self, name="seg_kidney_trace", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        trace_seg = self.single_inimg(
+            "seg_organs_trace", "kidney_all.nii.gz", src=self.OUTPUT
+        )
+        if not trace_seg:
+            self.no_data(
+                "No TRACE kidney seg found in seg_organs_trace/kidney_all.nii.gz"
+            )
+
+        subjids_use_local_trace_seg = self.kwargs.get("subjids_use_local_trace_seg", [])
+        if self.pipeline.options.subjid in subjids_use_local_trace_seg:
+            trace_seg = self.single_inimg(
+                "traceseg", "kidney_all.nii.gz", src=self.OUTPUT
+            )
+            if not trace_seg:
+                self.no_data(
+                    f"No local TRACE kidney seg found for {self.pipeline.options.subjid}"
+                )
+
+        trace_seg.reorient2std()
+        trace_seg.save(self.outfile("kidney.nii.gz"))
+        left_data = self.split_lr(trace_seg.data, trace_seg.affine, side="l")
+        trace_seg.save_derived(left_data, self.outfile("kidney_left.nii.gz"))
+        right_data = self.split_lr(trace_seg.data, trace_seg.affine, side="r")
+        trace_seg.save_derived(right_data, self.outfile("kidney_right.nii.gz"))
+
+        t2w = self.single_inimg("../fsort/t2w", "t2w.nii.gz")
+        if t2w:
+            t2w.reorient2std()
+            self.lightbox(t2w, trace_seg, name="kidney_overlay", tight=True)
