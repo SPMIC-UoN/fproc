@@ -259,7 +259,7 @@ class T1Molli(Module):
         LOG.info(f" - Using temporal slice spaceing: {tss}")
 
         imgs = self.inimgs(molli_dir, molli_glob, src=molli_src)
-        if imgs:
+        if imgs and self.kwargs.get("use_raw_data", True):
             for img in imgs:
                 LOG.info(f" - Processing MOLLI data from {img.fname} using MDR={mdr}, MOLLI corrections={molli}, parameters={parameters}")
                 if tis_use_md or tis is None:
@@ -732,7 +732,9 @@ class DwiMoco(Module):
         if dwi.nvols != dwi.bval.shape[0]:
             LOG.warn(f" - Number of volumes ({dwi.nvols}) does not match number of bvals ({dwi.bval.shape[0]}) - truncating to match")
         bval = dwi.bval[:dwi.nvols]
-        adc_moco_mapper = ADC(dwi.data, dwi.affine, bval, ukrin_b=False, moco=True)
+        dwi_data = np.copy(dwi.data)
+        dwi_data[~np.isfinite(dwi_data)] = 0
+        adc_moco_mapper = ADC(dwi_data, dwi.affine, bval, ukrin_b=False, moco=True)
         moco_data = adc_moco_mapper.pixel_array_mean
         dwi.save_derived(moco_data, self.outfile("dwi_moco.nii.gz"), copy_bdata=False)
         bval_moco = np.unique(dwi.bval)
