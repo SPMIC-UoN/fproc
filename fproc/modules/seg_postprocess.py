@@ -298,14 +298,15 @@ class LargestBlob(Module):
 
 
 class SplitLR(Module):
-    def __init__(self, srcdir, seg_glob):
+    def __init__(self, srcdir, seg_glob, **kwargs):
         self._srcdir = srcdir
         self._seg_glob = seg_glob
         deps = [self._srcdir]
-        Module.__init__(self, f"{srcdir}_splitlr", deps=deps)
+        name = kwargs.pop("name", f"{srcdir}_splitlr")
+        Module.__init__(self, name, deps=deps, **kwargs)
 
     def process(self):
-        segs = self.inimgs(self._srcdir, self._seg_glob, src=self.OUTPUT)
+        segs = self.inimgs(self._srcdir, self._seg_glob, src=self.kwargs.get("src", self.OUTPUT))
         for seg in segs:
             for side in ("l", "r"):
                 out_fname = self.outfile(seg.fname.replace(".nii", f"_{side}.nii"))
