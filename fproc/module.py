@@ -213,17 +213,6 @@ class Module:
         if same:
             return src.nii
 
-        # if self.is_diagonal(affine):
-        #    # Use faster sequence mode
-        #    affine = np.diagonal(affine)
-        #    LOG.debug(str(affine))
-        #    LOG.debug(str(output_shape))
-        #    LOG.debug(str(np.min(data_src)))
-        #    LOG.debug(str(np.max(data_src)))
-        #    res_data = scipy.ndimage.affine_transform(data_src, affine, offset=offset,
-        #                                            output_shape=output_shape,
-        #                                            order=0 if is_roi else 1,
-        #                                            cval=cval, mode='grid-constant')
         if not allow_rotated and not self.is_diagonal(affine):
             LOG.warn(
                 "Data is rotated relative to segmentation - will not use this segmentation"
