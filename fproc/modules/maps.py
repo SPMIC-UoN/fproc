@@ -4,6 +4,7 @@ FPROC: Modules for generating parameter maps from raw data
 import logging
 import os
 import glob
+import csv
 
 import numpy as np
 import scipy
@@ -438,19 +439,38 @@ class T1SE(Module):
 
 class DixonClassify(Module):
     def __init__(self, name="dixon_classify", **kwargs):
-        Module.__init__(self, name, **kwargs)
+        self._dixon_src = kwargs.get("dixon_src", "raw_dixon")
+        Module.__init__(self, name, deps=[self._dixon_src], **kwargs)
 
     def process(self):
         model_fpath = self.kwargs.get("model", "/spmstore/project/RenalMRI/dixon_classifier/dixon_classifier_20250702.h5")
+        fixes_fpath = self.kwargs.get("fixes", None)
         LOG.info(f" - Using Dixon classifier model: {model_fpath}")
+        if fixes_fpath:
+            LOG.info(f" - Applying fixes from: {fixes_fpath}")
         from dixon_classify import DixonClassifier
         classifier = DixonClassifier()
         classifier.load(model_fpath)
 
-        dixon_src = self.kwargs.get("dixon_src", "raw_dixon")
         dixon_glob = self.kwargs.get("dixon_glob", "raw_dixon*.nii.gz")
-        input_dir = os.path.join(self.pipeline.options.output, dixon_src)
+        input_dir = os.path.join(self.pipeline.options.output, self._dixon_src)
         classifier.classify(input_dir, dixon_glob, self.outfile(""))
+        if fixes_fpath:
+            fixes = csv.DictReader(open(fixes_fpath))
+            for fix in fixes:
+                if fix["subjid"] == self.pipeline.options.subjid and fix["module"] == self.name:
+                    fix_src = os.path.join(input_dir, fix["fname"])
+                    fix_dest = fix["dest"]
+                    fix_vol = int(fix.get("vol", 0))
+                    LOG.info(f" - Using {fix['fname']}, volume {fix_vol} for  {fix_dest}")
+                    fix_img = ImageFile(fix_src, warn_json=False)
+                    fix_data = fix_img.data
+                    if fix_data.ndim == 4:
+                        fix_data = fix_data[..., fix_vol]
+                    elif fix_data.ndim == 3 and fix_vol > 0:
+                        LOG.warn(f" - Fix image {fix['fname']} is 3D but fix specifies volume {fix_vol} - ignoring volume and using 3D data")   
+
+                    fix_img.save_derived(fix_data, self.outfile(fix_dest + ".nii.gz"))
 
 class FatFractionDixon(Module):
     def __init__(self, name="fat_fraction", **kwargs):
@@ -459,9 +479,11 @@ class FatFractionDixon(Module):
     def process(self):
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         ff_name = self.kwargs.get("ff_name", "fat_fraction")
+        ff_calc_name = self.kwargs.get("ff_calc_name", "fat_fraction_calc_fixed")
         fat = self.inimg(dixon_dir, "fat.nii.gz")
         water = self.inimg(dixon_dir, "water.nii.gz")
         ff_scanner = self.inimg(dixon_dir, f"{ff_name}.nii.gz", check=False)
+        ff_calc = self.inimg(dixon_dir, f"{ff_calc_name}.nii.gz", check=False)
 
         if ff_scanner is not None:
             ff_data = ff_scanner.data
@@ -484,7 +506,12 @@ class FatFractionDixon(Module):
         else:
             LOG.info(" - Scanner derived fat fraction map not found")
 
-        if fat is not None and water is not None:
+        if ff_calc is not None:
+            LOG.info(f" - Found precalculated fat fraction map {ff_calc.fname} - saving as {ff_name}_calc.nii.gz")
+            ff_calc.save(self.outfile(f"{ff_name}_calc.nii.gz"))
+            if ff_scanner is None:
+                ff_calc.save(ff, self.outfile(f"{ff_name}.nii.gz"))
+        elif fat is not None and water is not None:
             water_data = self.resample(water, fat, allow_rotated=True).get_fdata()
             ff = np.zeros_like(fat.data, dtype=np.float32)
             valid = fat.data + water_data > 0
@@ -494,7 +521,7 @@ class FatFractionDixon(Module):
             if ff_scanner is None:
                 fat.save_derived(ff, self.outfile(f"{ff_name}.nii.gz"))
         else:
-            LOG.info(" - Could not find fat/water images - not calculating fat fraction")
+            LOG.info(" - No fat/water images and no precalculated map - not calculating fat fraction")
             if ff_scanner is None:
                 LOG.warn("No fat fraction data found")
 
@@ -726,6 +753,14 @@ class DwiMoco(Module):
         if dwi is None:
             self.no_data(f"No DWI data found matching {dwi_dir}/{dwi_glob}")
 
+        # Check we have some valid (positive, non NaN) timeseries otherwise
+        # the ADC will fail after spending hours doing moco
+        valid_voxels = np.all(dwi.data > 0, axis=-1)
+        if not np.any(valid_voxels):
+            self.bad_data(f"No valid DWI timeseries (>0) found in {dwi.fname}")
+        if np.any(~np.isfinite(dwi.data)):
+            self.bad_data(f"Non-finite values found in DWI data from {dwi.fname}")
+
         # Motion correct all bvals
         LOG.info(f" - Processing DWI data from {dwi.fname}")
         from ukat.mapping.diffusion import ADC
@@ -782,7 +817,7 @@ class AslMoco(Module):
             moco_data = perf_mapper.pixel_array
             img.save_derived(moco_data, self.outfile(f'{img.fname_noext}_moco.nii.gz'))
 
-            # Do our own label-control subtraction
+            # Do our own label-control subtraction assuming block of controls followed by block of labels
             if moco_data.ndim != 4 or moco_data.shape[-1] % 2 != 0:
                 LOG.warn(f" - ASL data not in label/control format - skipping label-control subtraction")
                 continue
