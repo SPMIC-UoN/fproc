@@ -393,7 +393,7 @@ class ShapeMetrics(Module):
         LOG.info(f" - Saving shape metrics to {csv_fname}")
         with open(self.outfile(csv_fname), "w") as f:
             for name, glob in segs.items():
-                img = self.single_inimg(self._seg_dir, glob, src=self.OUTPUT)
+                img = self.single_inimg(self._seg_dir, glob, src=self.kwargs.get("seg_src", self.OUTPUT))
                 if img is None:
                     LOG.warn(f" - No segmentation found for {name} matching {self._seg_dir}/{glob}")
                     continue
