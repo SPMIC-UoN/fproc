@@ -454,6 +454,8 @@ class DixonClassify(Module):
 
         dixon_glob = self.kwargs.get("dixon_glob", "raw_dixon*.nii.gz")
         input_dir = os.path.join(self.pipeline.options.output, self._dixon_src)
+        if not glob.glob(os.path.join(input_dir, dixon_glob)):
+            self.no_data(f"No Dixon data found in {input_dir} matching {dixon_glob}")
         classifier.classify(input_dir, dixon_glob, self.outfile(""))
         if fixes_fpath:
             fixes = csv.DictReader(open(fixes_fpath))
@@ -480,8 +482,10 @@ class FatFractionDixon(Module):
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         ff_name = self.kwargs.get("ff_name", "fat_fraction")
         ff_calc_name = self.kwargs.get("ff_calc_name", "fat_fraction_calc_fixed")
-        fat = self.inimg(dixon_dir, "fat.nii.gz")
-        water = self.inimg(dixon_dir, "water.nii.gz")
+        fat_name = self.kwargs.get("fat_name", "fat")
+        water_name = self.kwargs.get("water_name", "water")
+        fat = self.inimg(dixon_dir, f"{fat_name}.nii.gz")
+        water = self.inimg(dixon_dir, f"{water_name}.nii.gz")
         ff_scanner = self.inimg(dixon_dir, f"{ff_name}.nii.gz", check=False)
         ff_calc = self.inimg(dixon_dir, f"{ff_calc_name}.nii.gz", check=False)
 
