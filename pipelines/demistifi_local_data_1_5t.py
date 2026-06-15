@@ -12,6 +12,7 @@ __version__ = "0.0.1"
 
 LOG = logging.getLogger(__name__)
 
+
 class Nifti(Module):
     def __init__(self):
         Module.__init__(self, "nifti")
@@ -23,24 +24,37 @@ class Nifti(Module):
         if not t1s:
             self.no_data(f"No T1 data found in {datadir}")
         elif len(t1s) > 1:
-            LOG.warn(f"Multiple T1 data files found in {datadir}: {t1s}: choosing first")
+            LOG.warn(
+                f"Multiple T1 data files found in {datadir}: {t1s}: choosing first"
+            )
         t1 = t1s[0]
         nii_t1 = nib.load(t1)
         LOG.info(f" - T1 data from {t1}: {nii_t1.shape}")
-        nii_t1 = nib.Nifti1Image(nii_t1.get_fdata().squeeze(-1), nii_t1.header.get_best_affine(), nii_t1.header)
+        nii_t1 = nib.Nifti1Image(
+            nii_t1.get_fdata().squeeze(-1),
+            nii_t1.header.get_best_affine(),
+            nii_t1.header,
+        )
         nii_t1.to_filename(self.outfile("t1.nii.gz"))
 
         masks = [img for img in imgs if "mask" in img.lower()]
         if not masks:
             self.no_data(f"No mask data found in {datadir}")
         elif len(masks) > 1:
-            LOG.warn(f"Multiple mask data files found in {datadir}: {masks}: choosing first")
+            LOG.warn(
+                f"Multiple mask data files found in {datadir}: {masks}: choosing first"
+            )
         mask = masks[0]
         nii_mask = nib.load(mask)
         LOG.info(f" - mask data from {mask}: {nii_mask.shape}")
         # Sometimes the mask is not in the right image space so force it to the same as the T1
-        nii_mask = nib.Nifti1Image((nii_mask.get_fdata() > 0).astype(np.int32), nii_t1.header.get_best_affine(), nii_t1.header)
+        nii_mask = nib.Nifti1Image(
+            (nii_mask.get_fdata() > 0).astype(np.int32),
+            nii_t1.header.get_best_affine(),
+            nii_t1.header,
+        )
         nii_mask.to_filename(self.outfile("mask.nii.gz"))
+
 
 class PyRadiomics(Module):
     def __init__(self):
@@ -65,11 +79,9 @@ class PyRadiomics(Module):
                     continue
                 f.write(f"{k},{v}\n")
 
+
 __version__ = "0.0.1"
 
 NAME = "demistifi_pyradiomics"
 
-MODULES = [
-    Nifti(),
-    PyRadiomics()
-]
+MODULES = [Nifti(), PyRadiomics()]

@@ -9,13 +9,11 @@ __version__ = "1.0.0"
 NAME = "airecon_fixed_masks"
 
 MODULES = [
-
     seg_postprocess.SplitLR("", "*.nii.gz", src="INPUT", name="fixed_masks"),
-
     statistics.ShapeMetrics(
         name="fixed_masks_shape_metrics",
         seg_dir="fixed_masks",
-        segs={"tkv_l": "*_l.nii.gz", "tkv_r" : "*_r.nii.gz"},
+        segs={"tkv_l": "*_l.nii.gz", "tkv_r": "*_r.nii.gz"},
         metrics=[
             "surf_area",
             "surf_area_over_vol",
@@ -30,7 +28,6 @@ MODULES = [
             "fa",
         ],
     ),
-
     statistics.SegStats(
         name="fixed_masks_vols",
         segs={
@@ -48,8 +45,7 @@ MODULES = [
             },
         },
         seg_volumes=True,
-
-    )
+    ),
 ]
 
 

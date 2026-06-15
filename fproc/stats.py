@@ -5,17 +5,22 @@ import scipy
 
 LOG = logging.getLogger(__name__)
 
+
 def _sample(arr):
     return arr
+
 
 def median(arr):
     return np.nanmedian(_sample(arr))
 
+
 def skew(arr):
-    return scipy.stats.skew(arr.flatten(), nan_policy='omit')
+    return scipy.stats.skew(arr.flatten(), nan_policy="omit")
+
 
 def kurtosis(arr):
-    return scipy.stats.kurtosis(arr.flatten(), nan_policy='omit')
+    return scipy.stats.kurtosis(arr.flatten(), nan_policy="omit")
+
 
 def mode(arr):
     """
@@ -25,18 +30,23 @@ def mode(arr):
     loc, _scale = scipy.stats.norm.fit(arr_no_nan_inf)
     return loc
 
+
 def n(arr):
     return np.count_nonzero(~np.isnan(arr))
+
 
 def lq(arr):
     return np.nanquantile(_sample(arr), 0.25)
 
+
 def uq(arr):
     return np.nanquantile(_sample(arr), 0.75)
 
+
 def iqr(arr):
     uq, lq = tuple(np.nanquantile(_sample(arr), [0.75, 0.25]))
-    return uq-lq
+    return uq - lq
+
 
 def _get_iqdata(arr):
     if n(arr) == 0:
@@ -50,17 +60,21 @@ def _get_iqdata(arr):
         arr3 = arr2
     return arr3
 
+
 def iqn(arr):
     arr = _get_iqdata(arr)
     return np.count_nonzero(~np.isnan(arr))
+
 
 def iqmean(arr):
     arr = _get_iqdata(arr)
     return np.nanmean(arr)
 
+
 def iqstd(arr):
     arr = _get_iqdata(arr)
     return np.nanstd(arr)
+
 
 def fwhm(arr):
     """
@@ -68,56 +82,64 @@ def fwhm(arr):
     """
     arr_no_nan_inf = arr[np.isfinite(arr)]
     _loc, scale = scipy.stats.norm.fit(arr_no_nan_inf)
-    return 2.355*scale
+    return 2.355 * scale
+
 
 def mean(arr):
     return np.nanmean(arr)
 
+
 def std(arr):
     return np.nanstd(arr)
+
 
 def max(arr):
     return np.nanmax(arr)
 
+
 def min(arr):
     return np.nanmin(arr)
 
+
 def perc90(arr):
     return np.nanpercentile(arr, 90)
+
 
 def totalenergy(arr):
     arr_no_nan = arr[np.isfinite(arr)]
     return np.sum(arr_no_nan**2)
 
+
 STAT_IMPLS = {
-    "mean" : mean,
-    "std" : std,
-    "median" : median,
-    "min" : min,
-    "max" : max,
-    "lq" : lq,
-    "uq" : uq,
-    "iqr" : iqr,
-    "mode" : mode,
-    "fwhm" : fwhm,
-    "skewness" : skew,
-    "kurtosis" : kurtosis,
-    "iqmean" : iqmean,
-    "iqstd" : iqstd,
-    "n" : n,
-    "vol" : n,
-    "ndata" : n,
-    "voldata" : n,
-    "iqn" : iqn,
-    "iqvol" : iqn,
-    "perc90" : perc90,
-    "te" : totalenergy,
+    "mean": mean,
+    "std": std,
+    "median": median,
+    "min": min,
+    "max": max,
+    "lq": lq,
+    "uq": uq,
+    "iqr": iqr,
+    "mode": mode,
+    "fwhm": fwhm,
+    "skewness": skew,
+    "kurtosis": kurtosis,
+    "iqmean": iqmean,
+    "iqstd": iqstd,
+    "n": n,
+    "vol": n,
+    "ndata": n,
+    "voldata": n,
+    "iqn": iqn,
+    "iqvol": iqn,
+    "perc90": perc90,
+    "te": totalenergy,
 }
 
 DEFAULT_STATS = ["mean", "median", "std", "min", "max"]
 
+
 def run(data, **kwargs):
-    
+
     data_limits = kwargs.get("data_limits", (None, None))
 
     stats = kwargs.get("stats", DEFAULT_STATS)
@@ -133,7 +155,10 @@ def run(data, **kwargs):
     if not isinstance(data_limits, (list, tuple)) or len(data_limits) != 2:
         LOG.warn("Invalid data limits: %s - ignoring", data_limits)
         data_limits = (None, None)
-    return _get_stats(data, stats, data_limits, voxel_volume=kwargs.get("voxel_volume", 1.0))
+    return _get_stats(
+        data, stats, data_limits, voxel_volume=kwargs.get("voxel_volume", 1.0)
+    )
+
 
 def _get_stats(data, stats, data_limits=(None, None), voxel_volume=1.0):
     """
@@ -167,6 +192,7 @@ def _get_stats(data, stats, data_limits=(None, None), voxel_volume=1.0):
         data_stats[s] = value
 
     return data_stats
+
 
 def _restrict_data(data, data_limits):
     dmin, dmax = data_limits

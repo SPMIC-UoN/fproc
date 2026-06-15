@@ -1,6 +1,7 @@
 """
 FSORT: File pre-sorter for imaging processing pipelines
 """
+
 import importlib
 import os
 import sys
@@ -12,6 +13,7 @@ from .options import ArgumentParser
 
 LOG = logging.getLogger(__name__)
 
+
 def _setup_logging(args):
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -20,13 +22,15 @@ def _setup_logging(args):
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(levelname)s: %(message)s')
+    formatter = logging.Formatter("%(levelname)s: %(message)s")
     handler.setFormatter(formatter)
     logging.getLogger().addHandler(handler)
+
 
 def run(config_fname):
     sys.argv.append(f"--config={config_fname}")
     main()
+
 
 def main():
     """
@@ -47,13 +51,17 @@ def main():
         pipeline_config_fname = pipeline.__name__
     except ImportError:
         pipeline_config_fpath = os.path.abspath(os.path.normpath(options.pipeline))
-        pipeline_config_dirname, pipeline_config_fname = os.path.split(pipeline_config_fpath)
+        pipeline_config_dirname, pipeline_config_fname = os.path.split(
+            pipeline_config_fpath
+        )
         try:
             sys.path.append(pipeline_config_dirname)
             pipeline = importlib.import_module(pipeline_config_fname.replace(".py", ""))
         except ImportError:
             LOG.exception("Loading config")
-            raise ValueError(f"Could not load configuration {options.pipeline} - must be a python module or file")
+            raise ValueError(
+                f"Could not load configuration {options.pipeline} - must be a python module or file"
+            )
         finally:
             sys.path.remove(pipeline_config_dirname)
 
@@ -67,6 +75,7 @@ def main():
     pipeline_version = getattr(pipeline, "__version__", "unknown")
     pipeline = Pipeline(pipeline_name, pipeline_version, options, pipeline_modules)
     pipeline.run()
+
 
 if __name__ == "__main__":
     main()

@@ -148,7 +148,19 @@ class Stats(statistics.SegStats):
                     "glob": "fat_fraction.nii.gz",
                 },
             },
-            stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm"],
+            stats=[
+                "n",
+                "vol",
+                "iqn",
+                "iqvol",
+                "iqmean",
+                "median",
+                "iqstd",
+                "perc90",
+                "te",
+                "mode",
+                "fwhm",
+            ],
         )
 
 
@@ -226,7 +238,7 @@ class StatsDixon(statistics.SegStats):
                 "t1": {
                     "dir": "t1_molli_cor",
                     "glob": "t1_conf.nii.gz",
-                    "segs" : [
+                    "segs": [
                         "spleen",
                         "sat",
                         "kidney_dixon_nofat",
@@ -234,16 +246,16 @@ class StatsDixon(statistics.SegStats):
                         "kidney_dixon_right_nofat",
                         "fat_pelvis",
                         "fat_pelvis_left",
-                        "fat_pelvis_right"
+                        "fat_pelvis_right",
                     ],
                 },
                 "t1_ax": {
                     "dir": "t1_molli_ax",
                     "glob": "t1_conf.nii.gz",
-                    "segs" : [
+                    "segs": [
                         "liver",
                         "pancreas",
-                    ]
+                    ],
                 },
                 "b0": {
                     "dir": "b0",
@@ -262,9 +274,22 @@ class StatsDixon(statistics.SegStats):
                     "glob": "fat_fraction.nii.gz",
                 },
             },
-            stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm"],
+            stats=[
+                "n",
+                "vol",
+                "iqn",
+                "iqvol",
+                "iqmean",
+                "median",
+                "iqstd",
+                "perc90",
+                "te",
+                "mode",
+                "fwhm",
+            ],
             seg_volumes=True,
         )
+
 
 class StatsDixonTotalseg(statistics.SegStats):
     def __init__(self):
@@ -340,7 +365,7 @@ class StatsDixonTotalseg(statistics.SegStats):
                 "t1": {
                     "dir": "t1_molli_cor",
                     "glob": "t1_conf.nii.gz",
-                    "segs" : [
+                    "segs": [
                         "spleen",
                         "sat",
                         "kidney_dixon_nofat",
@@ -348,16 +373,16 @@ class StatsDixonTotalseg(statistics.SegStats):
                         "kidney_dixon_right_nofat",
                         "fat_pelvis",
                         "fat_pelvis_left",
-                        "fat_pelvis_right"
-                    ]
+                        "fat_pelvis_right",
+                    ],
                 },
                 "t1_ax": {
                     "dir": "t1_molli_ax",
                     "glob": "t1_conf.nii.gz",
-                    "segs" : [
+                    "segs": [
                         "liver",
                         "pancreas",
-                    ]
+                    ],
                 },
                 "b0": {
                     "dir": "b0",
@@ -376,10 +401,21 @@ class StatsDixonTotalseg(statistics.SegStats):
                     "glob": "fat_fraction.nii.gz",
                 },
             },
-            stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm"],
+            stats=[
+                "n",
+                "vol",
+                "iqn",
+                "iqvol",
+                "iqmean",
+                "median",
+                "iqstd",
+                "perc90",
+                "te",
+                "mode",
+                "fwhm",
+            ],
             seg_volumes=True,
         )
-
 
 
 class T1MolliMetadata(Module):
@@ -483,13 +519,15 @@ class T1Scaled(Module):
 
 
 MODULES = [
-    misc.ScanDates("scan_dates", input={
-        "../fsort/t1w" : "*.nii.gz",
-        "../fsort/t2w" : "*.nii.gz",
-        "../fsort/t1_molli" : "*.nii.gz",
-    }),
+    misc.ScanDates(
+        "scan_dates",
+        input={
+            "../fsort/t1w": "*.nii.gz",
+            "../fsort/t2w": "*.nii.gz",
+            "../fsort/t1_molli": "*.nii.gz",
+        },
+    ),
     maps.DixonClassify(dixon_src="../fsort/raw_dixon"),
-    
     # Parameter maps
     maps.T1Molli(
         name="t1_molli_mdr",
@@ -510,15 +548,9 @@ MODULES = [
         tis_use_md=True,
     ),
     maps.T1Molli(
-        name="t1_molli_cor",
-        molli_dir="../fsort/molli_cor",
-        use_raw_data=False
+        name="t1_molli_cor", molli_dir="../fsort/molli_cor", use_raw_data=False
     ),
-    maps.T1Molli(
-        name="t1_molli_ax",
-        molli_dir="../fsort/molli_ax",
-        use_raw_data=False
-    ),
+    maps.T1Molli(name="t1_molli_ax", molli_dir="../fsort/molli_ax", use_raw_data=False),
     maps.T2(),
     maps.T2star(),
     maps.B0(),
@@ -527,7 +559,6 @@ MODULES = [
     maps.AslMoco(name="pcasl_moco", asl_glob="pcasl*.nii.gz"),
     maps.AslMoco(name="fair_moco", asl_glob="fair*.nii.gz"),
     maps.T2starDixon(name="t2star_dixon", dixon_dir="../fproc/dixon_classify"),
-
     # Segmentations
     segmentations.KidneyT1(
         map_dir="t1_molli_cor",
@@ -555,8 +586,12 @@ MODULES = [
     segmentations.OrgansTraceData(),
     # segmentations.BodyDixon(),
     segmentations.SatDixon(name="seg_sat_dixon", dixon_dir="../fproc/dixon_classify"),
-    segmentations.LiverDixon(name="seg_liver_dixon", dixon_dir="../fproc/dixon_classify"),
-    segmentations.SpleenDixon(name="seg_spleen_dixon", dixon_dir="../fproc/dixon_classify"),
+    segmentations.LiverDixon(
+        name="seg_liver_dixon", dixon_dir="../fproc/dixon_classify"
+    ),
+    segmentations.SpleenDixon(
+        name="seg_spleen_dixon", dixon_dir="../fproc/dixon_classify"
+    ),
     segmentations.KidneyDixon(
         name="seg_kidney_dixon", dixon_dir="../fproc/dixon_classify", model_id="422"
     ),
@@ -577,7 +612,9 @@ MODULES = [
         },
     ),
     segmentations.TotalSeg(
-        name="totalseg", src_dir="../fproc/dixon_classify", dilate=1,
+        name="totalseg",
+        src_dir="../fproc/dixon_classify",
+        dilate=1,
     ),
     segmentations.VatDixon(
         name="seg_vat_dixon_totalseg",
@@ -596,7 +633,6 @@ MODULES = [
     ),
     segmentations.TraceSeg(name="traceseg", src_dir="t2w", img_glob="t2w.nii.gz"),
     segmentations.KidneyWholeTrace(),
-
     # Manual fixes
     T1Scaled(),
     seg_postprocess.SegFix(
@@ -1018,17 +1054,17 @@ MODULES = [
                 "dir": "totalseg",
                 "fname": "kidney_right.nii.gz",
             },
-            "liver" : {
+            "liver": {
                 "dir": "totalseg",
-                "fname" : "liver.nii.gz",
+                "fname": "liver.nii.gz",
             },
-            "pancreas" : {
+            "pancreas": {
                 "dir": "totalseg",
-                "fname" : "pancreas.nii.gz",
+                "fname": "pancreas.nii.gz",
             },
-            "spleen" : {
+            "spleen": {
                 "dir": "totalseg",
-                "fname" : "spleen.nii.gz",
+                "fname": "spleen.nii.gz",
             },
         },
         features={
@@ -1116,7 +1152,7 @@ MODULES = [
                 "Compactness1",
             ],
         },
-    ), 
+    ),
     statistics.ShapeMetrics(
         name="wkv_ero_shape_metrics",
         seg_dir="seg_kidney_pelvis_trace",
@@ -1142,8 +1178,14 @@ MODULES = [
             "t2w": {"dir": "t2w", "fname": "t2w.nii.gz", "src": Module.INPUT},
         },
         segs={
-            "wkv_ero_l": {"dir": "seg_kidney_pelvis_trace_splitlr", "fname": "*ero_l*.nii.gz"},
-            "wkv_ero_r": {"dir": "seg_kidney_pelvis_trace_splitlr", "fname": "*ero_r*.nii.gz"},
+            "wkv_ero_l": {
+                "dir": "seg_kidney_pelvis_trace_splitlr",
+                "fname": "*ero_l*.nii.gz",
+            },
+            "wkv_ero_r": {
+                "dir": "seg_kidney_pelvis_trace_splitlr",
+                "fname": "*ero_r*.nii.gz",
+            },
         },
         features={
             "shape": [
@@ -1157,7 +1199,6 @@ MODULES = [
             ],
         },
     ),
-    
     statistics.KidneyCystStats(
         name="kidney_cyst_stats",
         cyst_dir="seg_kidney_cyst_t2w_clean",
@@ -1197,17 +1238,17 @@ MODULES = [
     statistics.SegStats(
         "wkv_ero_volumes",
         segs={
-            "wkv_ero_all" : {
-                "dir" : "seg_kidney_pelvis_trace",
-                "glob" : "whole_kidney_ero.nii.gz",
+            "wkv_ero_all": {
+                "dir": "seg_kidney_pelvis_trace",
+                "glob": "whole_kidney_ero.nii.gz",
             },
-            "wkv_ero_all_l" : {
-                "dir" : "seg_kidney_pelvis_trace_splitlr",
-                "glob" : "whole_kidney_ero_l.nii.gz",
+            "wkv_ero_all_l": {
+                "dir": "seg_kidney_pelvis_trace_splitlr",
+                "glob": "whole_kidney_ero_l.nii.gz",
             },
-            "wkv_ero_all_r" : {
-                "dir" : "seg_kidney_pelvis_trace_splitlr",
-                "glob" : "whole_kidney_ero_r.nii.gz",
+            "wkv_ero_all_r": {
+                "dir": "seg_kidney_pelvis_trace_splitlr",
+                "glob": "whole_kidney_ero_r.nii.gz",
             },
         },
         seg_volumes=True,
@@ -1225,77 +1266,89 @@ MODULES = [
                 "glob": "kidney_pelvis_right.nii.gz",
                 "params": [],
             },
-            "kidney_pelvis_fat_l_trace" : {
+            "kidney_pelvis_fat_l_trace": {
                 "dir": "seg_kidney_pelvis_fat_trace",
                 "glob": "kidney_pelvis_left_fat.nii.gz",
-                "params" : ["ff"],
+                "params": ["ff"],
             },
-            "kidney_pelvis_fat_r_trace" : {
+            "kidney_pelvis_fat_r_trace": {
                 "dir": "seg_kidney_pelvis_fat_trace",
                 "glob": "kidney_pelvis_right_fat.nii.gz",
-                "params" : ["ff"],
+                "params": ["ff"],
             },
-            "kidney_pelvis_nofat_l_trace" : {
+            "kidney_pelvis_nofat_l_trace": {
                 "dir": "seg_kidney_pelvis_fat_trace",
                 "glob": "kidney_pelvis_left_nofat.nii.gz",
                 "params": [],
             },
-            "kidney_pelvis_nofat_r_trace" : {
+            "kidney_pelvis_nofat_r_trace": {
                 "dir": "seg_kidney_pelvis_fat_trace",
                 "glob": "kidney_pelvis_right_nofat.nii.gz",
                 "params": [],
             },
-            "kidney_paren_l" : {
+            "kidney_paren_l": {
                 "dir": "seg_kidney_t2w_fix",
                 "glob": "kidney_left.nii.gz",
-                "params" : ["ff", "ff_lt25"],
+                "params": ["ff", "ff_lt25"],
             },
-            "kidney_paren_r" : {
+            "kidney_paren_r": {
                 "dir": "seg_kidney_t2w_fix",
                 "glob": "kidney_right.nii.gz",
-                "params" : ["ff", "ff_lt25"],
+                "params": ["ff", "ff_lt25"],
             },
-            "kidney_cyst_l" : {
+            "kidney_cyst_l": {
                 "dir": "seg_kidney_cyst_trace_splitlr",
                 "glob": "*_l.nii.gz",
-                "params" : [],
+                "params": [],
             },
-            "kidney_cyst_r" : {
+            "kidney_cyst_r": {
                 "dir": "seg_kidney_cyst_trace_splitlr",
                 "glob": "*_r.nii.gz",
-                "params" : [],
+                "params": [],
             },
         },
         params={
-            "ff" : {
+            "ff": {
                 "dir": "ff_dixon",
                 "glob": "fat_fraction.nii.gz",
             },
-            "ff_lt25" : {
+            "ff_lt25": {
                 "dir": "ff_dixon",
                 "glob": "fat_fraction.nii.gz",
                 "limits": (0, 25),
-            }
+            },
         },
         seg_volumes=True,
-        stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm"],
+        stats=[
+            "n",
+            "vol",
+            "iqn",
+            "iqvol",
+            "iqmean",
+            "median",
+            "iqstd",
+            "perc90",
+            "te",
+            "mode",
+            "fwhm",
+        ],
     ),
     statistics.SegStats(
         name="kidney_stats_alternate",
         segs={
-            "kidney_paren_defin" : {
+            "kidney_paren_defin": {
                 "dir": "seg_kidney_t2w_fix",
                 "glob": "kidney_mask.nii.gz",
                 "params": [],
             },
-            "kidney_paren_model1" : {
-                "dir" : "seg_kidney_t2w_model1",
-                "glob" : "kidney_mask.nii.gz",
+            "kidney_paren_model1": {
+                "dir": "seg_kidney_t2w_model1",
+                "glob": "kidney_mask.nii.gz",
                 "params": [],
             },
-            "kidney_paren_model2" : {
-                "dir" : "seg_kidney_t2w",
-                "glob" : "kidney_mask.nii.gz",
+            "kidney_paren_model2": {
+                "dir": "seg_kidney_t2w",
+                "glob": "kidney_mask.nii.gz",
                 "params": [],
             },
             "kidney_pelvis_defin": {
@@ -1303,7 +1356,7 @@ MODULES = [
                 "glob": "kidney_pelvis.nii.gz",
                 "params": [],
             },
-            "kidney_pelvis_t2w" : {
+            "kidney_pelvis_t2w": {
                 "dir": "seg_kidney_pelvis_t2w",
                 "glob": "kidney_pelvis.nii.gz",
                 "params": [],
@@ -1319,10 +1372,10 @@ MODULES = [
             "kidney_cyst_stats_trace_orig/kidney_cyst.csv",
         ],
         diffs={
-            "cyst_def_min_trace" : ("kidney_cyst_defin_vol", "kidney_cyst_trace_vol"),
-            "cyst_def_min_uon" : ("kidney_cyst_defin_vol", "kidney_cyst_uon_vol"),
-            "cyst_trace_min_uon" : ("kidney_cyst_trace_vol", "kidney_cyst_uon_vol"),
-        }
+            "cyst_def_min_trace": ("kidney_cyst_defin_vol", "kidney_cyst_trace_vol"),
+            "cyst_def_min_uon": ("kidney_cyst_defin_vol", "kidney_cyst_uon_vol"),
+            "cyst_trace_min_uon": ("kidney_cyst_trace_vol", "kidney_cyst_uon_vol"),
+        },
     ),
     statistics.SegStats(
         name="organ_volumes",
@@ -1370,7 +1423,7 @@ MODULES = [
         },
         seg_volumes=True,
     ),
-    #TempAddPelvis(),
+    # TempAddPelvis(),
 ]
 
 

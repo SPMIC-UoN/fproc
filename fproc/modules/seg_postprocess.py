@@ -1,6 +1,7 @@
 """
 FPROC: Modules for post-processing segmentations
 """
+
 import glob
 import logging
 import os
@@ -15,10 +16,12 @@ from fproc.module import Module
 
 LOG = logging.getLogger(__name__)
 
+
 class SegFix(Module):
     """
     Module that can replace automatic segmentations with a manually drawn one
     """
+
     def __init__(self, seg_dir, name=None, **kwargs):
         if name is None:
             name = seg_dir + "_fix"
@@ -31,9 +34,13 @@ class SegFix(Module):
         fix_dir = getattr(self.pipeline.options, fix_dir_option, None)
         try_to_fix = False
         if not fix_dir:
-            LOG.info(" - No fixed segmentations dir specified - will not try to fix masks")
+            LOG.info(
+                " - No fixed segmentations dir specified - will not try to fix masks"
+            )
         elif not os.path.exists(fix_dir):
-            LOG.warn(f" - Fixed seg dir {fix_dir} does not exist - will not try to fix masks")
+            LOG.warn(
+                f" - Fixed seg dir {fix_dir} does not exist - will not try to fix masks"
+            )
         else:
             LOG.info(f" - Looking for fixed segmentations in {fix_dir}")
             try_to_fix = True
@@ -58,12 +65,21 @@ class SegFix(Module):
                 select_side = fix_spec.get("side", None)
                 ignore_missing = fix_spec.get("ignore_missing", False)
                 fname = fix_spec.get("fname", fname)
-            seg_img = self.single_inimg(self._seg_dir, seg_glob, src=self.kwargs.get("seg_src", self.OUTPUT), warn=False)
+            seg_img = self.single_inimg(
+                self._seg_dir,
+                seg_glob,
+                src=self.kwargs.get("seg_src", self.OUTPUT),
+                warn=False,
+            )
             if seg_img is None and ignore_missing:
-                LOG.info(f" - No segmentation found matching {self._seg_dir}/{seg_glob} - ignoring")
+                LOG.info(
+                    f" - No segmentation found matching {self._seg_dir}/{seg_glob} - ignoring"
+                )
                 continue
             elif seg_img is None:
-                LOG.info(f" - No original image matching {self._seg_dir}/{seg_glob} - will check for fix anyway")
+                LOG.info(
+                    f" - No original image matching {self._seg_dir}/{seg_glob} - will check for fix anyway"
+                )
             else:
                 LOG.info(f" - Checking for fixed version of {seg_img.fname}")
                 if not fname:
@@ -71,36 +87,55 @@ class SegFix(Module):
 
             fixed_img = None
             if try_to_fix:
-                globexpr = os.path.join(fix_dir, fix_glob % self.pipeline.options.subjid)
+                globexpr = os.path.join(
+                    fix_dir, fix_glob % self.pipeline.options.subjid
+                )
                 fixed_segs = glob.glob(globexpr, recursive=True)
                 if not fixed_segs:
                     LOG.info(f" - No fixed segmentation found in {globexpr}")
                 else:
                     if len(fixed_segs) > 1:
-                        LOG.warn(f" - Multiple matching 'fixed' segmentations found: {fixed_segs} - using first")
+                        LOG.warn(
+                            f" - Multiple matching 'fixed' segmentations found: {fixed_segs} - using first"
+                        )
                     fixed_img = ImageFile(fixed_segs[0])
                     fixed_data = fixed_img.data
-                    LOG.info(f" - Found fixed segmentation {fixed_img.fname} with {np.count_nonzero(fixed_data)} voxels")
+                    LOG.info(
+                        f" - Found fixed segmentation {fixed_img.fname} with {np.count_nonzero(fixed_data)} voxels"
+                    )
                     if select_side:
                         LOG.info(f" - Selecting {select_side} side")
-                        fixed_data = self._split_lr(fixed_data, fixed_img.affine, select_side)
+                        fixed_data = self._split_lr(
+                            fixed_data, fixed_img.affine, select_side
+                        )
                         if not fname:
-                            fname = fixed_img.fname.replace(".nii", f"_{select_side}.nii")
+                            fname = fixed_img.fname.replace(
+                                ".nii", f"_{select_side}.nii"
+                            )
                     elif not fname:
                         fname = fixed_img.fname
 
                     LOG.info(f" - Saving fixed segmentation from {fname} as int")
-                    fixed_img = fixed_img.save_derived((fixed_data > 0).astype(np.int32), self.outfile(fname))
+                    fixed_img = fixed_img.save_derived(
+                        (fixed_data > 0).astype(np.int32), self.outfile(fname)
+                    )
 
             if fixed_img is None and seg_img is not None:
-                LOG.info(f" - Saving original segmentation from {seg_img.fname} as {fname}")
+                LOG.info(
+                    f" - Saving original segmentation from {seg_img.fname} as {fname}"
+                )
                 fixed_img = seg_img
                 fixed_img.save(self.outfile(fname))
             elif fixed_img is None:
                 LOG.warn(f" - No fixed segmentation found - will not save")
 
             if map_img is not None and fixed_img is not None:
-                self.lightbox(map_img, fixed_img, name=f"{fixed_img.fname_noext}_lightbox", tight=True)
+                self.lightbox(
+                    map_img,
+                    fixed_img,
+                    name=f"{fixed_img.fname_noext}_lightbox",
+                    tight=True,
+                )
 
     def _split_lr(self, data, affine, side):
         LOG.debug(f" - Affine:\n{affine}")
@@ -111,9 +146,17 @@ class SegFix(Module):
         split_data = np.copy(data)
         lr_slices = [slice(None)] * 3
         if side.lower() in ("l", "left"):
-            lr_slices[lr_axis] = slice(lr_centre) if "L" in axcodes else slice(lr_centre, data.shape[lr_axis])
-        elif side.lower() in ("r", "right"):        
-            lr_slices[lr_axis] = slice(lr_centre) if "R" in axcodes else slice(lr_centre, data.shape[lr_axis])
+            lr_slices[lr_axis] = (
+                slice(lr_centre)
+                if "L" in axcodes
+                else slice(lr_centre, data.shape[lr_axis])
+            )
+        elif side.lower() in ("r", "right"):
+            lr_slices[lr_axis] = (
+                slice(lr_centre)
+                if "R" in axcodes
+                else slice(lr_centre, data.shape[lr_axis])
+            )
         else:
             LOG.warn(f" - Unknown side '{side}' - not selecting")
             return split_data
@@ -122,6 +165,7 @@ class SegFix(Module):
         split_data[tuple(lr_slices)] = 0
         split_data[tuple(lr_slices)] = 0
         return split_data
+
 
 class KidneyT1Clean(Module):
     def __init__(self, name="seg_kidney_t1_clean", **kwargs):
@@ -138,35 +182,55 @@ class KidneyT1Clean(Module):
         t2w_masks_glob = self.kwargs.get("t2w_masks_glob", "kidney_mask.nii.gz")
         t1_segs = self.inimgs(self._seg_t1_srcdir, seg_t1_glob, src=self.OUTPUT)
         if not t1_segs:
-            self.no_data(f" - No T1 segmentations found to clean in {self._seg_t1_srcdir}/{seg_t1_glob}")
+            self.no_data(
+                f" - No T1 segmentations found to clean in {self._seg_t1_srcdir}/{seg_t1_glob}"
+            )
 
         t2w_masks = self.inimgs(self._seg_t2w_srcdir, t2w_masks_glob, src=self.OUTPUT)
         if not t2w_masks:
             t2w_masks = [None]
         elif len(t2w_masks) > 1 and t2w:
-            LOG.warn(f" - Multiple T2w segmentations - using first: {t2w_masks[0].fname}")
+            LOG.warn(
+                f" - Multiple T2w segmentations - using first: {t2w_masks[0].fname}"
+            )
         t2w_mask = t2w_masks[0]
 
         for t1_seg in t1_segs:
             if t2w:
                 if t2w_mask is not None:
-                    LOG.info(f" - Cleaning {t1_seg.fname} using T2w mask {t2w_mask.fname}")
-                    t2w_mask_res = self.resample(t2w_mask, t1_seg, is_roi=True, allow_rotated=True)
+                    LOG.info(
+                        f" - Cleaning {t1_seg.fname} using T2w mask {t2w_mask.fname}"
+                    )
+                    t2w_mask_res = self.resample(
+                        t2w_mask, t1_seg, is_roi=True, allow_rotated=True
+                    )
                     t2w_mask_res_data = t2w_mask_res.get_fdata()
-                    vol_frac_before = np.count_nonzero(t2w_mask.data) / t2w_mask.data.size
-                    vol_frac_after = np.count_nonzero(t2w_mask_res_data) / t2w_mask_res_data.size
+                    vol_frac_before = (
+                        np.count_nonzero(t2w_mask.data) / t2w_mask.data.size
+                    )
+                    vol_frac_after = (
+                        np.count_nonzero(t2w_mask_res_data) / t2w_mask_res_data.size
+                    )
                     if vol_frac_after / vol_frac_before < 0.2:
-                        LOG.warn(f" - T2w mask volume reduced by more than 80% - not using")
+                        LOG.warn(
+                            f" - T2w mask volume reduced by more than 80% - not using"
+                        )
                         if generic:
                             LOG.warn(f" - Using generic cleaning instead")
                             cleaned_data_t1_seg = self._clean_generic(t1_seg, t1_segs)
                     else:
-                        cleaned_data_t1_seg = self._clean_t2w(t1_seg.data, t2w_mask_res.get_fdata())
+                        cleaned_data_t1_seg = self._clean_t2w(
+                            t1_seg.data, t2w_mask_res.get_fdata()
+                        )
                 elif generic:
-                    LOG.warn(f" - Could not find T2w mask in {self._seg_t2w_srcdir}/{t2w_masks_glob} - using generic cleaning")
+                    LOG.warn(
+                        f" - Could not find T2w mask in {self._seg_t2w_srcdir}/{t2w_masks_glob} - using generic cleaning"
+                    )
                     cleaned_data_t1_seg = self._clean_generic(t1_seg, t1_segs)
                 else:
-                    LOG.warn(f" - Could not find T2w mask in {self._seg_t2w_srcdir}/{t2w_masks_glob} - not cleaning")
+                    LOG.warn(
+                        f" - Could not find T2w mask in {self._seg_t2w_srcdir}/{t2w_masks_glob} - not cleaning"
+                    )
                     cleaned_data_t1_seg = t1_seg
             elif generic:
                 LOG.info(f" - Cleaning {t1_seg.fname} using generic algorithm")
@@ -182,20 +246,32 @@ class KidneyT1Clean(Module):
             t1_maps = self.inimgs(self._t1_map_srcdir, t1_map_glob, src=self.OUTPUT)
             t1_map = self._matching_t1_map(t1_seg, self._seg_t1_srcdir, t1_maps)
             if t1_map is None:
-                LOG.warn(f" - Could not find matching T1 map for {t1_seg.fname} - no overlay will be generated")
+                LOG.warn(
+                    f" - Could not find matching T1 map for {t1_seg.fname} - no overlay will be generated"
+                )
             else:
-                self.lightbox(t1_map.data, cleaned_data_t1_seg, f"{t1_seg.fname_noext}_t1_cleaned_lightbox")
+                self.lightbox(
+                    t1_map.data,
+                    cleaned_data_t1_seg,
+                    f"{t1_seg.fname_noext}_t1_cleaned_lightbox",
+                )
 
     def _matching_t1_map(self, t1_seg, seg_t1_srcdir, t1_maps):
         map_fname = t1_seg.fname_noext.replace("kidney_", "")
         for part in ("cortex", "medulla", "all"):
             if part in map_fname:
-                map_fname = map_fname[:map_fname.index(part)]
+                map_fname = map_fname[: map_fname.index(part)]
                 if map_fname and map_fname[-1] == "_":
                     map_fname = map_fname[:-1]
                 break
 
-        map_img =  self.inimg(seg_t1_srcdir, f"{map_fname}.nii.gz", src=self.OUTPUT, check=False, warn=False)
+        map_img = self.inimg(
+            seg_t1_srcdir,
+            f"{map_fname}.nii.gz",
+            src=self.OUTPUT,
+            check=False,
+            warn=False,
+        )
         if not map_img:
             if t1_maps:
                 return t1_maps[0]
@@ -211,11 +287,11 @@ class KidneyT1Clean(Module):
 
         # How close to the horizontal centre (as a fraction of total pixels) a blob centroid needs to be
         # before it is discarded (the kidneys should be either side of the central spine)
-        CENTRE_FRACTION = 1.0/12
+        CENTRE_FRACTION = 1.0 / 12
 
         # Fraction of pixels to use as criteria for small blob removal. The minimum size of a blob
         # is this fraction of the horizontal dimension squared
-        SMALL_FRACTION = 1.0/20
+        SMALL_FRACTION = 1.0 / 20
 
         # Get the whole kidney mask matching the segmentation we are cleaning
         mask_img_cor, mask_img_med = [], []
@@ -226,9 +302,11 @@ class KidneyT1Clean(Module):
                 mask_img_cor.append(seg.data)
 
         if not mask_img_cor or not mask_img_med:
-            self.bad_data(f"Could not find cortex and medulla mask images matching {t1_seg.fname}")
-        mask_img_cor = (sum(mask_img_cor) > 0)
-        mask_img_med = (sum(mask_img_med) > 0)
+            self.bad_data(
+                f"Could not find cortex and medulla mask images matching {t1_seg.fname}"
+            )
+        mask_img_cor = sum(mask_img_cor) > 0
+        mask_img_med = sum(mask_img_med) > 0
         kid_mask = np.logical_or(mask_img_cor, mask_img_med)
         cleaned_data = np.copy(t1_seg.data)
 
@@ -239,23 +317,32 @@ class KidneyT1Clean(Module):
 
             # Remove any central blobs
             for region in props:
-                if (region.centroid[0] < kid_mask.shape[0]*(0.5+CENTRE_FRACTION) and 
-                    region.centroid[0] > kid_mask.shape[0]*(0.5-CENTRE_FRACTION)):
+                if region.centroid[0] < kid_mask.shape[0] * (
+                    0.5 + CENTRE_FRACTION
+                ) and region.centroid[0] > kid_mask.shape[0] * (0.5 - CENTRE_FRACTION):
                     kid_mask_slice[labelled == region.label] = 0
 
             # Remove any blobs around the edge
             for region in props:
-                if (region.centroid[1] < kid_mask.shape[0]*EDGE_HORIZ_FRACTION or
-                    region.centroid[1] > kid_mask.shape[0]*(1-EDGE_HORIZ_FRACTION) or
-                    region.centroid[0] < kid_mask.shape[1]*EDGE_VERT_FRACTION or
-                    region.centroid[0] > kid_mask.shape[1]*(1-EDGE_VERT_FRACTION)):
+                if (
+                    region.centroid[1] < kid_mask.shape[0] * EDGE_HORIZ_FRACTION
+                    or region.centroid[1]
+                    > kid_mask.shape[0] * (1 - EDGE_HORIZ_FRACTION)
+                    or region.centroid[0] < kid_mask.shape[1] * EDGE_VERT_FRACTION
+                    or region.centroid[0] > kid_mask.shape[1] * (1 - EDGE_VERT_FRACTION)
+                ):
                     kid_mask_slice[labelled == region.label] = 0
 
             # Remove any small blobs from one copy
             if remove_small:
-                smallblob_thresh = round((kid_mask_slice.shape[0]*SMALL_FRACTION)**2)
+                smallblob_thresh = round(
+                    (kid_mask_slice.shape[0] * SMALL_FRACTION) ** 2
+                )
                 for region in props:
-                    if np.sum(kid_mask_slice[labelled == region.label]) < smallblob_thresh:
+                    if (
+                        np.sum(kid_mask_slice[labelled == region.label])
+                        < smallblob_thresh
+                    ):
                         kid_mask_slice[labelled == region.label] = 0
 
             cleaned_data[..., slice_idx] *= kid_mask_slice
@@ -264,11 +351,18 @@ class KidneyT1Clean(Module):
 
     def _clean_t2w(self, t1_seg, t2w_mask):
         # Dilate T2w masks by 2 voxels
-        mask_data_dil = scipy.ndimage.binary_dilation(t2w_mask, structure=np.ones((3, 3, 3)))
-        mask_data_dil = scipy.ndimage.binary_dilation(mask_data_dil, structure=np.ones((3, 3, 3)))
+        mask_data_dil = scipy.ndimage.binary_dilation(
+            t2w_mask, structure=np.ones((3, 3, 3))
+        )
+        mask_data_dil = scipy.ndimage.binary_dilation(
+            mask_data_dil, structure=np.ones((3, 3, 3))
+        )
         cleaned_data = (t1_seg * mask_data_dil).astype(np.uint8)
-        LOG.debug(f" - Voxel counts: orig {np.count_nonzero(t1_seg)}, mask {np.count_nonzero(t2w_mask)}, dil mask {np.count_nonzero(mask_data_dil)}, out {np.count_nonzero(cleaned_data)},")
+        LOG.debug(
+            f" - Voxel counts: orig {np.count_nonzero(t1_seg)}, mask {np.count_nonzero(t2w_mask)}, dil mask {np.count_nonzero(mask_data_dil)}, out {np.count_nonzero(cleaned_data)},"
+        )
         return cleaned_data
+
 
 class LargestBlob(Module):
     def __init__(self, srcdir, seg_glob, overlay_srcdir=None, overlay_glob=None):
@@ -278,7 +372,7 @@ class LargestBlob(Module):
         self._overlay_glob = overlay_glob
         deps = [self._srcdir]
         Module.__init__(self, f"{srcdir}_largestblob", deps=deps)
-    
+
     def process(self):
         segs = self.inimgs(self._srcdir, self._seg_glob, src=self.OUTPUT)
         for seg in segs:
@@ -290,7 +384,9 @@ class LargestBlob(Module):
                 continue
 
             largest = blobs[0]
-            LOG.info(f" - Largest blob for {seg.fname} has {np.count_nonzero(largest)} voxels")
+            LOG.info(
+                f" - Largest blob for {seg.fname} has {np.count_nonzero(largest)} voxels"
+            )
             LOG.info(f" - Also found {len(blobs) - 1} other blobs")
 
             seg.save_derived(largest, out_fname)
@@ -306,7 +402,9 @@ class SplitLR(Module):
         Module.__init__(self, name, deps=deps, **kwargs)
 
     def process(self):
-        segs = self.inimgs(self._srcdir, self._seg_glob, src=self.kwargs.get("src", self.OUTPUT))
+        segs = self.inimgs(
+            self._srcdir, self._seg_glob, src=self.kwargs.get("src", self.OUTPUT)
+        )
         for seg in segs:
             for side in ("l", "r"):
                 out_fname = self.outfile(seg.fname.replace(".nii", f"_{side}.nii"))
@@ -335,12 +433,24 @@ class SegVolumes(Module):
                 if seg_img is None:
                     LOG.warn(f"Segmentation not found: {seg}")
                 else:
-                    f.write("%s,%.2f\n" % (name, seg_img.voxel_volume * np.count_nonzero(seg_img.data)))
+                    f.write(
+                        "%s,%.2f\n"
+                        % (name, seg_img.voxel_volume * np.count_nonzero(seg_img.data))
+                    )
                     if self.kwargs.get("split_lr", False):
                         left_data = self.split_lr(seg_img.data, seg_img.affine, "l")
                         right_data = self.split_lr(seg_img.data, seg_img.affine, "r")
-                        f.write("%s_l,%.2f\n" % (name, seg_img.voxel_volume * np.count_nonzero(left_data)))
-                        f.write("%s_r,%.2f\n" % (name, seg_img.voxel_volume * np.count_nonzero(right_data)))
+                        f.write(
+                            "%s_l,%.2f\n"
+                            % (name, seg_img.voxel_volume * np.count_nonzero(left_data))
+                        )
+                        f.write(
+                            "%s_r,%.2f\n"
+                            % (
+                                name,
+                                seg_img.voxel_volume * np.count_nonzero(right_data),
+                            )
+                        )
 
 
 class Dilate(Module):
@@ -354,9 +464,9 @@ class Dilate(Module):
         dil_voxels = self.kwargs.get("dil_voxels", 1)
         slice_axis = self.kwargs.get("slice_axis", None)
         slice_axcodes = {
-            "A" : "SI",
-            "C" : "AP",
-            "S" : "LR",
+            "A": "SI",
+            "C": "AP",
+            "S": "LR",
         }
         for seg in segs:
             seg_img = self.single_inimg(self._seg_dir, seg, src=self.OUTPUT)
@@ -369,23 +479,35 @@ class Dilate(Module):
                         slice_axis_idx = int(slice_axis)
                         if slice_axis_idx < 0 or slice_axis_idx > 2:
                             self.bad_data(f"Invalid slice axis index {slice_axis_idx}")
-                        LOG.info(f" - Dilating slicewise along axis index {slice_axis_idx}")
+                        LOG.info(
+                            f" - Dilating slicewise along axis index {slice_axis_idx}"
+                        )
                     except ValueError:
                         axcodes = nib.orientations.aff2axcodes(seg_img.affine)
                         dirs = slice_axcodes.get(slice_axis, None)
                         if dirs:
-                            slice_axis_idx = axcodes.index(dirs[0]) if dirs[0] in axcodes else axcodes.index(dirs[1])
+                            slice_axis_idx = (
+                                axcodes.index(dirs[0])
+                                if dirs[0] in axcodes
+                                else axcodes.index(dirs[1])
+                            )
                         else:
                             self.bad_data(f"Unknown slice axis code {slice_axis}")
-                        LOG.info(f" - Dilating slicewise along axis {slice_axis}, index {slice_axis_idx}")
+                        LOG.info(
+                            f" - Dilating slicewise along axis {slice_axis}, index {slice_axis_idx}"
+                        )
 
                     dilated_data = np.zeros_like(seg_img.data)
                     for slice_idx in range(seg_img.data.shape[slice_axis_idx]):
                         slices = [slice(None)] * 3
                         slices[slice_axis_idx] = slice_idx
-                        dilated_data[tuple(slices)] = scipy.ndimage.binary_dilation(seg_img.data[tuple(slices)], iterations=dil_voxels)
+                        dilated_data[tuple(slices)] = scipy.ndimage.binary_dilation(
+                            seg_img.data[tuple(slices)], iterations=dil_voxels
+                        )
                 else:
-                    dilated_data = scipy.ndimage.binary_dilation(seg_img.data, iterations=dil_voxels)
+                    dilated_data = scipy.ndimage.binary_dilation(
+                        seg_img.data, iterations=dil_voxels
+                    )
                 seg_img.save_derived(dilated_data, self.outfile(seg_img.fname))
 
 
@@ -413,14 +535,18 @@ class KidneyCystClean(Module):
 
         if t2w_mask is not None:
             LOG.info(f" - Cleaning {cyst_seg.fname} using T2w mask {t2w_mask.fname}")
-            t2w_mask_res_nii = self.resample(t2w_mask, cyst_seg, is_roi=True, allow_rotated=True)
+            t2w_mask_res_nii = self.resample(
+                t2w_mask, cyst_seg, is_roi=True, allow_rotated=True
+            )
             t2w_mask_res = (t2w_mask_res_nii.get_fdata() > 0).astype(np.int8)
             cyst_seg.save_derived(t2w_mask_res, self.outfile("t2w_mask_res.nii.gz"))
             combined_mask = (t2w_mask_res + cyst_seg.data > 0).astype(np.int8)
             cyst_seg.save_derived(combined_mask, self.outfile("combined_mask.nii.gz"))
             blobs = self.blobs_by_size(combined_mask)
             if len(blobs) < 2:
-                LOG.warn(f"Only {len(blobs)} blobs found - expected 2 (one for each kidney)")
+                LOG.warn(
+                    f"Only {len(blobs)} blobs found - expected 2 (one for each kidney)"
+                )
             else:
                 kidney_blobs = blobs[:2]
             kidney_blobs = (sum(kidney_blobs) > 0).astype(np.int8)
@@ -428,7 +554,9 @@ class KidneyCystClean(Module):
             cleaned_data = kidney_blobs
             cleaned_data[t2w_mask_res > 0] = 0
         else:
-            LOG.warn("No T2w kidney segmentation found - will not clean kidney cyst segmentation")
+            LOG.warn(
+                "No T2w kidney segmentation found - will not clean kidney cyst segmentation"
+            )
             cleaned_data = cyst_seg.data
 
         cyst_seg.save_derived(cleaned_data, self.outfile("kidney_cyst_mask.nii.gz"))
@@ -436,6 +564,8 @@ class KidneyCystClean(Module):
 
         t2w_map = self.single_inimg(self._t2w_map_dir, t2w_map_glob, src=t2w_src)
         if t2w_map is not None:
-            self.lightbox(t2w_map, cleaned_mask, name="kidney_cyst_t2w_lightbox", tight=True) 
+            self.lightbox(
+                t2w_map, cleaned_mask, name="kidney_cyst_t2w_lightbox", tight=True
+            )
         else:
             LOG.warn("No T2w map found - will not create lightbox image")

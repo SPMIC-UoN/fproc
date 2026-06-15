@@ -1,6 +1,7 @@
 """
 FPROC: Modules for generating parameter maps from raw data
 """
+
 import logging
 import os
 import glob
@@ -13,6 +14,7 @@ from fproc.module import Module
 from fsort.image_file import ImageFile
 
 LOG = logging.getLogger(__name__)
+
 
 class B0(Module):
     def __init__(self):
@@ -33,13 +35,23 @@ class B0(Module):
 
             for real, imag in zip(realmaps, imagmaps):
                 if real.echotime != imag.echotime:
-                    self.bad_data(f"Real and imaginary maps {real.fname}, {imag.fname} do not have the same echo time: {real.echotime} vs {imag.echotime}")
-                LOG.info(f" - Calculating phase from real/imag: {real.fname}, {imag.fname}, TE: {real.echotime}")
+                    self.bad_data(
+                        f"Real and imaginary maps {real.fname}, {imag.fname} do not have the same echo time: {real.echotime} vs {imag.echotime}"
+                    )
+                LOG.info(
+                    f" - Calculating phase from real/imag: {real.fname}, {imag.fname}, TE: {real.echotime}"
+                )
                 data_phase = -np.arctan2(imag.data, real.data)
                 phasedata.append(data_phase)
-                real.save_derived(real.data, self.outfile(real.fname.replace("_real", "_realcopy")))
-                real.save_derived(imag.data, self.outfile(real.fname.replace("_real", "_imagcopy")))
-                real.save_derived(data_phase, self.outfile(real.fname.replace("_real", "_phase")))
+                real.save_derived(
+                    real.data, self.outfile(real.fname.replace("_real", "_realcopy"))
+                )
+                real.save_derived(
+                    imag.data, self.outfile(real.fname.replace("_real", "_imagcopy"))
+                )
+                real.save_derived(
+                    data_phase, self.outfile(real.fname.replace("_real", "_phase"))
+                )
                 tes.append(real.echotime * 1000)
                 srcfile = real
         else:
@@ -56,13 +68,16 @@ class B0(Module):
 
         stacked_data = np.stack(phasedata, axis=-1)
         from ukat.mapping.b0 import B0
+
         mapper = B0(stacked_data, tes, affine=srcfile.affine)
 
         # Save output maps to Nifti
         srcfile.save_derived(mapper.b0_map, self.outfile("b0.nii.gz"))
         srcfile.save_derived(mapper.phase0, self.outfile("b0phase0.nii.gz"))
         srcfile.save_derived(mapper.phase1, self.outfile("b0phase1.nii.gz"))
-        srcfile.save_derived(mapper.phase_difference, self.outfile("b0phasediff.nii.gz"))
+        srcfile.save_derived(
+            mapper.phase_difference, self.outfile("b0phasediff.nii.gz")
+        )
 
 
 class MTR(Module):
@@ -85,6 +100,7 @@ class MTR(Module):
             srcfile = onoffdata
 
         from ukat.mapping.mtr import MTR
+
         mapper = MTR(off_on_data, affine=srcfile.affine)
         srcfile.save_derived(mapper.mtr_map, self.outfile("mtr.nii.gz"))
 
@@ -114,7 +130,7 @@ class T2star(Module):
         LOG.info(f" - TEs: {tes}")
         last_echo = echos[-1]
         affine = last_echo.affine
-        last_echo.save_derived(last_echo.data, self.outfile("last_echo.nii.gz"))  
+        last_echo.save_derived(last_echo.data, self.outfile("last_echo.nii.gz"))
 
         voxel_sizes = last_echo.nii.header.get_zooms()
         resample_voxel_size = self.pipeline.options.t2star_resample
@@ -122,8 +138,12 @@ class T2star(Module):
             voxel_sizes = [round(v, 1) for v in voxel_sizes][:2]
             std_sizes = [round(resample_voxel_size, 1) for v in voxel_sizes][:2]
             if not np.allclose(voxel_sizes, std_sizes):
-                LOG.info(f" - T2* data has resolution: {voxel_sizes} - resampling to {std_sizes}")
-                zoom_factors = [voxel_sizes[d] / std_sizes[d] for d in range(2)] + [1.0] * (last_echo.ndim - 2)
+                LOG.info(
+                    f" - T2* data has resolution: {voxel_sizes} - resampling to {std_sizes}"
+                )
+                zoom_factors = [voxel_sizes[d] / std_sizes[d] for d in range(2)] + [
+                    1.0
+                ] * (last_echo.ndim - 2)
                 imgdata = [scipy.ndimage.zoom(d, zoom_factors) for d in imgdata]
                 # Need to scale affine by same amount so FOV is unchanged. Note that this means the corner
                 # voxels will have the same co-ordinates in original and rescaled data. The FOV depicted
@@ -137,22 +157,42 @@ class T2star(Module):
             methods = ["loglin", "2p_exp"]
         for method in methods:
             from ukat.mapping.t2star import T2Star
-            mapper = T2Star(np.stack(imgdata, axis=-1), tes, affine=affine, method=method, multithread=False)
-            last_echo.save_derived(mapper.t2star_map, self.outfile(f"t2star_{method}.nii.gz"))
-            last_echo.save_derived(self._fix_r2star_units(mapper.r2star_map()), self.outfile(f"r2star_{method}.nii.gz"))
+
+            mapper = T2Star(
+                np.stack(imgdata, axis=-1),
+                tes,
+                affine=affine,
+                method=method,
+                multithread=False,
+            )
+            last_echo.save_derived(
+                mapper.t2star_map, self.outfile(f"t2star_{method}.nii.gz")
+            )
+            last_echo.save_derived(
+                self._fix_r2star_units(mapper.r2star_map()),
+                self.outfile(f"r2star_{method}.nii.gz"),
+            )
             last_echo.save_derived(mapper.m0_map, self.outfile(f"m0_{method}.nii.gz"))
 
-    def _fix_r2star_units(self, r2star_data):    
+    def _fix_r2star_units(self, r2star_data):
         """
         Change R2* from ms^-1 to s^-1
-        
+
         FIXME do we need to check current range?
         """
-        return 1000.0*r2star_data
+        return 1000.0 * r2star_data
 
 
 class T2(Module):
-    def __init__(self, name="t2", t2_dir="t2", t2_glob="t2_e*.nii.gz", echos=10, max_echos=11, methods=["exp", "stim"]):
+    def __init__(
+        self,
+        name="t2",
+        t2_dir="t2",
+        t2_glob="t2_e*.nii.gz",
+        echos=10,
+        max_echos=11,
+        methods=["exp", "stim"],
+    ):
         Module.__init__(self, name)
         self._dir = t2_dir
         self._glob = t2_glob
@@ -168,35 +208,53 @@ class T2(Module):
             self.no_data("No T2 mapping data found")
         num_echos = len(echos)
         if num_echos < self._echos or num_echos > self._max_echos:
-            self.bad_data(f"Incorrect number of T2 echos found: {num_echos}, expected between {self._echos} and {self._max_echos}")
+            self.bad_data(
+                f"Incorrect number of T2 echos found: {num_echos}, expected between {self._echos} and {self._max_echos}"
+            )
         if len(echos) > self._echos:
-            LOG.warn(f"{num_echos} echos found - discarding last {num_echos - self._echos} echos")
-            echos = echos[:self._echos]
+            LOG.warn(
+                f"{num_echos} echos found - discarding last {num_echos - self._echos} echos"
+            )
+            echos = echos[: self._echos]
 
         first_echo = echos[0]
         data = np.stack([i.data for i in echos], axis=-1)
-        tes = np.array([i.echotime * 1000 for i in echos]) # In milliseconds
+        tes = np.array([i.echotime * 1000 for i in echos])  # In milliseconds
         for method in self._methods:
-            LOG.info(f" - Doing T2 mapping {method.upper()} fit on data shape {data.shape}, TES {tes}, vendor: {first_echo.vendor.lower()}")
+            LOG.info(
+                f" - Doing T2 mapping {method.upper()} fit on data shape {data.shape}, TES {tes}, vendor: {first_echo.vendor.lower()}"
+            )
             if method.lower() == "exp":
                 from ukat.mapping.t2 import T2
+
                 mapper = T2(data, tes, first_echo.affine)
             elif method.lower() == "stim":
                 from ukat.mapping.t2_stimfit import T2StimFit, StimFitModel
+
                 model = StimFitModel(ukrin_vendor=first_echo.vendor.lower())
                 mapper = T2StimFit(data, first_echo.affine, model)
             else:
                 raise ValueError(f"Unrecognized method: {method}")
 
             LOG.info(f" - DONE T2 mapping {method.upper()} fit - saving")
-            first_echo.save_derived(mapper.t2_map, self.outfile(f"t2_{method.lower()}.nii.gz"))
-            first_echo.save_derived(mapper.m0_map, self.outfile(f"m0_{method.lower()}.nii.gz"))
+            first_echo.save_derived(
+                mapper.t2_map, self.outfile(f"t2_{method.lower()}.nii.gz")
+            )
+            first_echo.save_derived(
+                mapper.m0_map, self.outfile(f"m0_{method.lower()}.nii.gz")
+            )
             if hasattr(mapper, "r2"):
-                first_echo.save_derived(mapper.r2, self.outfile(f"r2_{method.lower()}.nii.gz"))
+                first_echo.save_derived(
+                    mapper.r2, self.outfile(f"r2_{method.lower()}.nii.gz")
+                )
             if hasattr(mapper, "r2_map"):
-                first_echo.save_derived(mapper.r2_map, self.outfile(f"r2_{method.lower()}.nii.gz"))
+                first_echo.save_derived(
+                    mapper.r2_map, self.outfile(f"r2_{method.lower()}.nii.gz")
+                )
             if hasattr(mapper, "b1_map"):
-               first_echo.save_derived(mapper.b1_map, self.outfile(f"b1_{method.lower()}.nii.gz"))
+                first_echo.save_derived(
+                    mapper.b1_map, self.outfile(f"b1_{method.lower()}.nii.gz")
+                )
             LOG.info(f" - Saved data")
 
 
@@ -209,7 +267,9 @@ class T2Stim(Module):
         if not imgs:
             self.no_data("No T2 mapping data found")
         elif len(imgs) not in (10, 11):
-            self.bad_data(f"Incorrect number of T2 echos found: {len(imgs)}, expected 10 or 11")
+            self.bad_data(
+                f"Incorrect number of T2 echos found: {len(imgs)}, expected 10 or 11"
+            )
 
         if len(imgs) == 11:
             LOG.warn("11 echos found - discarding last echo")
@@ -220,11 +280,14 @@ class T2Stim(Module):
 
         # Import is expensive so delay until we need it
         from ukat.mapping.t2_stimfit import T2StimFit, StimFitModel
+
         first_echo = imgs[0]
         model = StimFitModel(ukrin_vendor=first_echo.vendor.lower())
-        #tes = np.array([i.echotime for i in imgs])
+        # tes = np.array([i.echotime for i in imgs])
         data = np.stack([i.data for i in imgs], axis=-1)
-        LOG.info(f" - Doing T2 mapping STIM fit on data shape {data.shape}, vendor: {first_echo.vendor.lower()}")
+        LOG.info(
+            f" - Doing T2 mapping STIM fit on data shape {data.shape}, vendor: {first_echo.vendor.lower()}"
+        )
         mapper = T2StimFit(data, first_echo.affine, model)
         LOG.info(f" - DONE T2 mapping STIM fit - saving")
         first_echo.save_derived(mapper.t2_map, self.outfile("t2_map.nii.gz"))
@@ -232,6 +295,7 @@ class T2Stim(Module):
         first_echo.save_derived(mapper.r2_map, self.outfile("r2_map.nii.gz"))
         first_echo.save_derived(mapper.b1_map, self.outfile("b1_map.nii.gz"))
         LOG.info(f" - Saved data")
+
 
 class T1Molli(Module):
     def __init__(self, name="t1_molli", **kwargs):
@@ -251,7 +315,9 @@ class T1Molli(Module):
             tis = None
         else:
             if tis_use_md:
-                LOG.info(" - Default set of TIs specified - but will use metadata if available")
+                LOG.info(
+                    " - Default set of TIs specified - but will use metadata if available"
+                )
             if any([ti for ti in tis if ti < 10]):
                 tis = [ti * 1000 for ti in tis]
                 LOG.warn(f"Looks like TIs were specified in seconds - converting to ms")
@@ -262,40 +328,75 @@ class T1Molli(Module):
         imgs = self.inimgs(molli_dir, molli_glob, src=molli_src)
         if imgs and self.kwargs.get("use_raw_data", True):
             for img in imgs:
-                LOG.info(f" - Processing MOLLI data from {img.fname} using MDR={mdr}, MOLLI corrections={molli}, parameters={parameters}")
+                LOG.info(
+                    f" - Processing MOLLI data from {img.fname} using MDR={mdr}, MOLLI corrections={molli}, parameters={parameters}"
+                )
                 if tis_use_md or tis is None:
                     # Consider TIs to be equivalent if they are with 10ms of each other
-                    img_tis = np.array(np.unique([int(t/10) for t in img.inversiontimedelay if int(t) > 0])) * 10
+                    img_tis = (
+                        np.array(
+                            np.unique(
+                                [
+                                    int(t / 10)
+                                    for t in img.inversiontimedelay
+                                    if int(t) > 0
+                                ]
+                            )
+                        )
+                        * 10
+                    )
                     if len(img_tis) == 0 and tis is None:
-                        LOG.warn(" - No TIs found in metadata and no default provided - skipping this image")
+                        LOG.warn(
+                            " - No TIs found in metadata and no default provided - skipping this image"
+                        )
                         continue
                     elif len(img_tis) == 0:
                         LOG.warn(" - No TIs found in metadata - using default provided")
                         img_tis = tis
                     else:
-                        LOG.info(f" - Found {len(img_tis)} TIs (ms): {img_tis} in metadata")
+                        LOG.info(
+                            f" - Found {len(img_tis)} TIs (ms): {img_tis} in metadata"
+                        )
                 else:
                     img_tis = tis
 
                 if img.nvols < len(img_tis):
-                    LOG.warn(f"Not enough volumes in raw MOLLI data for provided TIs ({img.nvols} vs {len(img_tis)}) - ignoring")
+                    LOG.warn(
+                        f"Not enough volumes in raw MOLLI data for provided TIs ({img.nvols} vs {len(img_tis)}) - ignoring"
+                    )
                     continue
                 elif img.nvols != len(img_tis):
-                    LOG.warn(f"{img.nvols} volumes in raw MOLLI data, only using first {len(img_tis)} volumes")
+                    LOG.warn(
+                        f"{img.nvols} volumes in raw MOLLI data, only using first {len(img_tis)} volumes"
+                    )
                 from ukat.mapping.t1 import T1
-                mapper = T1(img.data[..., :len(img_tis)], np.array(img_tis), img.affine, parameters=parameters, tss=tss, molli=molli, mdr=mdr)
+
+                mapper = T1(
+                    img.data[..., : len(img_tis)],
+                    np.array(img_tis),
+                    img.affine,
+                    parameters=parameters,
+                    tss=tss,
+                    molli=molli,
+                    mdr=mdr,
+                )
                 try:
                     mapper.to_nifti(self.outdir, base_file_name=img.fname_noext)
                     if mdr:
                         # Save out registered data
                         reg_data = mapper.pixel_array
-                        img.save_derived(reg_data, self.outfile(img.fname.replace(".nii.gz", "_reg.nii.gz")))
+                        img.save_derived(
+                            reg_data,
+                            self.outfile(img.fname.replace(".nii.gz", "_reg.nii.gz")),
+                        )
 
                     t1_map_data = np.copy(mapper.t1_map)
                     r2_thresh = self.kwargs.get("r2_thresh", 0.0)
                     if r2_thresh > 0:
                         LOG.info(f" - Applying R2 threshold of {r2_thresh} to T1 map")
-                        r2_map = self.single_inimg(self.name, img.fname_noext + "_r2.nii.gz", src=self.OUTPUT)
+                        r2_map = self.single_inimg(
+                            self.name, img.fname_noext + "_r2.nii.gz", src=self.OUTPUT
+                        )
                         t1_map_data[np.abs(r2_map.data) < r2_thresh] = 0
 
                     t1_thresh = self.kwargs.get("t1_thresh", None)
@@ -312,16 +413,19 @@ class T1Molli(Module):
                             t1_map_data[t1_map_data > t1_max] = t1_max
                             t1_map_data[t1_map_data < t1_min] = t1_min
                         else:
-                            raise ValueError(f"Unrecognized threshold mode: {thresh_mode}")
+                            raise ValueError(
+                                f"Unrecognized threshold mode: {thresh_mode}"
+                            )
                     fname = img.fname.replace(".nii.gz", "_t1_map.nii.gz")
                     img.save_derived(t1_map_data, self.outfile(fname))
                     LOG.info(f" - Final T1 map saved to {fname}")
                 except Exception as e:
                     LOG.warn(f" - Error saving MOLLI T1 map for {img.fname}: {e}")
 
-
         elif self.kwargs.get("use_scanner_maps", True):
-            LOG.info(f" - No raw MOLLI data found in {molli_dir}/{molli_glob} - looking for scanner T1 map/confidence images")
+            LOG.info(
+                f" - No raw MOLLI data found in {molli_dir}/{molli_glob} - looking for scanner T1 map/confidence images"
+            )
             map_glob = self.kwargs.get("map_glob", "t1_map*.nii.gz")
             conf_glob = self.kwargs.get("conf_glob", "t1_conf*.nii.gz")
             if self.inimgs(molli_dir, map_glob):
@@ -329,7 +433,9 @@ class T1Molli(Module):
                 self.copyinput(molli_dir, map_glob)
                 self.copyinput(molli_dir, conf_glob)
             else:
-                self.no_data(f"No raw MOLLI found and no scanner computer T1 maps in {molli_dir}/{map_glob}")
+                self.no_data(
+                    f"No raw MOLLI found and no scanner computer T1 maps in {molli_dir}/{map_glob}"
+                )
         else:
             self.no_data(f"No raw MOLLI data found in {molli_dir}/{molli_glob}")
 
@@ -369,7 +475,9 @@ class T1SE(Module):
         if not mag_only:
             ph_imgs = self.inimgs(se_dir, se_ph_glob, src=se_src)
             if len(mag_imgs) != len(ph_imgs):
-                self.bad_data(f"Different number of magnitude and phase images: {len(mag_imgs)} vs {len(ph_imgs)}")
+                self.bad_data(
+                    f"Different number of magnitude and phase images: {len(mag_imgs)} vs {len(ph_imgs)}"
+                )
         else:
             ph_imgs = [None] * len(mag_imgs)
 
@@ -389,20 +497,29 @@ class T1SE(Module):
                 img_tis = tis
 
             if mag.nvols < len(img_tis):
-                LOG.warn(f"Not enough volumes in magnitude data for provided TIs ({mag.nvols} vs {len(img_tis)}) - ignoring")
+                LOG.warn(
+                    f"Not enough volumes in magnitude data for provided TIs ({mag.nvols} vs {len(img_tis)}) - ignoring"
+                )
                 continue
             elif mag.nvols != len(img_tis):
-                LOG.warn(f"{mag.nvols} volumes in magnitude data, only using first {len(img_tis)} volumes")
+                LOG.warn(
+                    f"{mag.nvols} volumes in magnitude data, only using first {len(img_tis)} volumes"
+                )
 
             from ukat.mapping.t1 import T1, magnitude_correct
             from ukat.utils.tools import convert_to_pi_range
+
             if ph is not None:
                 LOG.info(f" - Found phase data {ph.fname} - correcting magnitude data")
                 if ph.nvols < len(img_tis):
-                    LOG.warn(f"Not enough volumes in phase data for provided TIs ({ph.nvols} vs {len(img_tis)}) - ignoring")
+                    LOG.warn(
+                        f"Not enough volumes in phase data for provided TIs ({ph.nvols} vs {len(img_tis)}) - ignoring"
+                    )
                     continue
                 elif ph.nvols != len(img_tis):
-                    LOG.warn(f"{ph.nvols} volumes in phase data, only using first {len(img_tis)} volumes")
+                    LOG.warn(
+                        f"{ph.nvols} volumes in phase data, only using first {len(img_tis)} volumes"
+                    )
 
                 phase_data = convert_to_pi_range(ph.data)
                 complex_data = mag.data * (np.cos(phase_data) + 1j * np.sin(phase_data))
@@ -411,26 +528,42 @@ class T1SE(Module):
                 magnitude_corrected = mag.data
 
             acq_order = "centric" if mag.manufacturer.lower() == "siemens" else "ascend"
-            LOG.info(f" - Using acquisition order: {acq_order} for vendor {mag.manufacturer}")
-            mapper = T1(magnitude_corrected[..., :len(img_tis)], np.array(img_tis), mag.affine, tss=tss, mag_corr=not mag_only, parameters=parameters, mdr=mdr, acq_order=acq_order)
+            LOG.info(
+                f" - Using acquisition order: {acq_order} for vendor {mag.manufacturer}"
+            )
+            mapper = T1(
+                magnitude_corrected[..., : len(img_tis)],
+                np.array(img_tis),
+                mag.affine,
+                tss=tss,
+                mag_corr=not mag_only,
+                parameters=parameters,
+                mdr=mdr,
+                acq_order=acq_order,
+            )
             try:
-                mapper.to_nifti(self.outdir, base_file_name=mag.fname_noext.replace("_mag", ""))
+                mapper.to_nifti(
+                    self.outdir, base_file_name=mag.fname_noext.replace("_mag", "")
+                )
                 if mdr:
                     # Save out registered data
-                    mag.save_derived(mapper.pixel_array, self.outfile(mag.fname.replace(".nii.gz", "_reg.nii.gz")))
+                    mag.save_derived(
+                        mapper.pixel_array,
+                        self.outfile(mag.fname.replace(".nii.gz", "_reg.nii.gz")),
+                    )
             except Exception as e:
                 LOG.warn(f" - Error saving SE T1 map for {mag.fname}: {e}")
 
-            #r2_thresh = self.kwargs.get("r2_thresh", 0.0)
-            #if r2_thresh > 0:
+            # r2_thresh = self.kwargs.get("r2_thresh", 0.0)
+            # if r2_thresh > 0:
             #    LOG.info(f" - Applying R2 threshold of {r2_thresh} to T1 map")
             #    r2_map = self.single_inimg(self.name, img.fname_noext + "_r2.nii.gz", src=self.OUTPUT)
             #    t1_map_thresh = np.copy(mapper.t1_map)
             #    t1_map_thresh[np.abs(r2_map.data) < r2_thresh] = 0
             #    img.save_derived(t1_map_thresh, self.outfile(img.fname.replace(".nii.gz", "_r2_thresh.nii.gz")))
 
-            #t1_thresh = self.kwargs.get("t1_thresh", None)
-            #if t1_thresh is not None:
+            # t1_thresh = self.kwargs.get("t1_thresh", None)
+            # if t1_thresh is not None:
             #    LOG.info(f" - Applying T1 max threshold of {t1_thresh} to T1 map")
             #    t1_map_thresh = np.copy(mapper.t1_map)
             #    t1_map_thresh[t1_map_thresh > t1_thresh] = 0
@@ -443,12 +576,16 @@ class DixonClassify(Module):
         Module.__init__(self, name, deps=[self._dixon_src], **kwargs)
 
     def process(self):
-        model_fpath = self.kwargs.get("model", "/spmstore/project/RenalMRI/dixon_classifier/dixon_classifier_20250702.h5")
+        model_fpath = self.kwargs.get(
+            "model",
+            "/spmstore/project/RenalMRI/dixon_classifier/dixon_classifier_20250702.h5",
+        )
         fixes_fpath = self.kwargs.get("fixes", None)
         LOG.info(f" - Using Dixon classifier model: {model_fpath}")
         if fixes_fpath:
             LOG.info(f" - Applying fixes from: {fixes_fpath}")
         from dixon_classify import DixonClassifier
+
         classifier = DixonClassifier()
         classifier.load(model_fpath)
 
@@ -460,19 +597,27 @@ class DixonClassify(Module):
         if fixes_fpath:
             fixes = csv.DictReader(open(fixes_fpath))
             for fix in fixes:
-                if fix["subjid"] == self.pipeline.options.subjid and fix["module"] == self.name:
+                if (
+                    fix["subjid"] == self.pipeline.options.subjid
+                    and fix["module"] == self.name
+                ):
                     fix_src = os.path.join(input_dir, fix["fname"])
                     fix_dest = fix["dest"]
                     fix_vol = int(fix.get("vol", 0))
-                    LOG.info(f" - Using {fix['fname']}, volume {fix_vol} for  {fix_dest}")
+                    LOG.info(
+                        f" - Using {fix['fname']}, volume {fix_vol} for  {fix_dest}"
+                    )
                     fix_img = ImageFile(fix_src, warn_json=False)
                     fix_data = fix_img.data
                     if fix_data.ndim == 4:
                         fix_data = fix_data[..., fix_vol]
                     elif fix_data.ndim == 3 and fix_vol > 0:
-                        LOG.warn(f" - Fix image {fix['fname']} is 3D but fix specifies volume {fix_vol} - ignoring volume and using 3D data")   
+                        LOG.warn(
+                            f" - Fix image {fix['fname']} is 3D but fix specifies volume {fix_vol} - ignoring volume and using 3D data"
+                        )
 
                     fix_img.save_derived(fix_data, self.outfile(fix_dest + ".nii.gz"))
+
 
 class FatFractionDixon(Module):
     def __init__(self, name="fat_fraction", **kwargs):
@@ -498,12 +643,21 @@ class FatFractionDixon(Module):
                 ff_data = ff_data * 100
             elif ff_max > 200:
                 if ff_scanner.philipsscaleslope is not None:
-                    LOG.info(f" - Found Philips enhanced scale slope - scaling Fat fraction by {ff_scanner.philipsscaleslope}")
+                    LOG.info(
+                        f" - Found Philips enhanced scale slope - scaling Fat fraction by {ff_scanner.philipsscaleslope}"
+                    )
                     ff_data = ff_data * ff_scanner.philipsscaleslope
-                    if ff_max * ff_scanner.philipsscaleslope > 200 or ff_max * ff_scanner.philipsscaleslope < 2:
-                        LOG.warn(f"Scaled fat fraction still not in expected range: {ff_max * ff_scanner.philipsscaleslope}")
+                    if (
+                        ff_max * ff_scanner.philipsscaleslope > 200
+                        or ff_max * ff_scanner.philipsscaleslope < 2
+                    ):
+                        LOG.warn(
+                            f"Scaled fat fraction still not in expected range: {ff_max * ff_scanner.philipsscaleslope}"
+                        )
                 else:
-                    LOG.warn("Fat fraction not in expected range and no scale slope found - check statistics")
+                    LOG.warn(
+                        "Fat fraction not in expected range and no scale slope found - check statistics"
+                    )
             LOG.info(f" - Saving scanner fat fraction to {ff_name}_scanner.nii.gz")
             ff_scanner.save_derived(ff_data, self.outfile(f"{ff_name}_scanner.nii.gz"))
             ff_scanner.save_derived(ff_data, self.outfile(f"{ff_name}.nii.gz"))
@@ -511,7 +665,9 @@ class FatFractionDixon(Module):
             LOG.info(" - Scanner derived fat fraction map not found")
 
         if ff_calc is not None:
-            LOG.info(f" - Found precalculated fat fraction map {ff_calc.fname} - saving as {ff_name}_calc.nii.gz")
+            LOG.info(
+                f" - Found precalculated fat fraction map {ff_calc.fname} - saving as {ff_name}_calc.nii.gz"
+            )
             ff_calc.save(self.outfile(f"{ff_name}_calc.nii.gz"))
             if ff_scanner is None:
                 ff_calc.save(ff, self.outfile(f"{ff_name}.nii.gz"))
@@ -519,15 +675,22 @@ class FatFractionDixon(Module):
             water_data = self.resample(water, fat, allow_rotated=True).get_fdata()
             ff = np.zeros_like(fat.data, dtype=np.float32)
             valid = fat.data + water_data > 0
-            ff[valid] = fat.data.astype(np.float32)[valid] * 100 / (fat.data + water_data)[valid]
+            ff[valid] = (
+                fat.data.astype(np.float32)[valid]
+                * 100
+                / (fat.data + water_data)[valid]
+            )
             LOG.info(f" - Saving fat/water derived fat fraction map as {ff_name}_calc")
             fat.save_derived(ff, self.outfile(f"{ff_name}_calc.nii.gz"))
             if ff_scanner is None:
                 fat.save_derived(ff, self.outfile(f"{ff_name}.nii.gz"))
         else:
-            LOG.info(" - No fat/water images and no precalculated map - not calculating fat fraction")
+            LOG.info(
+                " - No fat/water images and no precalculated map - not calculating fat fraction"
+            )
             if ff_scanner is None:
                 LOG.warn("No fat fraction data found")
+
 
 class T2starDixon(Module):
     def __init__(self, name="t2star_dixon", **kwargs):
@@ -537,38 +700,56 @@ class T2starDixon(Module):
         dixon_dir = self.kwargs.get("dixon_dir", "dixon")
         t2star_name = self.kwargs.get("t2star_name", "t2star")
         imgs = self.copyinput(dixon_dir, f"{t2star_name}.nii.gz")
-        
+
         if imgs:
             LOG.info(" - Saving R2* map")
             r2star_data = 1000.0 / imgs[0].data
             r2star_data[np.isclose(imgs[0].data, 0)] = 0
-            imgs[0].save_derived(r2star_data, self.outfile(f"r2star_{t2star_name}.nii.gz"))
+            imgs[0].save_derived(
+                r2star_data, self.outfile(f"r2star_{t2star_name}.nii.gz")
+            )
 
             # 100 is a fill value - replace with something easier to exclude in stats
             LOG.info(" - Saving T2* map with excluded fill value")
             exclude_fill = np.copy(imgs[0].data)
             exclude_fill[np.isclose(exclude_fill, 100)] = -9999
-            imgs[0].save_derived(exclude_fill, self.outfile(f"{t2star_name}_exclude_fill.nii.gz"))
+            imgs[0].save_derived(
+                exclude_fill, self.outfile(f"{t2star_name}_exclude_fill.nii.gz")
+            )
             LOG.info(" - Saving R2* map with excluded fill value")
             r2star_data = 1000.0 / exclude_fill
             r2star_data[np.isclose(exclude_fill, 0)] = 0
-            imgs[0].save_derived(r2star_data, self.outfile(f"r2star_{t2star_name}_exclude_fill.nii.gz"))
+            imgs[0].save_derived(
+                r2star_data, self.outfile(f"r2star_{t2star_name}_exclude_fill.nii.gz")
+            )
+
 
 class DixonDerived(Module):
     """
     Derived Dixon maps
     """
+
     def __init__(self, name="dixon", **kwargs):
         Module.__init__(self, name, **kwargs)
 
     def process(self):
         dixon_dir = self.kwargs.get("dixon_dir", "../fsort/dixon")
-        globs = self.kwargs.get("globs", ["fat.nii.gz", "water.nii.gz", "fat_fraction.nii.gz", "t2star.nii.gz", "ip.nii.gz", "op.nii.gz"])
+        globs = self.kwargs.get(
+            "globs",
+            [
+                "fat.nii.gz",
+                "water.nii.gz",
+                "fat_fraction.nii.gz",
+                "t2star.nii.gz",
+                "ip.nii.gz",
+                "op.nii.gz",
+            ],
+        )
         for img_glob in globs:
             imgs = self.inimgs(dixon_dir, img_glob, src=self.OUTPUT)
             if not imgs:
                 LOG.info(f" - No Dixon data found in {dixon_dir}/{img_glob}")
-                continue            
+                continue
             for img in imgs:
                 LOG.info(f" - Saving Dixon data from {img.fname}")
                 img.save(self.outfile(img.fname))
@@ -581,7 +762,9 @@ class DixonDerived(Module):
             LOG.info(" - Saving T2* map with excluded fill value")
             exclude_fill = np.copy(img.data)
             exclude_fill[np.isclose(exclude_fill, 100)] = -9999
-            img.save_derived(exclude_fill, self.outfile(f"{t2star_name}_exclude_fill.nii.gz"))
+            img.save_derived(
+                exclude_fill, self.outfile(f"{t2star_name}_exclude_fill.nii.gz")
+            )
 
         # Scanner derived and calculated FF map
         ff_name = self.kwargs.get("ff_name", "fat_fraction")
@@ -597,12 +780,21 @@ class DixonDerived(Module):
                 ff_data = ff_data * 100
             elif ff_max > 200:
                 if ff_scanner.philipsscaleslope is not None:
-                    LOG.info(f" - Found Philips enhanced scale slope - scaling Fat fraction by {ff_scanner.philipsscaleslope}")
+                    LOG.info(
+                        f" - Found Philips enhanced scale slope - scaling Fat fraction by {ff_scanner.philipsscaleslope}"
+                    )
                     ff_data = ff_data * ff_scanner.philipsscaleslope
-                    if ff_max * ff_scanner.philipsscaleslope > 200 or ff_max * ff_scanner.philipsscaleslope < 2:
-                        LOG.warn(f"Scaled fat fraction still not in expected range: {ff_max * ff_scanner.philipsscaleslope}")
+                    if (
+                        ff_max * ff_scanner.philipsscaleslope > 200
+                        or ff_max * ff_scanner.philipsscaleslope < 2
+                    ):
+                        LOG.warn(
+                            f"Scaled fat fraction still not in expected range: {ff_max * ff_scanner.philipsscaleslope}"
+                        )
                 else:
-                    LOG.warn("Fat fraction not in expected range and no scale slope found - check statistics")
+                    LOG.warn(
+                        "Fat fraction not in expected range and no scale slope found - check statistics"
+                    )
             LOG.info(f" - Saving scanner fat fraction to {ff_name}_scanner.nii.gz")
             ff_scanner.save_derived(ff_data, self.outfile(f"{ff_name}_scanner.nii.gz"))
         else:
@@ -612,11 +804,17 @@ class DixonDerived(Module):
             water_data = self.resample(water, fat, allow_rotated=True).get_fdata()
             ff = np.zeros_like(fat.data, dtype=np.float32)
             valid = fat.data + water_data > 0
-            ff[valid] = fat.data.astype(np.float32)[valid] * 100 / (fat.data + water_data)[valid]
+            ff[valid] = (
+                fat.data.astype(np.float32)[valid]
+                * 100
+                / (fat.data + water_data)[valid]
+            )
             LOG.info(f" - Saving fat/water derived fat fraction map as {ff_name}_calc")
             fat.save_derived(ff, self.outfile(f"{ff_name}_calc.nii.gz"))
         else:
-            LOG.info(" - Could not find fat/water images - not calculating fat fraction")
+            LOG.info(
+                " - Could not find fat/water images - not calculating fat fraction"
+            )
             if ff_scanner is None:
                 LOG.warn("No fat fraction data found")
 
@@ -640,6 +838,7 @@ class DixonDerived(Module):
             op = np.abs(water.data - fat.data)
             fat.save_derived(op, self.outfile("op.nii.gz"))
 
+
 class B1(Module):
     def __init__(self, name="b1", **kwargs):
         Module.__init__(self, name, **kwargs)
@@ -653,15 +852,19 @@ class B1(Module):
             img.save(self.outfile(img.fname))
 
             import ukat
+
             b1scaled = ukat.utils.tools.rescale_b1_map(img.data)
             LOG.info(f" - Saving rescaled B1 map from {img.fname}")
-            img.save_derived(b1scaled, self.outfile(img.fname.replace(".nii", "_rescaled.nii")))
+            img.save_derived(
+                b1scaled, self.outfile(img.fname.replace(".nii", "_rescaled.nii"))
+            )
 
 
 class MapFix(Module):
     """
     Module that can replace automatic map with an external one
     """
+
     def __init__(self, map_dir, name=None, **kwargs):
         if name is None:
             name = map_dir + "_fix"
@@ -675,7 +878,9 @@ class MapFix(Module):
         if not fix_dir:
             LOG.warn(" - No fixed maps dir specified - will not try to fix maps")
         elif not os.path.exists(fix_dir):
-            LOG.warn(f" - Fixed maps dir {fix_dir} does not exist - will not try to fix maps")
+            LOG.warn(
+                f" - Fixed maps dir {fix_dir} does not exist - will not try to fix maps"
+            )
         else:
             LOG.info(f" - Looking for fixed maps in {fix_dir}")
             try_to_fix = True
@@ -690,12 +895,19 @@ class MapFix(Module):
                 fix_glob = fix_spec.get("glob", None)
                 ignore_missing = fix_spec.get("ignore_missing", False)
                 fname = fix_spec.get("fname", fname)
-            map_img = self.single_inimg(self._map_dir, map_glob, src=self.kwargs.get("map_src", self.OUTPUT), warn=False)
+            map_img = self.single_inimg(
+                self._map_dir,
+                map_glob,
+                src=self.kwargs.get("map_src", self.OUTPUT),
+                warn=False,
+            )
             if map_img is None and ignore_missing:
                 LOG.warn(f"No map found matching {self._map_dir}/{map_glob} - ignoring")
                 continue
             elif map_img is None:
-                LOG.info(f" - No original image matching {self._map_dir}/{map_glob} - will check for fix anyway")
+                LOG.info(
+                    f" - No original image matching {self._map_dir}/{map_glob} - will check for fix anyway"
+                )
             else:
                 LOG.info(f" - Checking for fixed version of {map_img.fname}")
                 if not fname:
@@ -703,13 +915,17 @@ class MapFix(Module):
 
             fixed_map = None
             if try_to_fix:
-                globexpr = os.path.join(fix_dir, fix_glob % self.pipeline.options.subjid)
+                globexpr = os.path.join(
+                    fix_dir, fix_glob % self.pipeline.options.subjid
+                )
                 fixed_maps = glob.glob(globexpr, recursive=True)
                 if not fixed_maps:
                     LOG.info(f" - No fixed maps found in {globexpr}")
                 else:
                     if len(fixed_maps) > 1:
-                        LOG.warn(f" - Multiple matching 'fixed' maps found: {fixed_maps} - using first")
+                        LOG.warn(
+                            f" - Multiple matching 'fixed' maps found: {fixed_maps} - using first"
+                        )
                     fixed_map = ImageFile(fixed_maps[0])
                     fixed_data = fixed_map.data
                     if not fname:
@@ -725,6 +941,7 @@ class MapFix(Module):
             elif fixed_map is None:
                 LOG.warn(f" - No fixed map found - will not save")
 
+
 class AdditionalMap(Module):
     def __init__(self, name, **kwargs):
         Module.__init__(self, name, **kwargs)
@@ -733,7 +950,9 @@ class AdditionalMap(Module):
         srcdir_option = self.kwargs.get("srcdir_option", self.name + "_dir")
         srcdir = getattr(self.pipeline.options, srcdir_option, None)
         if srcdir is None:
-            LOG.info(" - No source directory specified - not checking for additional maps")
+            LOG.info(
+                " - No source directory specified - not checking for additional maps"
+            )
             return
 
         maps = self.kwargs.get("maps", {})
@@ -744,6 +963,7 @@ class AdditionalMap(Module):
             if img is not None:
                 LOG.info(f" - Saving additional map from {img.fpath} to {fname}")
                 img.save(self.outfile(fname))
+
 
 class DwiMoco(Module):
     def __init__(self, name="dwi_moco", **kwargs):
@@ -768,19 +988,27 @@ class DwiMoco(Module):
         # Motion correct all bvals
         LOG.info(f" - Processing DWI data from {dwi.fname}")
         from ukat.mapping.diffusion import ADC
+
         if dwi.nvols != dwi.bval.shape[0]:
-            LOG.warn(f" - Number of volumes ({dwi.nvols}) does not match number of bvals ({dwi.bval.shape[0]}) - truncating to match")
-        bval = dwi.bval[:dwi.nvols]
+            LOG.warn(
+                f" - Number of volumes ({dwi.nvols}) does not match number of bvals ({dwi.bval.shape[0]}) - truncating to match"
+            )
+        bval = dwi.bval[: dwi.nvols]
         dwi_data = np.copy(dwi.data)
         dwi_data[~np.isfinite(dwi_data)] = 0
         adc_moco_mapper = ADC(dwi_data, dwi.affine, bval, ukrin_b=False, moco=True)
         moco_data = adc_moco_mapper.pixel_array_mean
         dwi.save_derived(moco_data, self.outfile("dwi_moco.nii.gz"), copy_bdata=False)
         bval_moco = np.unique(dwi.bval)
-        np.savetxt(self.outfile('dwi_moco.bval'), np.expand_dims(bval_moco, 1).T, fmt='%.0f')
+        np.savetxt(
+            self.outfile("dwi_moco.bval"), np.expand_dims(bval_moco, 1).T, fmt="%.0f"
+        )
 
         moco_bvals = adc_moco_mapper.u_bvals
-        np.savetxt(self.outfile('dwi_moco.bval'), np.expand_dims(moco_bvals, 1).T, fmt='%.0f')
+        np.savetxt(
+            self.outfile("dwi_moco.bval"), np.expand_dims(moco_bvals, 1).T, fmt="%.0f"
+        )
+
 
 class DwiAdc(Module):
     def __init__(self, name="dwi_adc", **kwargs):
@@ -797,7 +1025,10 @@ class DwiAdc(Module):
         # Fit ADC using a limited number of bvals
         LOG.info(f" - Processing DWI data from {dwi.fname} (bvals: {dwi.bval})")
         from ukat.mapping.diffusion import ADC
-        adc_mapper = ADC(dwi.data, dwi.affine, np.unique(dwi.bval), ukrin_b=True, moco=False)
+
+        adc_mapper = ADC(
+            dwi.data, dwi.affine, np.unique(dwi.bval), ukrin_b=True, moco=False
+        )
         adc_mapper.to_nifti(self.outdir, base_file_name=dwi.fname_noext)
 
 
@@ -814,19 +1045,24 @@ class AslMoco(Module):
             self.no_data(f"No ASL data found matching {asl_dir}/{asl_glob}")
 
         from ukat.mapping.perfusion import Perfusion
+
         for img in asl_imgs:
             LOG.info(f" - Processing ASL data from {img.fname}")
             perf_mapper = Perfusion(img.data, img.affine, moco=True)
             perf_mapper.to_nifti(self.outdir, base_file_name=img.fname_noext)
             moco_data = perf_mapper.pixel_array
-            img.save_derived(moco_data, self.outfile(f'{img.fname_noext}_moco.nii.gz'))
+            img.save_derived(moco_data, self.outfile(f"{img.fname_noext}_moco.nii.gz"))
 
             # Do our own label-control subtraction assuming block of controls followed by block of labels
             if moco_data.ndim != 4 or moco_data.shape[-1] % 2 != 0:
-                LOG.warn(f" - ASL data not in label/control format - skipping label-control subtraction")
+                LOG.warn(
+                    f" - ASL data not in label/control format - skipping label-control subtraction"
+                )
                 continue
             else:
                 n = moco_data.shape[-1] // 2
                 c, l = moco_data[..., n:], moco_data[..., :n]
                 perf_data = c - l
-                img.save_derived(perf_data, self.outfile(f'{img.fname_noext}_pwi.nii.gz'))
+                img.save_derived(
+                    perf_data, self.outfile(f"{img.fname_noext}_pwi.nii.gz")
+                )

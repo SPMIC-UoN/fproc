@@ -1,6 +1,7 @@
 """
 FPROC: Script to 'flatten' image output of preprocessing scripts as this can be a more convenient format for review
 """
+
 import glob
 import logging
 import os
@@ -11,6 +12,7 @@ from ._version import __version__
 from .options import FlattenArgumentParser
 
 LOG = logging.getLogger(__name__)
+
 
 def main():
     arg_parser = FlattenArgumentParser()
@@ -24,14 +26,25 @@ def main():
 
     if options.subjids:
         with open(options.subjids) as f:
-            subjids = [l.strip() for l in f.readlines() if os.path.isdir(os.path.join(options.input, l.strip()))]
+            subjids = [
+                l.strip()
+                for l in f.readlines()
+                if os.path.isdir(os.path.join(options.input, l.strip()))
+            ]
     else:
-        subjids = sorted([d for d in os.listdir(options.input) if os.path.isdir(os.path.join(options.input, d))])
+        subjids = sorted(
+            [
+                d
+                for d in os.listdir(options.input)
+                if os.path.isdir(os.path.join(options.input, d))
+            ]
+        )
 
     for subjid in subjids:
         LOG.info(f" - Subject ID: {subjid}")
         subjdir = os.path.join(options.input, subjid)
         flatten_subject(subjid, subjdir, options.path, options.output, options.matcher)
+
 
 def flatten_pngs(subjid, subjdir, outdir, matcher):
     for root, _dirs, files in os.walk(subjdir):
@@ -39,6 +52,7 @@ def flatten_pngs(subjid, subjdir, outdir, matcher):
             if fname.endswith(".png") and (not matcher or matcher in fname):
                 outname = os.path.join(outdir, f"{subjid}_{fname}")
                 shutil.copyfile(os.path.join(root, fname), outname)
+
 
 def flatten_subject(subjid, subjdir, path, outdir, matcher):
     if not os.path.isdir(subjdir):

@@ -612,18 +612,22 @@ class MuscleMap(Module):
                     "mm_segment",
                     "-i",
                     self.outfile("input.nii.gz"),
-                    "-c", "auto",
+                    "-c",
+                    "auto",
                 ],
                 logfile=self.outfile("muscle_map.log"),
             )
         finally:
             os.chdir(cwd)
 
+
 class LegDixonUsingTotalsegFemur(Module):
     def __init__(self, name="seg_leg_dixon", **kwargs):
         self._dixon_dir = kwargs.get("dixon_dir", "dixon")
         self._totalseg_dir = kwargs.get("totalseg_dir", "totalseg")
-        Module.__init__(self, name, deps=[self._dixon_dir, self._totalseg_dir], **kwargs)
+        Module.__init__(
+            self, name, deps=[self._dixon_dir, self._totalseg_dir], **kwargs
+        )
 
     def process(self):
         fat_glob = self.kwargs.get("fat_glob", "fat.nii.gz")
@@ -639,7 +643,9 @@ class LegDixonUsingTotalsegFemur(Module):
         femur_r_glob = self.kwargs.get("femur_r_glob", "femur_right.nii.gz")
         femur_r = self.single_inimg(self._totalseg_dir, femur_r_glob, src=self.OUTPUT)
         if femur_l is None or femur_r is None:
-            LOG.warning(f"Could not find femur seg in {self._totalseg_dir} - continuing without femur mask")
+            LOG.warning(
+                f"Could not find femur seg in {self._totalseg_dir} - continuing without femur mask"
+            )
             femur_options = []
         else:
             femur_l = femur_l.reorient2std()
@@ -652,13 +658,28 @@ class LegDixonUsingTotalsegFemur(Module):
             femur_r = femur_r.reorient2std()
             femur_r_data = self.blobs_by_size(femur_r.data)[0]
             femur_slices = np.where(np.any(femur_r_data > 0, axis=(0, 1)))[0]
-            femur_bottom = min(femur_slices[0], femur_bottom)  # Take lowest of the two femurs as bottom
-            femur_top = max(femur_slices[-1], femur_top)  # Take highest of the two femurs as top
+            femur_bottom = min(
+                femur_slices[0], femur_bottom
+            )  # Take lowest of the two femurs as bottom
+            femur_top = max(
+                femur_slices[-1], femur_top
+            )  # Take highest of the two femurs as top
             LOG.info(f"Right femur from {femur_bottom} to {femur_top}")
             LOG.info(str([s for s in femur_slices]))
-            calf_top = femur_bottom + int(0.1 * (femur_top - femur_bottom))  # Add 10% of femur length to top of femur
-            femur_options = ["--thigh-start", str(femur_bottom), "--thigh-end", str(femur_top), "--calf-end", str(calf_top)]
-            LOG.info(f" - calf from 0 to {calf_top}, thigh from {femur_bottom} to {femur_top}")
+            calf_top = femur_bottom + int(
+                0.1 * (femur_top - femur_bottom)
+            )  # Add 10% of femur length to top of femur
+            femur_options = [
+                "--thigh-start",
+                str(femur_bottom),
+                "--thigh-end",
+                str(femur_top),
+                "--calf-end",
+                str(calf_top),
+            ]
+            LOG.info(
+                f" - calf from 0 to {calf_top}, thigh from {femur_bottom} to {femur_top}"
+            )
 
         fat_reorient_nii = nib.as_closest_canonical(fat.nii).as_reoriented(
             np.array([[0, 1], [1, 1], [2, 1]])
@@ -675,10 +696,14 @@ class LegDixonUsingTotalsegFemur(Module):
         retval = self.runcmd(
             [
                 "leg_dixon_seg",
-                "--fat", fat.fpath,
-                "--water", water.fpath,
-                "--output", outfile,
-            ] + femur_options,
+                "--fat",
+                fat.fpath,
+                "--water",
+                water.fpath,
+                "--output",
+                outfile,
+            ]
+            + femur_options,
             logfile=self.outfile("seg.log"),
             raise_on_error=True,
         )
@@ -709,13 +734,17 @@ class LegDixonUsingTotalsegFemur(Module):
             for name, region_idxs in regions.items():
                 mask = np.zeros_like(seg.data, dtype=np.int8)
                 for idx in region_idxs:
-                    seg_data = (seg.data == idx)
+                    seg_data = seg.data == idx
                     if self.kwargs.get("largest_blob_only", False):
                         seg_data_orig = seg_data
                         seg_data = self.blobs_by_size(seg_data)[0]
-                        LOG.info(f" - Keeping only largest blob: original {np.sum(seg_data_orig)} voxels, largest blob {np.sum(seg_data)} voxels")
+                        LOG.info(
+                            f" - Keeping only largest blob: original {np.sum(seg_data_orig)} voxels, largest blob {np.sum(seg_data)} voxels"
+                        )
                     mask[seg_data] = 1
-                if self.kwargs.get("dilate_muscle_masks", False) and "muscle" in name:  # Apply dilation only to muscle masks
+                if (
+                    self.kwargs.get("dilate_muscle_masks", False) and "muscle" in name
+                ):  # Apply dilation only to muscle masks
                     LOG.info(f"Applying dilation to {name}")
                     seg.save_derived(mask, self.outfile(f"{name}_nodil.nii.gz"))
                     mask = binary_dilation(mask)
@@ -723,7 +752,9 @@ class LegDixonUsingTotalsegFemur(Module):
                     # For the total (muscle + SAT) we want to dilate muscle only
                     if self.kwargs.get("dilate_muscle_masks", False):
                         seg.save_derived(mask, self.outfile(f"{name}_nodil.nii.gz"))
-                    muscle_dil = ImageFile(self.outfile("muscle_total.nii.gz"), warn_json=False)
+                    muscle_dil = ImageFile(
+                        self.outfile("muscle_total.nii.gz"), warn_json=False
+                    )
                     mask = mask | muscle_dil.data.astype(bool)
                 fname = self.outfile(f"{name}.nii.gz")
                 seg.save_derived(mask, fname)

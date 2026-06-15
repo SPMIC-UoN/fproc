@@ -12,6 +12,7 @@ __version__ = "0.0.1"
 
 NAME = "mongolia"
 
+
 class T1Data(Module):
     def __init__(self, name="t1_data", **kwargs):
         Module.__init__(self, name, **kwargs)
@@ -25,6 +26,7 @@ class T1Data(Module):
             img = ImageFile(img, warn_json=False)
             img.save(self.outfile(img.fname))
             LOG.info(f" - Found T1 image {img.fname}")
+
 
 MODULES = [
     T1Data(name="t1_data"),
@@ -43,6 +45,7 @@ MODULES = [
         img_glob="*postt1vibe*",
     ),
 ]
+
 
 def add_options(parser):
     parser.add_argument("--src-t1-dir", help="Dir containing NIFTI T1 maps")

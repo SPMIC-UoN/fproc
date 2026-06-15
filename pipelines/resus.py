@@ -17,12 +17,15 @@ from fproc.modules import segmentations, seg_postprocess, statistics, maps, regr
 
 LOG = logging.getLogger(__name__)
 
+
 class PancreasSegRestricted(Module):
     def __init__(self):
         Module.__init__(self, "seg_pancreas_ethrive_restricted")
 
     def process(self):
-        seg_orig = self.inimg("seg_pancreas_ethrive_fix_largestblob", "pancreas.nii.gz", is_depfile=True)
+        seg_orig = self.inimg(
+            "seg_pancreas_ethrive_fix_largestblob", "pancreas.nii.gz", is_depfile=True
+        )
         ff = self.inimg("fat_fraction", "fat_fraction_scanner.nii.gz", is_depfile=True)
         ff_resamp = self.resample(ff, seg_orig, is_roi=False).get_fdata().squeeze()
         ff_30 = ff_resamp < 30
@@ -35,6 +38,7 @@ class PancreasSegRestricted(Module):
         seg_orig.save_derived(ff_50, self.outfile("fat_fraction_lt_50.nii.gz"))
         seg_orig.save_derived(seg_30, self.outfile("seg_pancreas_ff_lt_30.nii.gz"))
         seg_orig.save_derived(seg_50, self.outfile("seg_pancreas_ff_lt_50.nii.gz"))
+
 
 class T1Molli(Module):
     def __init__(self):
@@ -51,6 +55,7 @@ class T1Molli(Module):
             conf = t1.data[..., 1]
             t1.save_derived(map, self.outfile("t1_map.nii.gz"))
             t1.save_derived(map, self.outfile("t1_conf.nii.gz"))
+
 
 class T1SE(Module):
     def __init__(self):
@@ -76,34 +81,43 @@ class KidneyRadiomics(statistics.Radiomics):
             self,
             name="kidney_radiomics",
             params={
-                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "minval" : 1000, "maxval" : 2500},
-                "t1_se" : {"dir" : "t1_se_mdr_step2_stitch", "fname" : "t1_map.nii.gz", "minval" : 1000, "maxval" : 2500},
+                "t1_molli": {
+                    "dir": "t1_molli",
+                    "fname": "t1_conf.nii.gz",
+                    "minval": 1000,
+                    "maxval": 2500,
+                },
+                "t1_se": {
+                    "dir": "t1_se_mdr_step2_stitch",
+                    "fname": "t1_map.nii.gz",
+                    "minval": 1000,
+                    "maxval": 2500,
+                },
             },
-            segs = {
-                "kidney_cortex_l" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*cortex_l*.nii.gz",
+            segs={
+                "kidney_cortex_l": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*cortex_l*.nii.gz",
                 },
-                "kidney_cortex_r" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*cortex_r*.nii.gz",
+                "kidney_cortex_r": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*cortex_r*.nii.gz",
                 },
-                "kidney_medulla_l" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*medulla_l*.nii.gz",
+                "kidney_medulla_l": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*medulla_l*.nii.gz",
                 },
-                "kidney_medulla_r" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*medulla_r*.nii.gz",
+                "kidney_medulla_r": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*medulla_r*.nii.gz",
                 },
             },
             features={
-                "firstorder" : ["90Percentile", "TotalEnergy"],
+                "firstorder": ["90Percentile", "TotalEnergy"],
             },
-            image_types=[
-                "Original"
-            ],
+            image_types=["Original"],
         )
+
 
 class LiverRadiomics(statistics.Radiomics):
     def __init__(self):
@@ -111,18 +125,26 @@ class LiverRadiomics(statistics.Radiomics):
             self,
             name="liver_radiomics",
             params={
-                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "minval" : 500, "maxval" : 1300},
-                "t1_se" : {"dir" : "t1_se_mdr_step2_stitch", "fname" : "t1_map.nii.gz", "minval" : 500, "maxval" : 1300},
+                "t1_molli": {
+                    "dir": "t1_molli",
+                    "fname": "t1_conf.nii.gz",
+                    "minval": 500,
+                    "maxval": 1300,
+                },
+                "t1_se": {
+                    "dir": "t1_se_mdr_step2_stitch",
+                    "fname": "t1_map.nii.gz",
+                    "minval": 500,
+                    "maxval": 1300,
+                },
             },
-            segs = {
-                "liver" : {"dir" : "seg_liver_dixon_fix", "fname" : "liver.nii.gz"},
+            segs={
+                "liver": {"dir": "seg_liver_dixon_fix", "fname": "liver.nii.gz"},
             },
             features={
-                "firstorder" : ["90Percentile", "TotalEnergy"],
+                "firstorder": ["90Percentile", "TotalEnergy"],
             },
-            image_types=[
-                "Original"
-            ],
+            image_types=["Original"],
         )
 
 
@@ -132,19 +154,28 @@ class SpleenRadiomics(statistics.Radiomics):
             self,
             name="spleen_radiomics",
             params={
-                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "minval" : 900, "maxval" : 1660},
-                "t1_se" : {"dir" : "t1_se_mdr_step2_stitch", "fname" : "t1_map.nii.gz", "minval" : 900, "maxval" : 1660},
+                "t1_molli": {
+                    "dir": "t1_molli",
+                    "fname": "t1_conf.nii.gz",
+                    "minval": 900,
+                    "maxval": 1660,
+                },
+                "t1_se": {
+                    "dir": "t1_se_mdr_step2_stitch",
+                    "fname": "t1_map.nii.gz",
+                    "minval": 900,
+                    "maxval": 1660,
+                },
             },
-            segs = {
-                "spleen" : {"dir" : "seg_spleen_dixon", "fname" : "spleen.nii.gz"},
+            segs={
+                "spleen": {"dir": "seg_spleen_dixon", "fname": "spleen.nii.gz"},
             },
             features={
-                "firstorder" : ["90Percentile", "TotalEnergy"],
+                "firstorder": ["90Percentile", "TotalEnergy"],
             },
-            image_types=[
-                "Original"
-            ],
+            image_types=["Original"],
         )
+
 
 class PancreasRadiomics(statistics.Radiomics):
     def __init__(self):
@@ -152,19 +183,28 @@ class PancreasRadiomics(statistics.Radiomics):
             self,
             name="pancreas_radiomics",
             params={
-                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "minval" : 400, "maxval" : 1300},
-                "t1_se" : {"dir" : "t1_se_mdr_step2_stitch", "fname" : "t1_map.nii.gz", "minval" : 400, "maxval" : 1300},
+                "t1_molli": {
+                    "dir": "t1_molli",
+                    "fname": "t1_conf.nii.gz",
+                    "minval": 400,
+                    "maxval": 1300,
+                },
+                "t1_se": {
+                    "dir": "t1_se_mdr_step2_stitch",
+                    "fname": "t1_map.nii.gz",
+                    "minval": 400,
+                    "maxval": 1300,
+                },
             },
-            segs = {
-                "pancreas" : {"dir" : "totalseg", "fname" : "pancreas.nii.gz"},
+            segs={
+                "pancreas": {"dir": "totalseg", "fname": "pancreas.nii.gz"},
             },
             features={
-                "firstorder" : ["90Percentile", "TotalEnergy"],
+                "firstorder": ["90Percentile", "TotalEnergy"],
             },
-            image_types=[
-                "Original"
-            ],
+            image_types=["Original"],
         )
+
 
 class LungRadiomics(statistics.Radiomics):
     def __init__(self):
@@ -172,219 +212,211 @@ class LungRadiomics(statistics.Radiomics):
             self,
             name="lung_radiomics",
             params={
-                "water_dixon" : {"dir" : "../dixon", "fname" : "water.nii.gz"},
+                "water_dixon": {"dir": "../dixon", "fname": "water.nii.gz"},
             },
-            segs = {
-                "lung" : {"dir" : "totalseg", "glob" : "*lung*dilated.nii.gz"},
-            },  
+            segs={
+                "lung": {"dir": "totalseg", "glob": "*lung*dilated.nii.gz"},
+            },
             features={
-                "firstorder" : ["Uniformity"],
-                "glcm" : ["Autocorrelation", "DifferenceVariance", "ClusterTendency"],
-                "glszm" : ["ZonePercentage", "ZoneEntropy"],
-                "glrlm" : ["RunPercentage", "RunEntropy"],
-                "ngtdm" : ["Coarseness"],
+                "firstorder": ["Uniformity"],
+                "glcm": ["Autocorrelation", "DifferenceVariance", "ClusterTendency"],
+                "glszm": ["ZonePercentage", "ZoneEntropy"],
+                "glrlm": ["RunPercentage", "RunEntropy"],
+                "ngtdm": ["Coarseness"],
             },
-            image_types=[
-                "Original"
-            ],
+            image_types=["Original"],
         )
 
 
 class KidneyStats(statistics.SegStats):
     def __init__(self):
         statistics.SegStats.__init__(
-            self, name="kidney_stats",
+            self,
+            name="kidney_stats",
             default_limits="3t",
-            segs = {
-                "kidney_cortex" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*cortex*.nii.gz",
+            segs={
+                "kidney_cortex": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*cortex*.nii.gz",
                 },
-                "kidney_cortex_l" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*cortex_l*.nii.gz",
+                "kidney_cortex_l": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*cortex_l*.nii.gz",
                 },
-                "kidney_cortex_r" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*cortex_r*.nii.gz",
+                "kidney_cortex_r": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*cortex_r*.nii.gz",
                 },
-                "kidney_medulla" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*medulla*.nii.gz",
+                "kidney_medulla": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*medulla*.nii.gz",
                 },
-                "kidney_medulla_l" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*medulla_l*.nii.gz",
+                "kidney_medulla_l": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*medulla_l*.nii.gz",
                 },
-                "kidney_medulla_r" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*medulla_r*.nii.gz",
+                "kidney_medulla_r": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*medulla_r*.nii.gz",
                 },
             },
-            params = {
-                "t1_se" : {
-                    "dir" : "t1_se",
-                    "glob" : "t1.nii.gz",
+            params={
+                "t1_se": {
+                    "dir": "t1_se",
+                    "glob": "t1.nii.gz",
                 },
-                "t1_se_nomdr" : {
-                    "dir" : "t1_se_nomdr_stitch",
-                    "glob" : "*map*.nii.gz",
-                    "seg_overrides" : {
-                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_cortex" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_medulla" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                    }
+                "t1_se_nomdr": {
+                    "dir": "t1_se_nomdr_stitch",
+                    "glob": "*map*.nii.gz",
+                    "seg_overrides": {
+                        "kidney_cortex_l": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex_r": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_l": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_r": {"dir": "seg_kidney_t1_se_clean_native"},
+                    },
                 },
-                "t1_se_mdr_2p" : {
-                    "dir" : "t1_se_mdr_stitch",
-                    "glob" : "*map*.nii.gz",
-                    "seg_overrides" : {
-                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_cortex" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_medulla" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                    }
+                "t1_se_mdr_2p": {
+                    "dir": "t1_se_mdr_stitch",
+                    "glob": "*map*.nii.gz",
+                    "seg_overrides": {
+                        "kidney_cortex_l": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex_r": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_l": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_r": {"dir": "seg_kidney_t1_se_clean_native"},
+                    },
                 },
-                "t1_se_mdr_3p" : {
-                    "dir" : "t1_se_mdr_step2_stitch",
-                    "glob" : "*map*.nii.gz",
-                    "seg_overrides" : {
-                        "kidney_cortex_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_cortex_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_cortex" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_medulla" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_medulla_l" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                        "kidney_medulla_r" : {"dir" : "seg_kidney_t1_se_clean_native"},
-                    }
+                "t1_se_mdr_3p": {
+                    "dir": "t1_se_mdr_step2_stitch",
+                    "glob": "*map*.nii.gz",
+                    "seg_overrides": {
+                        "kidney_cortex_l": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex_r": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_cortex": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_l": {"dir": "seg_kidney_t1_se_clean_native"},
+                        "kidney_medulla_r": {"dir": "seg_kidney_t1_se_clean_native"},
+                    },
                 },
             },
             stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd"],
         )
 
+
 class SegStats(statistics.SegStats):
     def __init__(self):
         statistics.SegStats.__init__(
-            self, name="stats",
+            self,
+            name="stats",
             default_limits="3t",
             segs={
-                "liver" : {
-                    "dir" : "seg_liver_dixon_fix",
-                    "glob" : "liver.nii.gz"
+                "liver": {"dir": "seg_liver_dixon_fix", "glob": "liver.nii.gz"},
+                "spleen": {"dir": "seg_spleen_dixon", "glob": "spleen.nii.gz"},
+                "kidney_dixon": {"dir": "seg_kidney_dixon", "glob": "kidney.nii.gz"},
+                "kidney_dixon_left": {
+                    "dir": "seg_kidney_dixon",
+                    "glob": "kidney_left.nii.gz",
                 },
-                "spleen" : {
-                    "dir" : "seg_spleen_dixon",
-                    "glob" : "spleen.nii.gz"
+                "kidney_dixon_right": {
+                    "dir": "seg_kidney_dixon",
+                    "glob": "kidney_right.nii.gz",
                 },
-                "kidney_dixon" : {
-                    "dir" : "seg_kidney_dixon",
-                    "glob" : "kidney.nii.gz"
+                "pancreas_ethrive": {
+                    "dir": "seg_pancreas_ethrive_fix",
+                    "glob": "pancreas.nii.gz",
                 },
-                "kidney_dixon_left" : {
-                    "dir" : "seg_kidney_dixon",
-                    "glob" : "kidney_left.nii.gz"
+                "pancreas": {
+                    "dir": "totalseg",
+                    "glob": "pancreas.nii.gz",
                 },
-                "kidney_dixon_right" : {
-                    "dir" : "seg_kidney_dixon",
-                    "glob" : "kidney_right.nii.gz"
+                "sat": {
+                    "dir": "seg_sat_dixon",
+                    "glob": "sat.nii.gz",
+                    "params": [],
                 },
-                "pancreas_ethrive" : {
-                    "dir" : "seg_pancreas_ethrive_fix",
-                    "glob" : "pancreas.nii.gz",
+                "vat": {
+                    "dir": "seg_vat_dixon",
+                    "glob": "vat.nii.gz",
+                    "params": [],
                 },
-                "pancreas" : {
-                    "dir" : "totalseg",
-                    "glob" : "pancreas.nii.gz",
+                "kidney_cortex": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*cortex*.nii.gz",
                 },
-                "sat" : {
-                    "dir" : "seg_sat_dixon",
-                    "glob" : "sat.nii.gz",
-                    "params" : [],
+                "kidney_cortex_l": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*cortex_l*.nii.gz",
                 },
-                "vat" : {
-                    "dir" : "seg_vat_dixon",
-                    "glob" : "vat.nii.gz",
-                    "params" : [],
+                "kidney_cortex_r": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*cortex_r*.nii.gz",
                 },
-                "kidney_cortex" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*cortex*.nii.gz",
+                "kidney_medulla": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*medulla*.nii.gz",
                 },
-                "kidney_cortex_l" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*cortex_l*.nii.gz",
+                "kidney_medulla_l": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*medulla_l*.nii.gz",
                 },
-                "kidney_cortex_r" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*cortex_r*.nii.gz",
-                },
-                "kidney_medulla" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*medulla*.nii.gz",
-                },
-                "kidney_medulla_l" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*medulla_l*.nii.gz",
-                },
-                "kidney_medulla_r" : {
-                    "dir" : "seg_kidney_t1_se_clean_native",
-                    "glob" : "*medulla_r*.nii.gz",
+                "kidney_medulla_r": {
+                    "dir": "seg_kidney_t1_se_clean_native",
+                    "glob": "*medulla_r*.nii.gz",
                 },
             },
             params={
-                "t2star" : {
-                    "dir" : "t2star_dixon",
-                    "glob" : "t2star_exclude_fill.nii.gz",
+                "t2star": {
+                    "dir": "t2star_dixon",
+                    "glob": "t2star_exclude_fill.nii.gz",
                 },
-                "r2star" : {
-                    "dir" : "t2star_dixon",
-                    "glob" : "r2star_t2star_exclude_fill.nii.gz",
+                "r2star": {
+                    "dir": "t2star_dixon",
+                    "glob": "r2star_t2star_exclude_fill.nii.gz",
                 },
-                "ff" : {
-                    "dir" : "fat_fraction",
-                    "glob" : "fat_fraction_scanner.nii.gz",
+                "ff": {
+                    "dir": "fat_fraction",
+                    "glob": "fat_fraction_scanner.nii.gz",
                 },
-                "t1_molli" : {
-                    "dir" : "t1_molli",
-                    "glob" : "t1_conf.nii.gz",
+                "t1_molli": {
+                    "dir": "t1_molli",
+                    "glob": "t1_conf.nii.gz",
                 },
-                "t1_se" : {
-                    "dir" : "t1_se",
-                    "glob" : "t1.nii.gz",
+                "t1_se": {
+                    "dir": "t1_se",
+                    "glob": "t1.nii.gz",
                 },
-                "adc" : {
-                    "dir" : "adc",
-                    "glob" : "adc.nii.gz",
+                "adc": {
+                    "dir": "adc",
+                    "glob": "adc.nii.gz",
                 },
-                "mre" : {
-                    "dir" : "mre_noconf",
-                    "glob" : "mre_noconf.nii.gz",
-                    "limits" : (1e-5, None),  # Remove zeros from confidence removal
+                "mre": {
+                    "dir": "mre_noconf",
+                    "glob": "mre_noconf.nii.gz",
+                    "limits": (1e-5, None),  # Remove zeros from confidence removal
                 },
-                "mre_qiba" : {
-                    "dir" : "mre_qiba_noconf",
-                    "glob" : "mre_qiba_noconf.nii.gz",
-                    "limits" : (1e-5, None),  # Remove zeros from confidence removal
+                "mre_qiba": {
+                    "dir": "mre_qiba_noconf",
+                    "glob": "mre_qiba_noconf.nii.gz",
+                    "limits": (1e-5, None),  # Remove zeros from confidence removal
                 },
-                "t2_scanner" : {
-                    "dir" : "../t2_map",
-                    "glob" : "t2_map.nii.gz",
+                "t2_scanner": {
+                    "dir": "../t2_map",
+                    "glob": "t2_map.nii.gz",
                 },
-                "t2_stim" : {
-                    "dir" : "t2",
-                    "glob" : "t2_stim.nii.gz",
+                "t2_stim": {
+                    "dir": "t2",
+                    "glob": "t2_stim.nii.gz",
                 },
-                "b1_stim" : {
-                    "dir" : "t2",
-                    "glob" : "b1_stim.nii.gz",
+                "b1_stim": {
+                    "dir": "t2",
+                    "glob": "b1_stim.nii.gz",
                 },
-                "mtr" : {
-                    "dir" : "mtr",
-                    "glob" : "mtr.nii.gz",
+                "mtr": {
+                    "dir": "mtr",
+                    "glob": "mtr.nii.gz",
                 },
             },
             stats=["n", "iqn", "iqmean", "median", "iqstd", "mode", "fwhm"],
@@ -403,30 +435,41 @@ class ADC(Module):
             LOG.info(f" - Saving ADC map from XNAT: {adc_img.fname}")
             adc_img.save(self.outfile("adc.nii.gz"))
         else:
-            LOG.info(f" - No ADC map found in XNAT, looking for additional ADC maps in {add_adc_dir}")
+            LOG.info(
+                f" - No ADC map found in XNAT, looking for additional ADC maps in {add_adc_dir}"
+            )
             subjdir = os.path.join(add_adc_dir, self.pipeline.options.subjid, "adc_map")
             adc_fnames = list(glob.glob(os.path.join(subjdir, "*.nii.gz")))
             if adc_fnames:
                 if len(adc_fnames) > 1:
-                    LOG.warning(f"Found multiple ADC images:  {adc_fnames} - using first")
+                    LOG.warning(
+                        f"Found multiple ADC images:  {adc_fnames} - using first"
+                    )
                 adc_fname = adc_fnames[0]
                 LOG.info(f" - Saving ADC map from {adc_fname}")
                 adc_img = ImageFile(adc_fname, warn_json=False)
                 adc_img.save(self.outfile("adc.nii.gz"))
+
 
 class MRE(Module):
     def __init__(self, name):
         Module.__init__(self, name)
 
     def process(self):
-        img = self.single_inimg(f"../{self.name}", f"{self.name}.nii.gz", src=self.OUTPUT)
+        img = self.single_inimg(
+            f"../{self.name}", f"{self.name}.nii.gz", src=self.OUTPUT
+        )
         add_dir = self.pipeline.options.add_niftis
         if img is not None:
             LOG.info(f" - Saving {self.name.upper()} map from XNAT: {img.fname}")
             img.save(self.outfile(f"{self.name}.nii.gz"))
         else:
-            LOG.info(f" - No {self.name.upper()} map found in XNAT, looking for additional maps in {add_dir}")
-            subjdir = os.path.join(add_dir, self.pipeline.options.subjid, f"{self.name}_map")
+            LOG.info(
+                f" - No {self.name.upper()} map found in XNAT, looking for additional maps in {add_dir}"
+            )
+            subjdir = os.path.join(
+                add_dir, self.pipeline.options.subjid, f"{self.name}_map"
+            )
             fnames = list(glob.glob(os.path.join(subjdir, "*.nii.gz")))
             if fnames:
                 if len(fnames) > 1:
@@ -435,6 +478,7 @@ class MRE(Module):
                 LOG.info(f" - Saving {self.name.upper()} map from {fname}")
                 img = ImageFile(fname, warn_json=False)
                 img.save(self.outfile(f"{self.name}.nii.gz"))
+
 
 class MRERemoveConf(Module):
     def __init__(self, name="mre_noconf", **kwargs):
@@ -447,7 +491,9 @@ class MRERemoveConf(Module):
         for img in mre_imgs:
             LOG.info(f" - Removing confidence map from MRE image {img.fname}")
             if img.data.ndim > 3:
-                LOG.warning(f" - MRE image {img.fname} has more than 3 dimensions, cannot remove confidence map")
+                LOG.warning(
+                    f" - MRE image {img.fname} has more than 3 dimensions, cannot remove confidence map"
+                )
                 continue
 
             data = img.data
@@ -464,7 +510,10 @@ class MRERemoveConf(Module):
 
             clean = clean * data
             clean[clean < 0] = 0
-            img.save_derived(clean, self.outfile(img.fname.replace(".nii.gz", "_noconf.nii.gz")))
+            img.save_derived(
+                clean, self.outfile(img.fname.replace(".nii.gz", "_noconf.nii.gz"))
+            )
+
 
 __version__ = "0.0.1"
 
@@ -472,7 +521,6 @@ NAME = "resus"
 
 MODULES = [
     maps.DixonClassify(dixon_src="../raw_dixon"),
-
     # Segmentations
     segmentations.BodyDixon(),
     segmentations.SatDixon(),
@@ -482,7 +530,6 @@ MODULES = [
     segmentations.PancreasEthrive(),
     segmentations.KidneyT2w(),
     segmentations.TotalSeg(src_dir="fproc/dixon_classify", dilate=1),
-
     # Parameter maps
     maps.FatFractionDixon(dixon_dir="fproc/dixon_classify"),
     maps.T2starDixon(),
@@ -495,31 +542,30 @@ MODULES = [
     MRERemoveConf(name="mre_noconf", mre_dir="mre"),
     MRERemoveConf(name="mre_qiba_noconf", mre_dir="mre_qiba"),
     maps.T2(),
-
     # Post-processing of segmentations
     seg_postprocess.SegFix(
         "seg_pancreas_ethrive",
         fix_dir_option="pancreas_masks",
         segs={
-            "pancreas.nii.gz" : {
-                "glob" : "%s_*.nii.gz",
-                "fname" : "pancreas.nii.gz",
+            "pancreas.nii.gz": {
+                "glob": "%s_*.nii.gz",
+                "fname": "pancreas.nii.gz",
             }
         },
         map_dir="../dixon",
-        map_fname="water.nii.gz"
+        map_fname="water.nii.gz",
     ),
     seg_postprocess.SegFix(
         "seg_liver_dixon",
         fix_dir_option="liver_masks",
         segs={
-            "liver.nii.gz" : {
-                "glob" : "%s_*.nii.gz",
-                "fname" : "liver.nii.gz",
+            "liver.nii.gz": {
+                "glob": "%s_*.nii.gz",
+                "fname": "liver.nii.gz",
             }
         },
         map_dir="../dixon",
-        map_fname="water.nii.gz"
+        map_fname="water.nii.gz",
     ),
     seg_postprocess.LargestBlob("seg_pancreas_ethrive_fix", "pancreas.nii.gz"),
     PancreasSegRestricted(),
@@ -527,38 +573,61 @@ MODULES = [
         ff_glob="fat_fraction_scanner.nii.gz",
         fail_on_missing=False,
         organs={
-            "seg_liver_dixon_fix" : "liver.nii.gz",
-            "seg_spleen_dixon" : "spleen.nii.gz",
-            "seg_pancreas_ethrive_fix_largestblob" : "pancreas.nii.gz",
-            "seg_kidney_dixon" : "kidney.nii.gz"
-        }
+            "seg_liver_dixon_fix": "liver.nii.gz",
+            "seg_spleen_dixon": "spleen.nii.gz",
+            "seg_pancreas_ethrive_fix_largestblob": "pancreas.nii.gz",
+            "seg_kidney_dixon": "kidney.nii.gz",
+        },
     ),
-
     # This is the T1-SE pipeline from Afirm
-    maps.T1SE(name="t1_se_nomdr", se_dir="t1_se_raw", tis=np.arange(100, 2001, 100), tss=53.7, mag_only=True),
-    maps.T1SE(name="t1_se_mdr", se_dir="t1_se_raw", tis=np.arange(100, 2001, 100), tss=53.7, mdr=True, mag_only=True, parameters=2),
-    maps.T1SE(name="t1_se_mdr_step2", se_dir="t1_se_mdr", tis=np.arange(100, 2001, 100), tss=53.7, se_mag_glob="*_reg.nii.gz", mdr=True, mag_only=True, parameters=3, se_src=Module.OUTPUT),
+    maps.T1SE(
+        name="t1_se_nomdr",
+        se_dir="t1_se_raw",
+        tis=np.arange(100, 2001, 100),
+        tss=53.7,
+        mag_only=True,
+    ),
+    maps.T1SE(
+        name="t1_se_mdr",
+        se_dir="t1_se_raw",
+        tis=np.arange(100, 2001, 100),
+        tss=53.7,
+        mdr=True,
+        mag_only=True,
+        parameters=2,
+    ),
+    maps.T1SE(
+        name="t1_se_mdr_step2",
+        se_dir="t1_se_mdr",
+        tis=np.arange(100, 2001, 100),
+        tss=53.7,
+        se_mag_glob="*_reg.nii.gz",
+        mdr=True,
+        mag_only=True,
+        parameters=3,
+        se_src=Module.OUTPUT,
+    ),
     regrid.StitchSlices(
         name="t1_se_nomdr_stitch",
         img_dir="t1_se_nomdr",
         imgs={
-            "*t1_map*.nii.gz" : "t1_map.nii.gz",
-        }
+            "*t1_map*.nii.gz": "t1_map.nii.gz",
+        },
     ),
     regrid.StitchSlices(
         name="t1_se_mdr_stitch",
         img_dir="t1_se_mdr",
         imgs={
-            "*t1_map*.nii.gz" : "t1_map.nii.gz",
-        }
+            "*t1_map*.nii.gz": "t1_map.nii.gz",
+        },
     ),
     regrid.StitchSlices(
         name="t1_se_mdr_step2_stitch",
         img_dir="t1_se_mdr_step2",
         imgs={
-            "*t1_map*.nii.gz" : "t1_map.nii.gz",
-            "*_reg_reg*.nii.gz" : "se_data.nii.gz",
-        }
+            "*t1_map*.nii.gz": "t1_map.nii.gz",
+            "*_reg_reg*.nii.gz": "se_data.nii.gz",
+        },
     ),
     segmentations.KidneyT1SE(
         name="seg_kidney_t1_se",
@@ -579,7 +648,6 @@ MODULES = [
         t2w=True,
         seg_t2w_srcdir="seg_kidney_t2w",
     ),
-
     # Statistics
     KidneyRadiomics(),
     LiverRadiomics(),
@@ -592,7 +660,11 @@ MODULES = [
         name="shape_metrics_totalseg",
         deps=["totalseg"],
         params={
-            "water": {"dir": "dixon_classify", "fname": "water.nii.gz", "src": Module.OUTPUT},
+            "water": {
+                "dir": "dixon_classify",
+                "fname": "water.nii.gz",
+                "src": Module.OUTPUT,
+            },
         },
         segs={
             "kidney_l": {
@@ -630,7 +702,10 @@ MODULES = [
     ),
 ]
 
+
 def add_options(parser):
     parser.add_argument("--add-niftis", help="Dir containing additional NIFTI maps")
-    parser.add_argument("--pancreas-masks", help="Directory containing manual pancreas masks")
+    parser.add_argument(
+        "--pancreas-masks", help="Directory containing manual pancreas masks"
+    )
     parser.add_argument("--liver-masks", help="Directory containing manual liver masks")

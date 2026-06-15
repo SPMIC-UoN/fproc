@@ -19,6 +19,7 @@ LOG = logging.getLogger(__name__)
 
 NAME = "memri"
 
+
 class Stats(statistics.SegStats):
     def __init__(self):
         statistics.SegStats.__init__(
@@ -65,8 +66,21 @@ class Stats(statistics.SegStats):
                     "glob": "t1_conf.nii.gz",
                 },
             },
-            stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm"],
+            stats=[
+                "n",
+                "vol",
+                "iqn",
+                "iqvol",
+                "iqmean",
+                "median",
+                "iqstd",
+                "perc90",
+                "te",
+                "mode",
+                "fwhm",
+            ],
         )
+
 
 class T1MolliMetadata(Module):
     def __init__(self, name="t1_molli_md", **kwargs):
@@ -113,11 +127,15 @@ class T1MolliMetadata(Module):
             f.write(f"t1_molli_ti2,{ti2}\n")
             f.write(f"t1_molli_ti_spacing,{spacing}\n")
 
+
 MODULES = [
-    misc.ScanDates("scan_dates", input={
-        "../fsort/t2w" : "*.nii.gz",
-        "../fsort/t1_molli" : "*.nii.gz",
-    }),
+    misc.ScanDates(
+        "scan_dates",
+        input={
+            "../fsort/t2w": "*.nii.gz",
+            "../fsort/t1_molli": "*.nii.gz",
+        },
+    ),
     # Parameter maps
     maps.T1Molli(
         name="t1_molli",
@@ -143,9 +161,7 @@ MODULES = [
         map_glob="t1_conf.nii.gz",
         t1_limits=[(0, 0), (4136, 0)],
     ),
-    segmentations.KidneyT2wRenalSegmentor(
-        name="seg_kidney_t2w"
-    ),
+    segmentations.KidneyT2wRenalSegmentor(name="seg_kidney_t2w"),
     seg_postprocess.SegFix(
         "seg_kidney_t2w",
         fix_dir_option="seg_kidney_t2w_fix",
@@ -162,9 +178,8 @@ MODULES = [
                 "glob": "%s/*kidney_mask*.nii.gz",
                 "fname": "kidney_mask.nii.gz",
             },
-        }
+        },
     ),
-    
     # Re-alignments
     # Segmentation cleaning
     seg_postprocess.KidneyT1Clean(
@@ -212,7 +227,7 @@ MODULES = [
                 "glob": "%s/seg_kidney_t1_clean/*_all_r_t1fix*.nii.gz",
                 "fname": "kidney_all_r_t1.nii.gz",
             },
-             "*_all_t1.nii.gz": {
+            "*_all_t1.nii.gz": {
                 "glob": "%s/seg_kidney_t1_clean/*_all_t1fix*.nii.gz",
                 "fname": "kidney_all_t1.nii.gz",
             },
@@ -327,7 +342,7 @@ MODULES = [
     statistics.SegStats(
         name="kidney_stats",
         segs={
-            "kidney_paren" : {
+            "kidney_paren": {
                 "dir": "seg_kidney_t2w_fix",
                 "glob": "kidney_mask.nii.gz",
                 "params": [],
@@ -342,9 +357,11 @@ MODULES = [
     ),
 ]
 
+
 def add_options(parser):
     parser.add_argument(
-        "--seg-kidney-t2w-fix", help="Directory containing manual fixed t2w kidney masks"
+        "--seg-kidney-t2w-fix",
+        help="Directory containing manual fixed t2w kidney masks",
     )
     parser.add_argument(
         "--seg-kidney-t1-fix", help="Directory containing manual fixed t1 kidney masks"

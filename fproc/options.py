@@ -36,10 +36,16 @@ class ArgumentParser(argparse.ArgumentParser):
             "--skip", help="Comma separated list of modules to skip", default=""
         )
         self.add_argument(
-            "--noskip", "--force", help="Comma separated list of modules to not skip", default=""
+            "--noskip",
+            "--force",
+            help="Comma separated list of modules to not skip",
+            default="",
         )
         self.add_argument(
-            "--autoskip", action="store_true", default=False, help="Automatically skip completed modules"
+            "--autoskip",
+            action="store_true",
+            default=False,
+            help="Automatically skip completed modules",
         )
         self.add_argument(
             "--skipdone",

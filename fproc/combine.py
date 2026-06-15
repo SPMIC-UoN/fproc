@@ -1,6 +1,7 @@
 """
 FPROC: Combine stats output from previous runs
 """
+
 from collections import OrderedDict
 import dateutil.parser
 import glob
@@ -13,6 +14,7 @@ from ._version import __version__
 from .options import StatsCombineArgumentParser
 
 LOG = logging.getLogger(__name__)
+
 
 def main():
     arg_parser = StatsCombineArgumentParser()
@@ -28,7 +30,13 @@ def main():
             reader = csv.reader(f)
             subjids = sorted([row[options.subjids_col].strip() for row in reader])
     else:
-        subjids = sorted([d for d in os.listdir(options.input) if os.path.isdir(os.path.join(options.input, d))])
+        subjids = sorted(
+            [
+                d
+                for d in os.listdir(options.input)
+                if os.path.isdir(os.path.join(options.input, d))
+            ]
+        )
 
     paths = options.path
     if options.paths:
@@ -61,15 +69,15 @@ def main():
                     continue
                 else:
                     # Preserve order
-                    if key not in headers: headers.append(key)
+                    if key not in headers:
+                        headers.append(key)
 
         writer = csv.DictWriter(f, fieldnames=headers)
         writer.writeheader()
         for row in stats:
-            row_pruned = {
-                k : v for k, v in row.items() if k in headers
-            }
+            row_pruned = {k: v for k, v in row.items() if k in headers}
             writer.writerow(row_pruned)
+
 
 def add_kv_stats(subjid, subjdir, paths, subj_stats):
     for rel_path in paths:
@@ -79,16 +87,20 @@ def add_kv_stats(subjid, subjdir, paths, subj_stats):
             LOG.warn(f" - Failed to find any file matching {fglob}")
             continue
         elif len(fnames) > 1:
-            LOG.warn(f" - Multiple files matching {fglob} - will use first which is {fnames[0]}")
+            LOG.warn(
+                f" - Multiple files matching {fglob} - will use first which is {fnames[0]}"
+            )
         fname = fnames[0]
 
         LOG.debug(f" - Adding stats from {fname}")
-            
+
         with open(fname) as f:
             for line in f.readlines():
                 parts = [p.strip() for p in line.split(",")]
                 if len(parts) != 2:
-                    LOG.warn(f" - {fname}: Ignoring line: {line}, did not contain key, value pair")
+                    LOG.warn(
+                        f" - {fname}: Ignoring line: {line}, did not contain key, value pair"
+                    )
                 else:
                     try:
                         subj_stats[parts[0]] = float(parts[1])
@@ -99,8 +111,14 @@ def add_kv_stats(subjid, subjdir, paths, subj_stats):
                                 dateutil.parser.parse(parts[1])
                             subj_stats[parts[0]] = parts[1]
                         except ValueError:
-                            if parts[1].strip() != "" and parts[0].strip().lower() != "subjid":
-                                LOG.warn(f" - {fname}: Ignoring line: {line}, value was not blank, date or numeric")
+                            if (
+                                parts[1].strip() != ""
+                                and parts[0].strip().lower() != "subjid"
+                            ):
+                                LOG.warn(
+                                    f" - {fname}: Ignoring line: {line}, value was not blank, date or numeric"
+                                )
+
 
 def add_csv_stats(subjid, subjdir, paths, subj_stats):
     for rel_path in paths:
@@ -110,14 +128,18 @@ def add_csv_stats(subjid, subjdir, paths, subj_stats):
             LOG.warn(f" - Failed to find any file matching {fglob}")
             return
         elif len(fnames) > 1:
-            LOG.warn(f" - Multiple files matching {fglob} - will use first which is {fnames[0]}")
+            LOG.warn(
+                f" - Multiple files matching {fglob} - will use first which is {fnames[0]}"
+            )
         fname = fnames[0]
 
         LOG.debug(f" - Adding CSV stats from {fname}")
         with open(fname) as f:
             lines = f.readlines()
             if len(lines) < 2:
-                LOG.warn(f" - {fname}: Ignoring, does not contain keys, values on separate lines")
+                LOG.warn(
+                    f" - {fname}: Ignoring, does not contain keys, values on separate lines"
+                )
                 continue
             elif len(lines) > 2:
                 LOG.warn(f" - {fname}: contains more than 2 lines, ignoring extras")
@@ -125,12 +147,16 @@ def add_csv_stats(subjid, subjdir, paths, subj_stats):
             keys = [p.strip() for p in lines[0].split(",")]
             values = [p.strip() for p in lines[1].split(",")]
             if len(keys) != len(values):
-                LOG.warn(f" - {fname}: Ignoring, keys and values have different lengths")
+                LOG.warn(
+                    f" - {fname}: Ignoring, keys and values have different lengths"
+                )
                 continue
-            
+
             for k, v in zip(keys, values):
                 try:
                     subj_stats[k] = float(v)
                 except ValueError:
                     if k.strip().lower() != "subjid":
-                        LOG.warn(f" - {fname}: Ignoring key: {k}, value {v} was not numeric")
+                        LOG.warn(
+                            f" - {fname}: Ignoring key: {k}, value {v} was not numeric"
+                        )

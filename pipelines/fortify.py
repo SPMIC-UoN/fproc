@@ -20,6 +20,7 @@ LOG = logging.getLogger(__name__)
 
 NAME = "afirm"
 
+
 class KidneyStats(statistics.SegStats):
     def __init__(self):
         statistics.SegStats.__init__(
@@ -142,8 +143,21 @@ class KidneyStats(statistics.SegStats):
                     },
                 },
             },
-            stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm"],
+            stats=[
+                "n",
+                "vol",
+                "iqn",
+                "iqvol",
+                "iqmean",
+                "median",
+                "iqstd",
+                "perc90",
+                "te",
+                "mode",
+                "fwhm",
+            ],
         )
+
 
 class KidneyStatsRpt(statistics.SegStats):
     def __init__(self):
@@ -241,23 +255,45 @@ class KidneyStatsRpt(statistics.SegStats):
                     "dir": "t1_molli_rpt_mdr",
                     "glob": "*map*.nii.gz",
                     "seg_overrides": {
-                        "kidney_cortex_l": {"dir": "seg_kidney_t1_rpt_mdr_clean_native"},
-                        "kidney_cortex_r": {"dir": "seg_kidney_t1_rpt_mdr_clean_native"},
+                        "kidney_cortex_l": {
+                            "dir": "seg_kidney_t1_rpt_mdr_clean_native"
+                        },
+                        "kidney_cortex_r": {
+                            "dir": "seg_kidney_t1_rpt_mdr_clean_native"
+                        },
                         "kidney_cortex": {"dir": "seg_kidney_t1_rpt_mdr_clean_native"},
                         "kidney_medulla": {"dir": "seg_kidney_t1_rpt_mdr_clean_native"},
-                        "kidney_medulla_l": {"dir": "seg_kidney_t1_rpt_mdr_clean_native"},
-                        "kidney_medulla_r": {"dir": "seg_kidney_t1_rpt_mdr_clean_native"},
+                        "kidney_medulla_l": {
+                            "dir": "seg_kidney_t1_rpt_mdr_clean_native"
+                        },
+                        "kidney_medulla_r": {
+                            "dir": "seg_kidney_t1_rpt_mdr_clean_native"
+                        },
                     },
                 },
             },
-            stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm"],
+            stats=[
+                "n",
+                "vol",
+                "iqn",
+                "iqvol",
+                "iqmean",
+                "median",
+                "iqstd",
+                "perc90",
+                "te",
+                "mode",
+                "fwhm",
+            ],
         )
+
 
 class PadT1SEData(Module):
     """
     Pad out 7 volume T1 data to a 20 volume image so it can go through the
     T1_SE segmentor
     """
+
     def __init__(self, name="t1_se_pad", **kwargs):
         self._t1_se_dir = kwargs.get("t1_se_dir", "t1_se")
         deps = [self._t1_se_dir]
@@ -271,20 +307,25 @@ class PadT1SEData(Module):
             self.no_data(f"No T1 SE data found in {self._t1_se_dir}/{t1_se_glob}")
         data = t1_se.data
         if data.ndim != 4 or data.shape[3] != 7:
-            self.no_data(f"Unexpected T1 SE data shape: {data.shape} - expected 4D with 7 volumes")
+            self.no_data(
+                f"Unexpected T1 SE data shape: {data.shape} - expected 4D with 7 volumes"
+            )
 
         padded_data = np.zeros(list(data.shape[:3]) + [20], dtype=data.dtype)
         for src_vol, dest_vol in enumerate([4, 5, 6, 9, 11, 13, 15]):
             padded_data[..., dest_vol] = data[..., src_vol]
         t1_se.save_derived(padded_data, self.outfile(t1_se.fname))
 
-MODULES = [
-    misc.ScanDates("scan_dates", input={
-        "../fsort/t1w" : "*.nii.gz",
-        "../fsort/t2w" : "*.nii.gz",
-        "../fsort/t1_molli" : "*.nii.gz",
-    }),
 
+MODULES = [
+    misc.ScanDates(
+        "scan_dates",
+        input={
+            "../fsort/t1w": "*.nii.gz",
+            "../fsort/t2w": "*.nii.gz",
+            "../fsort/t1_molli": "*.nii.gz",
+        },
+    ),
     # Parameter maps
     maps.T1Molli(
         name="t1_molli",
@@ -325,7 +366,6 @@ MODULES = [
     maps.FatFractionDixon(dixon_dir="../fsort/dixon"),
     maps.DwiMoco(),
     maps.DwiAdc(),
-
     # Segmentations
     segmentations.KidneyT1(
         name="seg_kidney_t1",
@@ -392,7 +432,6 @@ MODULES = [
         map_fname="t2w.nii.gz",
         map_src=Module.INPUT,
     ),
-
     # Re-alignments
     align.FlirtAlignOnly(
         name="seg_kidney_t1_align_t2star",
@@ -422,9 +461,7 @@ MODULES = [
             "t1_molli_rpt": "t1_conf.nii.gz",
         },
     ),
-
     ## Segmentation Post processing
-
     # Kidney cleaning - basic and repeats
     seg_postprocess.KidneyT1Clean(
         name="seg_kidney_t1_clean",
@@ -480,7 +517,6 @@ MODULES = [
         t2w=True,
         seg_t2w_srcdir="seg_kidney_t2w_fix",
     ),
-
     # T1 SE kidney segmentation cleaning
     seg_postprocess.KidneyT1Clean(
         name="seg_kidney_t1_se_clean_native",
@@ -489,7 +525,6 @@ MODULES = [
         t2w=True,
         seg_t2w_srcdir="seg_kidney_t2w_fix",
     ),
-
     # Kidney pelvis segmentation by removing cortex/medulla (and cysts) from whole kidney
     segmentations.KidneyPelvisTrace(
         paren_dir="seg_kidney_t2w_fix",
@@ -497,19 +532,15 @@ MODULES = [
         whole_glob="kidney.nii.gz",
         cyst_dir="seg_kidney_cyst_trace",
     ),
-
     ## Statistics and numerical measures
-
     KidneyStats(),
     KidneyStatsRpt(),
-
     statistics.KidneyCystStats(
         name="kidney_cyst_stats_trace",
         cyst_dir="seg_kidney_cyst_trace",
         cyst_glob="kidney_cyst_orig.nii.gz",
         suffix="trace",
     ),
-
     statistics.Radiomics(
         name="tkv_radiomics",
         deps=["seg_kidney_t2w_fix"],
@@ -532,7 +563,6 @@ MODULES = [
             ],
         },
     ),
-
     statistics.SegStats(
         name="tkv_volumes",
         segs={
@@ -551,7 +581,6 @@ MODULES = [
         },
         seg_volumes=True,
     ),
-
     statistics.Radiomics(
         name="wkv_radiomics",
         deps=["t2w", "seg_organs_trace"],
@@ -573,8 +602,7 @@ MODULES = [
                 "Compactness1",
             ],
         },
-    ), 
-    
+    ),
     statistics.SegStats(
         name="wkv_volumes",
         segs={

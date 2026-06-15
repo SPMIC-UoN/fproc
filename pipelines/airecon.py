@@ -236,7 +236,19 @@ class Stats(statistics.SegStats):
                     "glob": "fat_fraction.nii.gz",
                 },
             },
-            stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm"],
+            stats=[
+                "n",
+                "vol",
+                "iqn",
+                "iqvol",
+                "iqmean",
+                "median",
+                "iqstd",
+                "perc90",
+                "te",
+                "mode",
+                "fwhm",
+            ],
         )
 
 
@@ -401,9 +413,22 @@ class StatsDixon(statistics.SegStats):
                     "glob": "fat_fraction.nii.gz",
                 },
             },
-            stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm"],
+            stats=[
+                "n",
+                "vol",
+                "iqn",
+                "iqvol",
+                "iqmean",
+                "median",
+                "iqstd",
+                "perc90",
+                "te",
+                "mode",
+                "fwhm",
+            ],
             seg_volumes=True,
         )
+
 
 class StatsDixonTotalseg(statistics.SegStats):
     def __init__(self):
@@ -566,10 +591,21 @@ class StatsDixonTotalseg(statistics.SegStats):
                     "glob": "fat_fraction.nii.gz",
                 },
             },
-            stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm"],
+            stats=[
+                "n",
+                "vol",
+                "iqn",
+                "iqvol",
+                "iqmean",
+                "median",
+                "iqstd",
+                "perc90",
+                "te",
+                "mode",
+                "fwhm",
+            ],
             seg_volumes=True,
         )
-
 
 
 class T1MolliMetadata(Module):
@@ -716,7 +752,9 @@ class SegOrgansTraceData(Module):
         srcdir = self.pipeline.options.seg_organs_trace
         fpath = f"{srcdir}/{self.pipeline.options.subjid}.nii.gz"
         if not os.path.exists(fpath):
-            self.no_data(f"No TRACE cyst organ seg found for {self.pipeline.options.subjid} in {fpath}")
+            self.no_data(
+                f"No TRACE cyst organ seg found for {self.pipeline.options.subjid} in {fpath}"
+            )
 
         img = ImageFile(fpath, warn_json=False)
         LOG.info(" - Saving TRACE organ seg to trace_organs.nii.gz")
@@ -724,10 +762,10 @@ class SegOrgansTraceData(Module):
 
         with open(self.outfile("volumes.csv"), "w") as f:
             for idx, name in {
-                1 : "trace_kidney_r",
-                2 : "trace_kidney_l",
-                3 : "trace_spleen",
-                4 : "trace_liver", 
+                1: "trace_kidney_r",
+                2: "trace_kidney_l",
+                3: "trace_spleen",
+                4: "trace_liver",
             }.items():
                 roi = (img.data == idx).astype(np.int8)
                 organ_img = img.save_derived(roi, self.outfile(f"{name}.nii.gz"))
@@ -736,11 +774,14 @@ class SegOrgansTraceData(Module):
                 LOG.info(f" - {name}: volume = {volume} mL")
                 f.write(f"{name},{volume}\n")
             tkv = np.logical_or(img.data == 1, img.data == 2)
-            tkv_img = img.save_derived(tkv.astype(np.int8), self.outfile("trace_kidney_all.nii.gz"))
+            tkv_img = img.save_derived(
+                tkv.astype(np.int8), self.outfile("trace_kidney_all.nii.gz")
+            )
             self.lightbox(img, tkv_img, name="trace_kidney_all_overlay", tight=True)
             tkv_volume = np.count_nonzero(tkv) * img.voxel_volume
             LOG.info(f" - Total kidney volume: {tkv_volume} mL")
             f.write(f"trace_kidney_all,{tkv_volume}\n")
+
 
 class SegKidneyWhole(Module):
 
@@ -748,63 +789,90 @@ class SegKidneyWhole(Module):
         Module.__init__(self, name, **kwargs)
 
     def process(self):
-        trace_seg = self.single_inimg("seg_organs_trace", "trace_kidney_all.nii.gz", src=self.OUTPUT)
+        trace_seg = self.single_inimg(
+            "seg_organs_trace", "trace_kidney_all.nii.gz", src=self.OUTPUT
+        )
         if not trace_seg:
-            self.no_data("No TRACE (new) kidney seg found in seg_organs_trace/trace_kidney_all.nii.gz")
+            self.no_data(
+                "No TRACE (new) kidney seg found in seg_organs_trace/trace_kidney_all.nii.gz"
+            )
 
         SUBJIDS_USE_OLD_TRACE_SEG = [
-            "CBG_023_V1", "CBG_028_V1", "DER_006_V1", "DER_062_V1",
-            "DER_135_V1", "EDB_109_V1", "EDB_116_V1", "EDB_144_V1",
-            "GLA_002_V1", "LDS_045_V1", "LDS_114_V1", "MAN_008_V1",
-            "MAN_014_V1", "OXF_021_V1",
+            "CBG_023_V1",
+            "CBG_028_V1",
+            "DER_006_V1",
+            "DER_062_V1",
+            "DER_135_V1",
+            "EDB_109_V1",
+            "EDB_116_V1",
+            "EDB_144_V1",
+            "GLA_002_V1",
+            "LDS_045_V1",
+            "LDS_114_V1",
+            "MAN_008_V1",
+            "MAN_014_V1",
+            "OXF_021_V1",
         ]
         if self.pipeline.options.subjid in SUBJIDS_USE_OLD_TRACE_SEG:
-            trace_seg = self.single_inimg("traceseg", "trace_kidney_all.nii.gz", src=self.OUTPUT)
+            trace_seg = self.single_inimg(
+                "traceseg", "trace_kidney_all.nii.gz", src=self.OUTPUT
+            )
             if not trace_seg:
-                self.no_data(f"No TRACE (old) kidney seg found for {self.pipeline.options.subjid}")
+                self.no_data(
+                    f"No TRACE (old) kidney seg found for {self.pipeline.options.subjid}"
+                )
 
         trace_seg.reorient2std()
-        #tkv = self.single_inimg("seg_kidney_t2w_fix", "kidney_mask.nii.gz", src=self.OUTPUT)
-        #if not tkv:
+        # tkv = self.single_inimg("seg_kidney_t2w_fix", "kidney_mask.nii.gz", src=self.OUTPUT)
+        # if not tkv:
         #    LOG.warning("No TKV kidney seg found in seg_kidney_t2w - will not add to whole kidney")
         #    tkv_data = np.zeros_like(trace_new.data)
-        #else:
+        # else:
         #    tkv.reorient2std()
         #    tkv_data = tkv.data
-        #combined_data = np.logical_or(trace_new.data > 0, tkv_data > 0).astype(np.int8)
-        #combined_img = trace_new.save_derived(combined_data, self.outfile("kidney_whole.nii.gz"))
+        # combined_data = np.logical_or(trace_new.data > 0, tkv_data > 0).astype(np.int8)
+        # combined_img = trace_new.save_derived(combined_data, self.outfile("kidney_whole.nii.gz"))
 
         trace_seg.save(self.outfile("kidney_whole.nii.gz"))
-        left_data = self.split_lr(trace_seg.data, trace_seg.affine, side='l')
+        left_data = self.split_lr(trace_seg.data, trace_seg.affine, side="l")
         trace_seg.save_derived(left_data, self.outfile("kidney_whole_l.nii.gz"))
-        right_data = self.split_lr(trace_seg.data, trace_seg.affine, side='r')
+        right_data = self.split_lr(trace_seg.data, trace_seg.affine, side="r")
         trace_seg.save_derived(right_data, self.outfile("kidney_whole_r.nii.gz"))
-        
+
         t2w = self.single_inimg("../fsort/t2w", "t2w.nii.gz")
         if t2w:
             t2w.reorient2std()
             self.lightbox(t2w, trace_seg, name="kidney_whole_overlay", tight=True)
 
+
 class TempAddPelvis(Module):
     """
     Temp module to add manual pelvis segmentations from TRACE data into organ seg
     """
+
     def __init__(self, name="temp_add_pelvis", **kwargs):
         Module.__init__(self, name, **kwargs)
 
     def process(self):
         subjid = self.pipeline.options.subjid
-        pelvis_fpath = os.path.join(f"/spmstore/project/RenalMRI/afirm/PELVIS_RENAMED/{subjid}.nii.gz")
-        organ_fpath = os.path.join(f"/spmstore/project/RenalMRI/afirm/TRACE_ORGANS_RENAMED/{subjid}.nii.gz")
+        pelvis_fpath = os.path.join(
+            f"/spmstore/project/RenalMRI/afirm/PELVIS_RENAMED/{subjid}.nii.gz"
+        )
+        organ_fpath = os.path.join(
+            f"/spmstore/project/RenalMRI/afirm/TRACE_ORGANS_RENAMED/{subjid}.nii.gz"
+        )
         if not os.path.exists(pelvis_fpath) or not os.path.exists(organ_fpath):
-            self.no_data(f"No pelvis seg found for {self.pipeline.options.subjid} in {pelvis_fpath} or {organ_fpath}")
-        
+            self.no_data(
+                f"No pelvis seg found for {self.pipeline.options.subjid} in {pelvis_fpath} or {organ_fpath}"
+            )
+
         pelvis_img = ImageFile(pelvis_fpath, warn_json=False)
         pelvis_img.reorient2std()
         from scipy.ndimage import binary_dilation
+
         pelvis_data = binary_dilation((pelvis_img.data > 0).astype(np.int8))
-        pevis_img_l = self.split_lr(pelvis_data, pelvis_img.affine, side='l')
-        pevis_img_r = self.split_lr(pelvis_data, pelvis_img.affine, side='r')
+        pevis_img_l = self.split_lr(pelvis_data, pelvis_img.affine, side="l")
+        pevis_img_r = self.split_lr(pelvis_data, pelvis_img.affine, side="r")
         organ_img = ImageFile(organ_fpath, warn_json=False)
         organ_img.reorient2std()
         organ_data = np.copy(organ_img.data.astype(np.int32))
@@ -812,10 +880,12 @@ class TempAddPelvis(Module):
         organ_data[pevis_img_r > 0] = 1
         organ_img.save_derived(organ_data, self.outfile(f"{subjid}.nii.gz"))
 
+
 class DixonCorBest(Module):
     """
-    Select best coronal dixon images 
+    Select best coronal dixon images
     """
+
     def __init__(self, name="dixon_cor_best", **kwargs):
         Module.__init__(self, name, **kwargs)
 
@@ -826,19 +896,27 @@ class DixonCorBest(Module):
             for img in mdixon_imgs:
                 img.save(self.outfile(img.fname))
         else:
-            LOG.info(" - No coronal mdixon images found, looking for generic dixon images")
-            dixon_imgs = self.inimgs("../fsort/dixon_generic", "*.nii.gz", src=self.INPUT)
+            LOG.info(
+                " - No coronal mdixon images found, looking for generic dixon images"
+            )
+            dixon_imgs = self.inimgs(
+                "../fsort/dixon_generic", "*.nii.gz", src=self.INPUT
+            )
             if not dixon_imgs:
                 self.no_data("No generic dixon images found")
             for img in dixon_imgs:
                 img.save(self.outfile(img.fname))
 
+
 MODULES = [
-    misc.ScanDates("scan_dates", input={
-        "../fsort/t1w" : "*.nii.gz",
-        "../fsort/t2w" : "*.nii.gz",
-        "../fsort/t1_molli_raw" : "*.nii.gz",
-    }),
+    misc.ScanDates(
+        "scan_dates",
+        input={
+            "../fsort/t1w": "*.nii.gz",
+            "../fsort/t2w": "*.nii.gz",
+            "../fsort/t1_molli_raw": "*.nii.gz",
+        },
+    ),
     maps.DixonClassify(dixon_src="../fsort/raw_dixon"),
     DixonCorBest(),
     # Parameter maps
@@ -956,16 +1034,25 @@ MODULES = [
     ),
     segmentations.KidneyT2wRenalSegmentor(name="seg_kidney_t2w"),
     segmentations.KidneyT2w(name="seg_kidney_t2w_model2"),
-    segmentations.KidneyT2w(name="seg_kidney_t2w_model1", model="/software/imaging/body_pipelines/trained_models/t2w_seg.h5"),
+    segmentations.KidneyT2w(
+        name="seg_kidney_t2w_model1",
+        model="/software/imaging/body_pipelines/trained_models/t2w_seg.h5",
+    ),
     segmentations.KidneyCystT2w(
         t2w_dir="t2w", t2w_glob="t2w.nii.gz", t2w_src=Module.INPUT
     ),
     SegKidneyCystTraceData(),
     SegOrgansTraceData(),
     # segmentations.BodyDixon(),
-    segmentations.SatDixon(name="seg_sat_dixon_cor", dixon_dir="../fproc/dixon_cor_best"),
-    segmentations.LiverDixon(name="seg_liver_dixon_cor", dixon_dir="../fproc/dixon_cor_best"),
-    segmentations.SpleenDixon(name="seg_spleen_dixon_cor", dixon_dir="../fproc/dixon_cor_best"),
+    segmentations.SatDixon(
+        name="seg_sat_dixon_cor", dixon_dir="../fproc/dixon_cor_best"
+    ),
+    segmentations.LiverDixon(
+        name="seg_liver_dixon_cor", dixon_dir="../fproc/dixon_cor_best"
+    ),
+    segmentations.SpleenDixon(
+        name="seg_spleen_dixon_cor", dixon_dir="../fproc/dixon_cor_best"
+    ),
     segmentations.KidneyDixon(
         name="seg_kidney_dixon_cor", dixon_dir="../fproc/dixon_cor_best", model_id="422"
     ),
@@ -977,7 +1064,9 @@ MODULES = [
     ),
     segmentations.PancreasEthrive(),
     segmentations.BodyDixon(name="seg_body_dixon_ax", dixon_dir="dixon_ax"),
-    segmentations.BodyDixon(name="seg_body_dixon_cor", dixon_dir="../fproc/dixon_cor_best"),
+    segmentations.BodyDixon(
+        name="seg_body_dixon_cor", dixon_dir="../fproc/dixon_cor_best"
+    ),
     seg_postprocess.LargestBlob("seg_pancreas_ethrive", "pancreas.nii.gz"),
     segmentations.VatDixon(
         name="seg_vat_dixon_ax_local",
@@ -1006,13 +1095,21 @@ MODULES = [
         },
     ),
     segmentations.TotalSeg(
-        name="totalseg_cor", src_dir="../fproc/dixon_cor_best", dilate=1, csv_suffix="_cor"
+        name="totalseg_cor",
+        src_dir="../fproc/dixon_cor_best",
+        dilate=1,
+        csv_suffix="_cor",
     ),
     segmentations.TotalSeg(
         name="totalseg_ax", src_dir="dixon_ax", dilate=1, csv_suffix="_ax"
     ),
     segmentations.TotalSeg(
-        name="totalseg_sag_loc", src_dir="sag_local", water_glob="sag_local.nii.gz", fat_glob=None, dilate=1, csv_suffix="_sagloc"
+        name="totalseg_sag_loc",
+        src_dir="sag_local",
+        water_glob="sag_local.nii.gz",
+        fat_glob=None,
+        dilate=1,
+        csv_suffix="_sagloc",
     ),
     segmentations.VatDixon(
         name="seg_vat_dixon_cor_totalseg",
@@ -1600,17 +1697,17 @@ MODULES = [
                 "dir": "totalseg_ax",
                 "fname": "kidney_right.nii.gz",
             },
-            "liver" : {
+            "liver": {
                 "dir": "totalseg_ax",
-                "fname" : "liver.nii.gz",
+                "fname": "liver.nii.gz",
             },
-            "pancreas" : {
+            "pancreas": {
                 "dir": "totalseg_ax",
-                "fname" : "pancreas.nii.gz",
+                "fname": "pancreas.nii.gz",
             },
-            "spleen" : {
+            "spleen": {
                 "dir": "totalseg_ax",
-                "fname" : "spleen.nii.gz",
+                "fname": "spleen.nii.gz",
             },
         },
         features={
@@ -1702,8 +1799,8 @@ MODULES = [
                 "Compactness1",
             ],
         },
-    ), 
-        statistics.ShapeMetrics(
+    ),
+    statistics.ShapeMetrics(
         name="wkv_ero_shape_metrics",
         seg_dir="seg_kidney_pelvis_trace_splitlr",
         segs={"wkv_ero_l": "*ero_l*.nii.gz", "wkv_ero_r": "*ero_r*.nii.gz"},
@@ -1728,8 +1825,14 @@ MODULES = [
             "t2w": {"dir": "t2w", "fname": "t2w.nii.gz", "src": Module.INPUT},
         },
         segs={
-            "wkv_ero_l": {"dir": "seg_kidney_pelvis_trace_splitlr", "fname": "*ero_l*.nii.gz"},
-            "wkv_ero_r": {"dir": "seg_kidney_pelvis_trace_splitlr", "fname": "*ero_r*.nii.gz"},
+            "wkv_ero_l": {
+                "dir": "seg_kidney_pelvis_trace_splitlr",
+                "fname": "*ero_l*.nii.gz",
+            },
+            "wkv_ero_r": {
+                "dir": "seg_kidney_pelvis_trace_splitlr",
+                "fname": "*ero_r*.nii.gz",
+            },
         },
         features={
             "shape": [
@@ -1742,7 +1845,7 @@ MODULES = [
                 "Compactness1",
             ],
         },
-    ), 
+    ),
     statistics.ISNR(
         src=Module.INPUT,
         imgs={
@@ -1789,17 +1892,17 @@ MODULES = [
     statistics.SegStats(
         "wkv_ero_volumes",
         segs={
-            "wkv_ero_all" : {
-                "dir" : "seg_kidney_pelvis_trace",
-                "glob" : "whole_kidney_ero.nii.gz",
+            "wkv_ero_all": {
+                "dir": "seg_kidney_pelvis_trace",
+                "glob": "whole_kidney_ero.nii.gz",
             },
-            "wkv_ero_all_l" : {
-                "dir" : "seg_kidney_pelvis_trace_splitlr",
-                "glob" : "whole_kidney_ero_l.nii.gz",
+            "wkv_ero_all_l": {
+                "dir": "seg_kidney_pelvis_trace_splitlr",
+                "glob": "whole_kidney_ero_l.nii.gz",
             },
-            "wkv_ero_all_r" : {
-                "dir" : "seg_kidney_pelvis_trace_splitlr",
-                "glob" : "whole_kidney_ero_r.nii.gz",
+            "wkv_ero_all_r": {
+                "dir": "seg_kidney_pelvis_trace_splitlr",
+                "glob": "whole_kidney_ero_r.nii.gz",
             },
         },
         seg_volumes=True,
@@ -1817,77 +1920,89 @@ MODULES = [
                 "glob": "kidney_pelvis_right.nii.gz",
                 "params": [],
             },
-            "kidney_pelvis_fat_l_trace" : {
+            "kidney_pelvis_fat_l_trace": {
                 "dir": "seg_kidney_pelvis_fat_trace",
                 "glob": "kidney_pelvis_left_fat.nii.gz",
-                "params" : ["ff"],
+                "params": ["ff"],
             },
-            "kidney_pelvis_fat_r_trace" : {
+            "kidney_pelvis_fat_r_trace": {
                 "dir": "seg_kidney_pelvis_fat_trace",
                 "glob": "kidney_pelvis_right_fat.nii.gz",
-                "params" : ["ff"],
+                "params": ["ff"],
             },
-            "kidney_pelvis_nofat_l_trace" : {
+            "kidney_pelvis_nofat_l_trace": {
                 "dir": "seg_kidney_pelvis_fat_trace",
                 "glob": "kidney_pelvis_left_nofat.nii.gz",
                 "params": [],
             },
-            "kidney_pelvis_nofat_r_trace" : {
+            "kidney_pelvis_nofat_r_trace": {
                 "dir": "seg_kidney_pelvis_fat_trace",
                 "glob": "kidney_pelvis_right_nofat.nii.gz",
                 "params": [],
             },
-            "kidney_paren_l" : {
+            "kidney_paren_l": {
                 "dir": "seg_kidney_t2w_fix",
                 "glob": "kidney_left.nii.gz",
-                "params" : ["ff", "ff_lt25"],
+                "params": ["ff", "ff_lt25"],
             },
-            "kidney_paren_r" : {
+            "kidney_paren_r": {
                 "dir": "seg_kidney_t2w_fix",
                 "glob": "kidney_right.nii.gz",
-                "params" : ["ff", "ff_lt25"],
+                "params": ["ff", "ff_lt25"],
             },
-            "kidney_cyst_l" : {
+            "kidney_cyst_l": {
                 "dir": "seg_kidney_cyst_t2w_trace_splitlr",
                 "glob": "*_l.nii.gz",
-                "params" : [],
+                "params": [],
             },
-            "kidney_cyst_r" : {
+            "kidney_cyst_r": {
                 "dir": "seg_kidney_cyst_t2w_trace_splitlr",
                 "glob": "*_r.nii.gz",
-                "params" : [],
+                "params": [],
             },
         },
         params={
-            "ff" : {
+            "ff": {
                 "dir": "ff_dixon_cor",
                 "glob": "fat_fraction.nii.gz",
             },
-            "ff_lt25" : {
+            "ff_lt25": {
                 "dir": "ff_dixon_cor",
                 "glob": "fat_fraction.nii.gz",
                 "limits": (0, 25),
-            }
+            },
         },
         seg_volumes=True,
-        stats=["n", "vol", "iqn", "iqvol", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm"],
+        stats=[
+            "n",
+            "vol",
+            "iqn",
+            "iqvol",
+            "iqmean",
+            "median",
+            "iqstd",
+            "perc90",
+            "te",
+            "mode",
+            "fwhm",
+        ],
     ),
     statistics.SegStats(
         name="kidney_stats_alternate",
         segs={
-            "kidney_paren_defin" : {
+            "kidney_paren_defin": {
                 "dir": "seg_kidney_t2w_fix",
                 "glob": "kidney_mask.nii.gz",
                 "params": [],
             },
-            "kidney_paren_model1" : {
-                "dir" : "seg_kidney_t2w_model1",
-                "glob" : "kidney_mask.nii.gz",
+            "kidney_paren_model1": {
+                "dir": "seg_kidney_t2w_model1",
+                "glob": "kidney_mask.nii.gz",
                 "params": [],
             },
-            "kidney_paren_model2" : {
-                "dir" : "seg_kidney_t2w",
-                "glob" : "kidney_mask.nii.gz",
+            "kidney_paren_model2": {
+                "dir": "seg_kidney_t2w",
+                "glob": "kidney_mask.nii.gz",
                 "params": [],
             },
             "kidney_pelvis_defin": {
@@ -1895,7 +2010,7 @@ MODULES = [
                 "glob": "kidney_pelvis.nii.gz",
                 "params": [],
             },
-            "kidney_pelvis_t2w" : {
+            "kidney_pelvis_t2w": {
                 "dir": "seg_kidney_pelvis_t2w",
                 "glob": "kidney_pelvis.nii.gz",
                 "params": [],
@@ -1911,10 +2026,10 @@ MODULES = [
             "kidney_cyst_stats_trace_orig/kidney_cyst.csv",
         ],
         diffs={
-            "cyst_def_min_trace" : ("kidney_cyst_defin_vol", "kidney_cyst_trace_vol"),
-            "cyst_def_min_uon" : ("kidney_cyst_defin_vol", "kidney_cyst_uon_vol"),
-            "cyst_trace_min_uon" : ("kidney_cyst_trace_vol", "kidney_cyst_uon_vol"),
-        }
+            "cyst_def_min_trace": ("kidney_cyst_defin_vol", "kidney_cyst_trace_vol"),
+            "cyst_def_min_uon": ("kidney_cyst_defin_vol", "kidney_cyst_uon_vol"),
+            "cyst_trace_min_uon": ("kidney_cyst_trace_vol", "kidney_cyst_uon_vol"),
+        },
     ),
     statistics.SegStats(
         name="organ_volumes",
@@ -1994,7 +2109,7 @@ MODULES = [
         },
         seg_volumes=True,
     ),
-    #TempAddPelvis(),
+    # TempAddPelvis(),
 ]
 
 

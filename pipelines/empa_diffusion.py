@@ -14,6 +14,7 @@ __version__ = "0.0.1"
 
 LOG = logging.getLogger(__name__)
 
+
 class DiffusionOverlays(Module):
     def __init__(self):
         Module.__init__(self, "diffusion_overlays")
@@ -21,10 +22,20 @@ class DiffusionOverlays(Module):
     def process(self):
         diff_img = self.inimg("diffusion", "diffusion_firstvol.nii.gz")
         LOG.info(f" - Found diffusion first volume: {diff_img.fname}")
-        preproc_output = os.path.join(self.pipeline.options.preproc_output, self.pipeline.options.subjid)
+        preproc_output = os.path.join(
+            self.pipeline.options.preproc_output, self.pipeline.options.subjid
+        )
         LOG.info(f" - Using preprocessing output from: {preproc_output}")
-        cortex_masks = list(glob.glob(os.path.join(preproc_output, "t1_out", "seg_kidney_*_cortex_t1.nii.gz")))
-        medulla_masks = list(glob.glob(os.path.join(preproc_output, "t1_out", "seg_kidney_*_medulla_t1.nii.gz")))
+        cortex_masks = list(
+            glob.glob(
+                os.path.join(preproc_output, "t1_out", "seg_kidney_*_cortex_t1.nii.gz")
+            )
+        )
+        medulla_masks = list(
+            glob.glob(
+                os.path.join(preproc_output, "t1_out", "seg_kidney_*_medulla_t1.nii.gz")
+            )
+        )
         if not cortex_masks:
             self.no_data("No cortex masks found")
         if not medulla_masks:
@@ -42,18 +53,24 @@ class DiffusionOverlays(Module):
         self.lightbox(diff_img.data, cortex_mask_res, "diff_firstvol_cortex")
         self.lightbox(diff_img.data, medulla_mask_res, "diff_firstvol_medulla")
 
+
 MODULES = [
     DiffusionOverlays(),
 ]
+
 
 class EmpaDiffusionArgumentParser(ArgumentParser):
     def __init__(self):
         ArgumentParser.__init__(self, "empa_diffusion", __version__)
         self.add_argument("--preproc-output", required=True)
-        
+
+
 class EmpaDiffusion(Pipeline):
     def __init__(self):
-        Pipeline.__init__(self, "empa_diffusion", __version__, EmpaDiffusionArgumentParser(), MODULES)
+        Pipeline.__init__(
+            self, "empa_diffusion", __version__, EmpaDiffusionArgumentParser(), MODULES
+        )
+
 
 if __name__ == "__main__":
     EmpaDiffusion().run()

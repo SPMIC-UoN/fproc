@@ -1,6 +1,7 @@
 """
 DIFFAD: Processing pipeline for diffusion MRI Alzheimer's project
 """
+
 # TODO packaging and documentation
 # summary of how to run on cluster etc
 # TODO whole brain tract seg see links in SW Teams chat
@@ -22,12 +23,19 @@ from dipy.reconst.dti import (
     lower_triangular,
     fractional_anisotropy,
 )
-from dipy.reconst.csdeconv import (ConstrainedSphericalDeconvModel, auto_response_ssst, response_from_mask_ssst)
+from dipy.reconst.csdeconv import (
+    ConstrainedSphericalDeconvModel,
+    auto_response_ssst,
+    response_from_mask_ssst,
+)
 from dipy.data import default_sphere
 from dipy.direction import peaks_from_model
 from dipy.tracking import utils
 from dipy.tracking.local_tracking import LocalTracking
-from dipy.tracking.stopping_criterion import BinaryStoppingCriterion, ActStoppingCriterion
+from dipy.tracking.stopping_criterion import (
+    BinaryStoppingCriterion,
+    ActStoppingCriterion,
+)
 from dipy.tracking.streamline import Streamlines
 from dipy.tracking.tracker import probabilistic_tracking
 from dipy.tracking.utils import seeds_from_mask
@@ -180,6 +188,7 @@ SYNTHSEG_REGIONS = {
     255: "CC",
 }
 
+
 class BrcPipeline(Module):
     """
     Runs the BRC Pipeline
@@ -232,16 +241,24 @@ class BIDSDir(Module):
 
         dti_pa = self.single_inimg("dti", "dti_pa.nii.gz")
         if dti_pa is not None:
-            dti_pa.save(self.outfile("sub-01/ses-01/dwi/sub-01_ses-01_dir-pa_dwi.nii.gz"))
+            dti_pa.save(
+                self.outfile("sub-01/ses-01/dwi/sub-01_ses-01_dir-pa_dwi.nii.gz")
+            )
         dti_ap = self.single_inimg("dti", "dti_ap.nii.gz", warn=False)
         if dti_ap is not None:
-            dti_ap.save(self.outfile("sub-01/ses-01/dwi/sub-01_ses-01_dir-ap_dwi.nii.gz"))
+            dti_ap.save(
+                self.outfile("sub-01/ses-01/dwi/sub-01_ses-01_dir-ap_dwi.nii.gz")
+            )
         dti_lr = self.single_inimg("dti", "dti_lr.nii.gz", warn=False)
         if dti_lr is not None:
-            dti_lr.save(self.outfile("sub-01/ses-01/dwi/sub-01_ses-01_dir-lr_dwi.nii.gz"))
+            dti_lr.save(
+                self.outfile("sub-01/ses-01/dwi/sub-01_ses-01_dir-lr_dwi.nii.gz")
+            )
         dti_rl = self.single_inimg("dti", "dti_rl.nii.gz", warn=False)
         if dti_rl is not None:
-            dti_rl.save(self.outfile("sub-01/ses-01/dwi/sub-01_ses-01_dir-rl_dwi.nii.gz"))
+            dti_rl.save(
+                self.outfile("sub-01/ses-01/dwi/sub-01_ses-01_dir-rl_dwi.nii.gz")
+            )
 
         with open(self.outfile("dataset_description.json"), "w") as f:
             f.write('{"Name" : "diffad dataset", "BIDSVersion" : "1.0.2"}')
@@ -270,7 +287,7 @@ class MRIQC(Module):
                 self.outfile(""),
                 "participant",
                 "--participant-label",
-                "sub-01"
+                "sub-01",
             ],
             logfile="mriqc.log",
         )
@@ -655,12 +672,14 @@ class DtiPreproc(Module):
         dtis = self.inimgs(src, glob)
         if not dtis:
             self.no_data(f"No DTI data found in {src}/{glob}")
-        
+
         dti_files = {}
         for pedir in ("ap", "pa", "lr", "rl"):
             files = [f for f in dtis if f.fname_noext.endswith(f"_{pedir}")]
             if len(files) > 1:
-                LOG.warning(f"Found multiple DTI files for {pedir}: {files} - using first")
+                LOG.warning(
+                    f"Found multiple DTI files for {pedir}: {files} - using first"
+                )
             dti_files[pedir] = None if not files else files[0]
 
         if dti_files["ap"] and dti_files["pa"]:
@@ -695,6 +714,7 @@ class DtiPreproc(Module):
             if down:
                 f.write(f"down,{down}\n")
 
+
 class DtiDenoise(Module):
     """
     Denoising of diffusion data
@@ -714,11 +734,15 @@ class DtiDenoise(Module):
             LOG.info(f"Doing MPPCA denoising of: {dti.fname}")
             denoised_data = mppca(dti.data, patch_radius=10)
             dti.save_derived(
-                denoised_data, self.outfile(f"{dti.fname_noext}_denoised.nii.gz"), copy_bdata=True
+                denoised_data,
+                self.outfile(f"{dti.fname_noext}_denoised.nii.gz"),
+                copy_bdata=True,
             )
 
             rms_diff = np.sqrt((dti.data - denoised_data) ** 2)
-            dti.save_derived(rms_diff, self.outfile(f"{dti.fname_noext}_residuals.nii.gz"))
+            dti.save_derived(
+                rms_diff, self.outfile(f"{dti.fname_noext}_residuals.nii.gz")
+            )
 
 
 class DtiUnring(Module):
@@ -740,7 +764,9 @@ class DtiUnring(Module):
             LOG.info(f"Unringing DTI data: {dti.fname}")
             unringed = gibbs_removal(dti.data)
             dti.save_derived(
-                unringed, self.outfile(f"{dti.fname_noext}_unringed.nii.gz"), copy_bdata=True
+                unringed,
+                self.outfile(f"{dti.fname_noext}_unringed.nii.gz"),
+                copy_bdata=True,
             )
 
 
@@ -759,26 +785,36 @@ class DtiDistCorr(Module):
             self.no_data(f"No DTI data found in {src}/{glob_up}")
 
         if dti_down is None:
-            LOG.warn(f"No DTI down data found in {src}/{glob_down} - distcorr will not be performed")
+            LOG.warn(
+                f"No DTI down data found in {src}/{glob_down} - distcorr will not be performed"
+            )
             dti_up.save(self.outfile("dti_up_distcorr.nii.gz"))
             dti_up.save(self.outfile("dti_distcorr.nii.gz"))
             return
 
         # Copy metadata for distortion corrected output
         for ext in ("json", "bval", "bvec"):
-            shutil.copyfile(dti_up.fpath.replace(".nii.gz", f".{ext}"), self.outfile("dti_up_distcorr.json"))
-            shutil.copyfile(dti_down.fpath.replace(".nii.gz", f".{ext}"), self.outfile("dti_down_distcorr.json"))
+            shutil.copyfile(
+                dti_up.fpath.replace(".nii.gz", f".{ext}"),
+                self.outfile("dti_up_distcorr.json"),
+            )
+            shutil.copyfile(
+                dti_down.fpath.replace(".nii.gz", f".{ext}"),
+                self.outfile("dti_down_distcorr.json"),
+            )
 
         bval_up, bvec_up = dti_up.bval, dti_up.bvec
         bval_down, bvec_down = dti_down.bval, dti_down.bvec
         bval = np.concatenate([bval_up, bval_down], axis=0)
         bvec = np.concatenate([bvec_up, bvec_down], axis=1)
-        shutil.copyfile(dti_up.fpath.replace(".nii.gz", f".json"), self.outfile("dti_distcorr.json"))
+        shutil.copyfile(
+            dti_up.fpath.replace(".nii.gz", f".json"), self.outfile("dti_distcorr.json")
+        )
         np.savetxt(self.outfile("dti_distcorr.bval"), bval, fmt="%.3f")
         np.savetxt(self.outfile("dti_distcorr.bvec"), bvec, fmt="%.6f")
 
-        #t2 = self.single_inimg("flair", "flair.nii.gz")
-        #if t2 is None:
+        # t2 = self.single_inimg("flair", "flair.nii.gz")
+        # if t2 is None:
         #    self.no_data("No T2 data found in flair")
 
         LOG.info("Running TORTOISEProcess_cuda for distortion correction")
@@ -809,8 +845,8 @@ class DtiDistCorr(Module):
                 "0",
                 "--repol",
                 "0",
-                #"-s",
-                #t2.fpath,
+                # "-s",
+                # t2.fpath,
                 "-o",
                 self.outfile("tortoise_output.nii"),
                 "-t",
@@ -821,17 +857,23 @@ class DtiDistCorr(Module):
         if retval != 0:
             self.bad_data(f"TORTOISEProcess_cuda failed with return code {retval}")
 
-        corrected_up = self.single_inimg(self.name, f"temp/{dti_up.fname_noext}_proc_final_temp.nii*")
-        corrected_down = self.single_inimg(self.name, f"temp/{dti_down.fname_noext}_proc_final_temp.nii*")
+        corrected_up = self.single_inimg(
+            self.name, f"temp/{dti_up.fname_noext}_proc_final_temp.nii*"
+        )
+        corrected_down = self.single_inimg(
+            self.name, f"temp/{dti_down.fname_noext}_proc_final_temp.nii*"
+        )
         corrected_up.save(self.outfile("dti_up_distcorr.nii.gz"))
         corrected_down.save(self.outfile("dti_down_distcorr.nii.gz"))
         combined = ImageFile(self.outfile("tortoise_output.nii"), warn_json=False)
         combined.save(self.outfile("dti_distcorr.nii.gz"))
 
+
 class DtiBrainMask(Module):
     """
     Extract mean B0 and perform brain extraction using mri_synthstrip
     """
+
     def __init__(self, **kwargs):
         Module.__init__(self, "brainmask", deps=["distcorr"], **kwargs)
 
@@ -845,7 +887,9 @@ class DtiBrainMask(Module):
         # Extract mean B0
         b0s = dti.bval < self.pipeline.options.b0_threshold
         if not np.any(b0s):
-            self.no_data(f"No B0 volumes found in the DTI data (bval < {self.pipeline.options.b0_threshold})")
+            self.no_data(
+                f"No B0 volumes found in the DTI data (bval < {self.pipeline.options.b0_threshold})"
+            )
         b0_volumes = dti.data[..., b0s]
         dti.save_derived(b0_volumes, self.outfile("b0.nii.gz"))
         mean_b0 = np.mean(b0_volumes, axis=-1)
@@ -854,19 +898,29 @@ class DtiBrainMask(Module):
 
         # Brain extraction using mri_synthstrip
         LOG.info("Running mri_synthstrip for brain extraction on mean B0")
-        self.runcmd([
-            "mri_synthstrip",
-            "-i", mean_b0_path,
-            "-o", self.outfile("b0_brain.nii.gz"),
-            "-m", self.outfile("b0_brain_mask.nii.gz"),
-        ], logfile="mri_synthstrip_b0.log")
+        self.runcmd(
+            [
+                "mri_synthstrip",
+                "-i",
+                mean_b0_path,
+                "-o",
+                self.outfile("b0_brain.nii.gz"),
+                "-m",
+                self.outfile("b0_brain_mask.nii.gz"),
+            ],
+            logfile="mri_synthstrip_b0.log",
+        )
+
 
 class DtiReg(Module):
     """
     Register DTI to structural data
     """
+
     def __init__(self, **kwargs):
-        Module.__init__(self, "dtireg", deps=["brainmask", "distcorr", "struc"], **kwargs)
+        Module.__init__(
+            self, "dtireg", deps=["brainmask", "distcorr", "struc"], **kwargs
+        )
 
     def process(self):
         src = self.kwargs.get("src", "distcorr")
@@ -910,10 +964,12 @@ class DtiReg(Module):
             self.outfile(f"dti_to_t1_lin.mat"),
         )
 
+
 class DtiEddyCorrection(Module):
     """
     Eddy current motion correction
     """
+
     def __init__(self, **kwargs):
         Module.__init__(self, "eddycorr", deps=["brainmask", "distcorr"], **kwargs)
 
@@ -950,7 +1006,9 @@ class DtiEddyCorrection(Module):
         b0s = dti.bval < self.pipeline.options.b0_threshold
         dti_eddycorr_data[..., b0s] = dwi_data_b0.data
         dti_eddycorr_data[..., ~b0s] = dwi_data_nob0.data
-        dti.save_derived(dti_eddycorr_data, self.outfile("dti_eddycorr.nii.gz"), copy_bdata=True)
+        dti.save_derived(
+            dti_eddycorr_data, self.outfile("dti_eddycorr.nii.gz"), copy_bdata=True
+        )
 
 
 class DtiFitting(Module):
@@ -971,7 +1029,7 @@ class DtiFitting(Module):
         grad_table = gradient_table(
             np.array(dti.bval),
             np.array(dti.bvec),
-            b0_threshold=self.pipeline.options.b0_threshold
+            b0_threshold=self.pipeline.options.b0_threshold,
         )
 
         # FIXME mask data
@@ -993,6 +1051,7 @@ class DtiFitting(Module):
             )
         # dti.save_derived(tensor_fit.model_S0, self.outfile("S0.nii.gz"))
 
+
 class DtiFittingFSL(Module):
     """
     Fitting of diffusion tensor imaging (DTI) data using FSL
@@ -1011,26 +1070,37 @@ class DtiFittingFSL(Module):
         mask = self.single_inimg("brainmask", "b0_brain_mask.nii.gz")
         if mask is None:
             self.no_data("No brain mask found in brainmask/b0_brain_mask.nii.gz")
-            
+
         bval = dti.fpath.replace(".nii.gz", ".bval")
         bvec = dti.fpath.replace(".nii.gz", ".bvec")
-    
-        self.runcmd([
-            "dtifit",
-            "-k", dti.fpath,
-            "-o", self.outfile(""),
-            "-m", mask.fpath,
-            "-r", bvec,
-            "-b", bval,
-        ], logfile="dtifit_fsl.log")
-        
+
+        self.runcmd(
+            [
+                "dtifit",
+                "-k",
+                dti.fpath,
+                "-o",
+                self.outfile(""),
+                "-m",
+                mask.fpath,
+                "-r",
+                bvec,
+                "-b",
+                bval,
+            ],
+            logfile="dtifit_fsl.log",
+        )
+
+
 class FibreModelling(Module):
     """
     Fitting of fibre orientation distributions (FOD) using constrained spherical deconvolution (CSD)
     """
 
     def __init__(self, **kwargs):
-        Module.__init__(self, "fibremod", deps=["eddycorr", "dtifit", "brainmask"], **kwargs)
+        Module.__init__(
+            self, "fibremod", deps=["eddycorr", "dtifit", "brainmask"], **kwargs
+        )
 
     def process(self):
         src = self.kwargs.get("src", "eddycorr")
@@ -1054,16 +1124,18 @@ class FibreModelling(Module):
         gtab = gradient_table(
             np.array(dti.bval),
             np.array(dti.bvec),
-            b0_threshold=self.pipeline.options.b0_threshold
+            b0_threshold=self.pipeline.options.b0_threshold,
         )
 
         # Processing parameters (tune to your data)
-        FA_RESPONSE_THRESH = 0.7 # FA threshold to select single-fiber voxels for response
-        FA_SEED_THRESH = 0.2 # FA threshold for seeding mask
-        SEED_DENSITY = 2 # seeds per voxel (integer)
-        REL_PEAK_THRESH = 0.5 # relative peak threshold for peaks extraction
-        MIN_SEP_ANGLE = 25 # min separation angle (degrees)
-        STEP_SIZE = 0.5 # mm
+        FA_RESPONSE_THRESH = (
+            0.7  # FA threshold to select single-fiber voxels for response
+        )
+        FA_SEED_THRESH = 0.2  # FA threshold for seeding mask
+        SEED_DENSITY = 2  # seeds per voxel (integer)
+        REL_PEAK_THRESH = 0.5  # relative peak threshold for peaks extraction
+        MIN_SEP_ANGLE = 25  # min separation angle (degrees)
+        STEP_SIZE = 0.5  # mm
 
         # ---------------------
         # Estimate response function
@@ -1071,10 +1143,14 @@ class FibreModelling(Module):
         LOG.info(" - Estimating response function using high-FA voxels...")
         # Approach A: use response_from_mask with a high-FA mask
         masked_data = dti.data * (mask.data[..., None] > 0)
-        sf_mask = (fa.data > FA_RESPONSE_THRESH)
+        sf_mask = fa.data > FA_RESPONSE_THRESH
         if sf_mask.sum() < 50:
-            LOG.warn(f"Too few voxels with FA > {FA_RESPONSE_THRESH}. Falling back to auto_response")
-            response, ratio = auto_response_ssst(gtab, masked_data, roi_radius=10, fa_thr=FA_RESPONSE_THRESH)
+            LOG.warn(
+                f"Too few voxels with FA > {FA_RESPONSE_THRESH}. Falling back to auto_response"
+            )
+            response, ratio = auto_response_ssst(
+                gtab, masked_data, roi_radius=10, fa_thr=FA_RESPONSE_THRESH
+            )
         else:
             response, ratio = response_from_mask_ssst(gtab, masked_data, sf_mask)
 
@@ -1095,17 +1171,27 @@ class FibreModelling(Module):
             sphere=default_sphere,
             relative_peak_threshold=REL_PEAK_THRESH,
             min_separation_angle=MIN_SEP_ANGLE,
-            mask=mask.data
+            mask=mask.data,
         )
-        #dti.save_derived(peaks, self.outfile("peaks.nii.gz"))
+        # dti.save_derived(peaks, self.outfile("peaks.nii.gz"))
 
-        LOG.info(" - Preparing seeds from FA thresholded mask and stopping criterion...")
+        LOG.info(
+            " - Preparing seeds from FA thresholded mask and stopping criterion..."
+        )
         seed_mask = np.logical_and(fa.data > FA_SEED_THRESH, mask.data > 0)
-        seeds = utils.seeds_from_mask(seed_mask, density=SEED_DENSITY, affine=dti.affine)
+        seeds = utils.seeds_from_mask(
+            seed_mask, density=SEED_DENSITY, affine=dti.affine
+        )
         stopping_criterion = BinaryStoppingCriterion(seed_mask)
 
         LOG.info(" - Running LocalTracking")
-        streamlines_generator = LocalTracking(peaks, stopping_criterion, seeds=seeds, affine=dti.affine, step_size=STEP_SIZE)
+        streamlines_generator = LocalTracking(
+            peaks,
+            stopping_criterion,
+            seeds=seeds,
+            affine=dti.affine,
+            step_size=STEP_SIZE,
+        )
         streamlines = list(streamlines_generator)
         LOG.info(f" - Generated {len(streamlines)} streamlines")
 
@@ -1113,6 +1199,7 @@ class FibreModelling(Module):
         out_trk = self.outfile("streamlines.trk")
         LOG.info(f" - Saving streamlines to {out_trk} ...")
         save_trk(tractogram, out_trk)
+
 
 class FibreModellingFSL(Module):
     """
@@ -1140,17 +1227,27 @@ class FibreModellingFSL(Module):
         shutil.move(dti.fpath.replace(".nii.gz", ".bval"), self.outfile("bvals"))
         shutil.move(dti.fpath.replace(".nii.gz", ".bvec"), self.outfile("bvecs"))
 
-        self.runcmd([
-            "bedpostx",
-            self.outfile(""),
-            "--nf", "3",
-            "--fudge", "1",
-            "--bi", "3000",
-            "--nj", "1250",
-            "--se", "25",
-            "--model", "2",
-            "--cnonlinear",
-        ], logfile="bedpostx.log")
+        self.runcmd(
+            [
+                "bedpostx",
+                self.outfile(""),
+                "--nf",
+                "3",
+                "--fudge",
+                "1",
+                "--bi",
+                "3000",
+                "--nj",
+                "1250",
+                "--se",
+                "25",
+                "--model",
+                "2",
+                "--cnonlinear",
+            ],
+            logfile="bedpostx.log",
+        )
+
 
 class Tractography(Module):
     """
@@ -1158,7 +1255,9 @@ class Tractography(Module):
     """
 
     def __init__(self, **kwargs):
-        Module.__init__(self, "tract", deps=["eddycorr", "fibremod", "struc", "brainmask"], **kwargs)
+        Module.__init__(
+            self, "tract", deps=["eddycorr", "fibremod", "struc", "brainmask"], **kwargs
+        )
 
     def _std_to_dti(self, img_std):
         lin = self.outfile(f"../struc/reg/std_to_t1_orig_lin.mat")
@@ -1171,24 +1270,28 @@ class Tractography(Module):
             strucref_ants,
             img_std_ants,
             [lin, nonlin],
-            #interpolator="genericLabel",
+            # interpolator="genericLabel",
         )
-        ants.image_write(img_struc_ants, self.outfile(f"{img_std.fname_noext}_struc.nii.gz"))
+        ants.image_write(
+            img_struc_ants, self.outfile(f"{img_std.fname_noext}_struc.nii.gz")
+        )
         dtiref_ants = ants.image_read(self.outfile("../brainmask/mean_b0.nii.gz"))
         img_dti_ants = ants.apply_transforms(
             dtiref_ants,
             img_std_ants,
             [lin, nonlin, dti2struc_lin],
-            whichtoinvert=[False, False, True]
-            #interpolator="genericLabel",
+            whichtoinvert=[False, False, True],
+            # interpolator="genericLabel",
         )
-        ants.image_write(img_dti_ants, self.outfile(f"{img_std.fname_noext}_dti2.nii.gz"))
+        ants.image_write(
+            img_dti_ants, self.outfile(f"{img_std.fname_noext}_dti2.nii.gz")
+        )
         img_dti = ants.apply_transforms(
             dtiref_ants,
             img_struc_ants,
             [dti2struc_lin],
-            whichtoinvert=[True]
-            #interpolator="genericLabel",
+            whichtoinvert=[True],
+            # interpolator="genericLabel",
         )
         dti_outfile = self.outfile(f"{img_std.fname_noext}_dti.nii.gz")
         ants.image_write(img_dti, dti_outfile)
@@ -1197,7 +1300,9 @@ class Tractography(Module):
     def process(self):
         fsldir = os.getenv("FSLDIR")
         if not fsldir:
-            self.bad_data("FSLDIR environment variable not set - FSL is required for tractography")
+            self.bad_data(
+                "FSLDIR environment variable not set - FSL is required for tractography"
+            )
 
         src = self.kwargs.get("src", "eddycorr")
         glob = self.kwargs.get("glob", "dti_eddycorr.nii.gz")
@@ -1212,13 +1317,22 @@ class Tractography(Module):
         tract = "af_l"
         os.makedirs(self.outfile(tract), exist_ok=True)
         xtract_data = os.path.join(fsldir, "data", "xtract_data", "Human")
-        seed = ImageFile(os.path.join(xtract_data, tract, "seed.nii.gz"), warn_json=False)
-        target = ImageFile(os.path.join(xtract_data, tract, "target2.nii.gz"), warn_json=False)
-        #stop = ImageFile(os.path.join(xtract_data, tract, "stop.nii.gz"), warn_json=False)
-        exclude = ImageFile(os.path.join(xtract_data, tract, "exclude.nii.gz"), warn_json=False)
-        stdref = ImageFile(os.path.join(fsldir, "data", "standard", "MNI152_T1_1mm_brain.nii.gz"), warn_json=False)
+        seed = ImageFile(
+            os.path.join(xtract_data, tract, "seed.nii.gz"), warn_json=False
+        )
+        target = ImageFile(
+            os.path.join(xtract_data, tract, "target2.nii.gz"), warn_json=False
+        )
+        # stop = ImageFile(os.path.join(xtract_data, tract, "stop.nii.gz"), warn_json=False)
+        exclude = ImageFile(
+            os.path.join(xtract_data, tract, "exclude.nii.gz"), warn_json=False
+        )
+        stdref = ImageFile(
+            os.path.join(fsldir, "data", "standard", "MNI152_T1_1mm_brain.nii.gz"),
+            warn_json=False,
+        )
         stdref_dti = self._std_to_dti(stdref)
-        
+
         seed = self._std_to_dti(seed)
         target = self._std_to_dti(target)
         exclude = self._std_to_dti(exclude)
@@ -1227,7 +1341,7 @@ class Tractography(Module):
         target.save(self.outfile(f"{tract}/target.nii.gz"))
 
         seeds = seeds_from_mask(seed.data, seed.affine, density=10)
-        #sc = BinaryStoppingCriterion(target.data)
+        # sc = BinaryStoppingCriterion(target.data)
         sc = ActStoppingCriterion(target.data, exclude.data)
 
         streamline_generator = probabilistic_tracking(
@@ -1241,7 +1355,7 @@ class Tractography(Module):
             step_size=0.2,
             return_all=False,
         )
-        
+
         streamlines = list(streamline_generator)
         LOG.info(f" - Generated {len(streamlines)} streamlines")
         tractogram = StatefulTractogram(streamlines, fod.nii, Space.RASMM)
@@ -1251,15 +1365,19 @@ class Tractography(Module):
         save_trk(tractogram, out_trk)
 
         fa = self.single_inimg("dtifit", "FA.nii.gz")
-        FA_SEED_THRESH = 0.2 # FA threshold for seeding mask
+        FA_SEED_THRESH = 0.2  # FA threshold for seeding mask
         mask = self.single_inimg("brainmask", "b0_brain_mask.nii.gz")
-        #SEED_DENSITY = 2 # seeds per voxel (integer)
+        # SEED_DENSITY = 2 # seeds per voxel (integer)
 
-        LOG.info(" - Preparing seeds from FA thresholded mask and stopping criterion...")
+        LOG.info(
+            " - Preparing seeds from FA thresholded mask and stopping criterion..."
+        )
         os.makedirs(self.outfile(f"{tract}_2"), exist_ok=True)
         seed_mask = np.logical_and(fa.data > FA_SEED_THRESH, mask.data > 0)
-        mask.save_derived(seed_mask.astype(np.uint8), self.outfile(f"{tract}_2/seed_mask.nii.gz"))
-        #seeds = utils.seeds_from_mask(seed_mask, density=SEED_DENSITY, affine=dti.affine)
+        mask.save_derived(
+            seed_mask.astype(np.uint8), self.outfile(f"{tract}_2/seed_mask.nii.gz")
+        )
+        # seeds = utils.seeds_from_mask(seed_mask, density=SEED_DENSITY, affine=dti.affine)
         sc = BinaryStoppingCriterion(seed_mask)
 
         streamline_generator = probabilistic_tracking(
@@ -1272,10 +1390,9 @@ class Tractography(Module):
             max_angle=20,
             step_size=0.2,
         )
-        
 
-        #LOG.info(" - Running LocalTracking")
-        #streamlines_generator = LocalTracking(peaks, stopping_criterion, seeds=seeds, affine=dti.affine, step_size=STEP_SIZE)
+        # LOG.info(" - Running LocalTracking")
+        # streamlines_generator = LocalTracking(peaks, stopping_criterion, seeds=seeds, affine=dti.affine, step_size=STEP_SIZE)
         streamlines = list(streamline_generator)
         LOG.info(f" - Generated {len(streamlines)} streamlines")
 
@@ -1283,6 +1400,7 @@ class Tractography(Module):
         out_trk = self.outfile(f"{tract}_2/streamlines.trk")
         LOG.info(f" - Saving streamlines to {out_trk} ...")
         save_trk(tractogram, out_trk)
+
 
 class RegFSL(Module):
     """
@@ -1300,7 +1418,7 @@ class RegFSL(Module):
         dti_b0 = self.single_inimg("brainmask", "mean_b0.nii.gz")
         if dti_b0 is None:
             self.no_data("No DTI mean B0 image found in brainmask/mean_b0.nii.gz")
-        
+
         dti_b0_brain = self.single_inimg("brainmask", "b0_brain.nii.gz")
         if dti_b0_brain is None:
             self.no_data("No DTI brain image found in brainmask/b0_brain.nii.gz")
@@ -1308,92 +1426,149 @@ class RegFSL(Module):
         t1 = self.single_inimg("struc/t1_orig", "t1.nii.gz")
         if t1 is None:
             self.no_data("No T1 image found in struc/t1_orig/t1.nii.gz")
-        
-        #t1_brain = self.single_inimg("struc/t1_orig", "t1_brain.nii.gz")
-        #wmseg = self.single_inimg("struc/seg", "t1_biascorr_wm.nii.gz")
+
+        # t1_brain = self.single_inimg("struc/t1_orig", "t1_brain.nii.gz")
+        # wmseg = self.single_inimg("struc/seg", "t1_biascorr_wm.nii.gz")
 
         LOG.info(" - Converting ANTs transforms to FSL format")
-        self.runcmd([
-            "c3d_affine_tool",
-            "-ref", f"{fsldir}/data/standard/MNI152_T1_1mm.nii.gz",
-            "-src", t1.fpath,
-            "-itk", self.outfile("../struc/reg/t1_orig_to_std_lin.mat"),
-            "-ras2fsl",
-            "-o", self.outfile("t1_to_std_lin_fsl.mat"),
-        ], logfile="c3d_t1_to_std_lin.log")
-        self.runcmd([
-            "c3d_affine_tool",
-            "-ref", t1.fpath,
-            "-src", dti_b0.fpath,
-            "-itk", self.outfile("../dtireg/dti_to_t1_lin.mat"),
-            "-ras2fsl",
-            "-o", self.outfile("dti_to_t1_lin_fsl.mat"),
-        ], logfile="c3d_dti_to_t1_lin_fsl.log")
+        self.runcmd(
+            [
+                "c3d_affine_tool",
+                "-ref",
+                f"{fsldir}/data/standard/MNI152_T1_1mm.nii.gz",
+                "-src",
+                t1.fpath,
+                "-itk",
+                self.outfile("../struc/reg/t1_orig_to_std_lin.mat"),
+                "-ras2fsl",
+                "-o",
+                self.outfile("t1_to_std_lin_fsl.mat"),
+            ],
+            logfile="c3d_t1_to_std_lin.log",
+        )
+        self.runcmd(
+            [
+                "c3d_affine_tool",
+                "-ref",
+                t1.fpath,
+                "-src",
+                dti_b0.fpath,
+                "-itk",
+                self.outfile("../dtireg/dti_to_t1_lin.mat"),
+                "-ras2fsl",
+                "-o",
+                self.outfile("dti_to_t1_lin_fsl.mat"),
+            ],
+            logfile="c3d_dti_to_t1_lin_fsl.log",
+        )
 
-        self.runcmd([
-            "c3d",
-            "-mcs", self.outfile("../struc/reg/t1_orig_to_std_nonlin.nii.gz"),
-            "-oo", self.outfile("warp_x_tmp.nii.gz"), self.outfile("warp_y_tmp.nii.gz"), self.outfile("warp_z_tmp.nii.gz"),
-        ], logfile="c3d_t1_to_std_nonlin.log")
-        self.runcmd([
-            "fslmaths",
-            self.outfile("warp_y_tmp.nii.gz"),
-            "-mul", "-1",
-            self.outfile("warp_y_tmp.nii.gz"),
-        ], logfile="fslmaths_t1_to_std_nonlin.log")
-        self.runcmd([
-            "fslmerge",
-            "-t", self.outfile("t1_to_std_nonlin_fsl.nii.gz"),
-            self.outfile("warp_x_tmp.nii.gz"), self.outfile("warp_y_tmp.nii.gz"), self.outfile("warp_z_tmp.nii.gz"),
-        ], logfile="fslmerge_t1_to_std_nonlin.log")
-        self.runcmd([
-            "convertwarp",
-            "--rel",
-            "-r", f"{fsldir}/data/standard/MNI152_T1_1mm.nii.gz",
-            "-m", self.outfile("t1_to_std_lin_fsl.mat"),
-            "-w", self.outfile("t1_to_std_nonlin_fsl.nii.gz"),
-            "-o", self.outfile("t1_to_std_nonlin_total_fsl.nii.gz"),
-        ], logfile="convertwarp_t1_to_std_total.log")
-        self.runcmd([
-            "invwarp",
-            "-r", t1.fpath,
-            "-w", self.outfile("t1_to_std_nonlin_total_fsl.nii.gz"),
-            "-o", self.outfile("std_to_t1_nonlin_total_fsl.nii.gz"),
-        ], logfile="invwarp_std_to_t1_nonlin_total.log")
+        self.runcmd(
+            [
+                "c3d",
+                "-mcs",
+                self.outfile("../struc/reg/t1_orig_to_std_nonlin.nii.gz"),
+                "-oo",
+                self.outfile("warp_x_tmp.nii.gz"),
+                self.outfile("warp_y_tmp.nii.gz"),
+                self.outfile("warp_z_tmp.nii.gz"),
+            ],
+            logfile="c3d_t1_to_std_nonlin.log",
+        )
+        self.runcmd(
+            [
+                "fslmaths",
+                self.outfile("warp_y_tmp.nii.gz"),
+                "-mul",
+                "-1",
+                self.outfile("warp_y_tmp.nii.gz"),
+            ],
+            logfile="fslmaths_t1_to_std_nonlin.log",
+        )
+        self.runcmd(
+            [
+                "fslmerge",
+                "-t",
+                self.outfile("t1_to_std_nonlin_fsl.nii.gz"),
+                self.outfile("warp_x_tmp.nii.gz"),
+                self.outfile("warp_y_tmp.nii.gz"),
+                self.outfile("warp_z_tmp.nii.gz"),
+            ],
+            logfile="fslmerge_t1_to_std_nonlin.log",
+        )
+        self.runcmd(
+            [
+                "convertwarp",
+                "--rel",
+                "-r",
+                f"{fsldir}/data/standard/MNI152_T1_1mm.nii.gz",
+                "-m",
+                self.outfile("t1_to_std_lin_fsl.mat"),
+                "-w",
+                self.outfile("t1_to_std_nonlin_fsl.nii.gz"),
+                "-o",
+                self.outfile("t1_to_std_nonlin_total_fsl.nii.gz"),
+            ],
+            logfile="convertwarp_t1_to_std_total.log",
+        )
+        self.runcmd(
+            [
+                "invwarp",
+                "-r",
+                t1.fpath,
+                "-w",
+                self.outfile("t1_to_std_nonlin_total_fsl.nii.gz"),
+                "-o",
+                self.outfile("std_to_t1_nonlin_total_fsl.nii.gz"),
+            ],
+            logfile="invwarp_std_to_t1_nonlin_total.log",
+        )
 
-        self.runcmd([
-            "convertwarp",
-            "--relout",
-            "-r", f"{fsldir}/data/standard/MNI152_T1_1mm.nii.gz",
-            "-m", self.outfile("dti_to_t1_lin_fsl.mat"),
-            "-w", self.outfile("t1_to_std_nonlin_total_fsl.nii.gz"),
-            "-o", self.outfile("dti_to_std_nonlin_fsl.nii.gz"),
-        ], logfile="convertwarp_dti_to_std.log")
-        self.runcmd([
-            "invwarp",
-            "-w", self.outfile("dti_to_std_nonlin_fsl.nii.gz"),
-            "-o", self.outfile("std_to_dti_nonlin_fsl.nii.gz"),
-            "-r", dti_b0.fpath,
-        ], logfile="invwarp_std_to_dti.log")
+        self.runcmd(
+            [
+                "convertwarp",
+                "--relout",
+                "-r",
+                f"{fsldir}/data/standard/MNI152_T1_1mm.nii.gz",
+                "-m",
+                self.outfile("dti_to_t1_lin_fsl.mat"),
+                "-w",
+                self.outfile("t1_to_std_nonlin_total_fsl.nii.gz"),
+                "-o",
+                self.outfile("dti_to_std_nonlin_fsl.nii.gz"),
+            ],
+            logfile="convertwarp_dti_to_std.log",
+        )
+        self.runcmd(
+            [
+                "invwarp",
+                "-w",
+                self.outfile("dti_to_std_nonlin_fsl.nii.gz"),
+                "-o",
+                self.outfile("std_to_dti_nonlin_fsl.nii.gz"),
+                "-r",
+                dti_b0.fpath,
+            ],
+            logfile="invwarp_std_to_dti.log",
+        )
 
-        #LOG.info(" - FLIRT DTI to T1 alignment")
-        #self.runcmd([
+        # LOG.info(" - FLIRT DTI to T1 alignment")
+        # self.runcmd([
         #    "flirt",
         #    "-in", dti_b0_brain.fpath,
         #    "-ref", t1_brain.fpath,
         #    "-dof", "6",
         #    "-omat", self.outfile("dti2t1_lin.mat"),
         #    "-out", self.outfile("dti2t1_lin.nii.gz"),
-        #], logfile="flirt_init.log")
+        # ], logfile="flirt_init.log")
 
-        #self.runcmd([
+        # self.runcmd([
         #    "convert_xfm",
         #    "-omat", self.outfile("t12dti_lin.mat"),
         #    "-inverse", self.outfile("dti2t1_lin.mat"),
-        #], logfile="invert_flirt_init.log")
+        # ], logfile="invert_flirt_init.log")
 
-        #LOG.info(" - FLIRT T1 to STD alignment")
-        #self.runcmd([
+        # LOG.info(" - FLIRT T1 to STD alignment")
+        # self.runcmd([
         #    "flirt",
         #    "-interp", "spline",
         #    "-dof", "12",
@@ -1401,10 +1576,10 @@ class RegFSL(Module):
         #    "-ref", f"{fsldir}/data/standard/MNI152_T1_1mm_brain.nii.gz",
         #    "-omat", self.outfile("t1_to_mni_linear.mat"),
         #    "-out", self.outfile("t1_to_mni_linear.nii.gz"),
-        #], logfile="flirt_t1_to_std.log")
-        
-        #LOG.info(" - FNIRT T1 to STD non-linear alignment")
-        #self.runcmd([
+        # ], logfile="flirt_t1_to_std.log")
+
+        # LOG.info(" - FNIRT T1 to STD non-linear alignment")
+        # self.runcmd([
         #    "fnirt",
         #    "--interp", "spline",
         #    "--in", t1_brain.fpath,
@@ -1412,10 +1587,10 @@ class RegFSL(Module):
         #    "--ref", f"{fsldir}/data/standard/MNI152_T1_1mm.nii.gz",
         #    "--cout", self.outfile("t1_to_mni_nonlin_coeff.nii.gz"),
         #    "--iout", self.outfile("t1_to_mni_nonlin.nii.gz"),
-        #], logfile="fnirt_t1_to_std.log")
+        # ], logfile="fnirt_t1_to_std.log")
 
-        #LOG.info(" - FLIRT BBR")
-        #self.runcmd([
+        # LOG.info(" - FLIRT BBR")
+        # self.runcmd([
         #    "flirt",
         #    "-in", dti_b0.fpath,
         #    "-ref", t1.fpath,
@@ -1426,7 +1601,7 @@ class RegFSL(Module):
         #    "-omat", self.outfile("dti2t1_lin.mat"),
         #    "-out", self.outfile("dti2t1_lin.nii.gz"),
         #    "-schedule", f"{fsldir}/etc/flirtsch/bbr.sch",
-        #], logfile="flirt_bbr.log")
+        # ], logfile="flirt_bbr.log")
 
 
 class TractographyFSL(Module):
@@ -1441,16 +1616,31 @@ class TractographyFSL(Module):
         with open(self.outfile("ptxopts.txt"), "w") as f:
             f.write("--savepaths --opathdir")
 
-        self.runcmd([
-            "xtract",
-            "-bpx", self.outfile("../fibremod_fsl.bedpostX"),
-            "-out", self.outfile(""),
-            "-species", "HUMAN",
-            "-stdwarp", os.path.abspath(self.outfile("../reg_fsl/std_to_dti_nonlin_fsl.nii.gz")), os.path.abspath(self.outfile("../reg_fsl/dti_to_std_nonlin_fsl.nii.gz")),
-            "-ptx_options", self.outfile("ptxopts.txt"),
-            "-gpu",
-        ], logfile="xtract.log")
-    #-p ${protdir} -str ${strlist} -queue imgpascalq
+        self.runcmd(
+            [
+                "xtract",
+                "-bpx",
+                self.outfile("../fibremod_fsl.bedpostX"),
+                "-out",
+                self.outfile(""),
+                "-species",
+                "HUMAN",
+                "-stdwarp",
+                os.path.abspath(
+                    self.outfile("../reg_fsl/std_to_dti_nonlin_fsl.nii.gz")
+                ),
+                os.path.abspath(
+                    self.outfile("../reg_fsl/dti_to_std_nonlin_fsl.nii.gz")
+                ),
+                "-ptx_options",
+                self.outfile("ptxopts.txt"),
+                "-gpu",
+            ],
+            logfile="xtract.log",
+        )
+
+    # -p ${protdir} -str ${strlist} -queue imgpascalq
+
 
 __version__ = "0.0.1"
 
@@ -1459,7 +1649,7 @@ NAME = "diffad"
 MODULES = [
     # BrcPipeline(),
     BIDSDir(),
-    #MRIQC(),
+    # MRIQC(),
     StrucPreproc(),
     DtiPreproc(),
     DtiDenoise(),
@@ -1479,4 +1669,6 @@ MODULES = [
 
 
 def add_options(parser):
-    parser.add_argument("--b0-threshold", help="B0 threshold for diffusion data", type=float, default=50)
+    parser.add_argument(
+        "--b0-threshold", help="B0 threshold for diffusion data", type=float, default=50
+    )

@@ -128,6 +128,7 @@ MUSCLE_MAP_ROIS = {
     8162: "right_fibula",
 }
 
+
 class BiasCorr(Module):
     def __init__(self, name="biascorr", **kwargs):
         self._src_dir = kwargs.get("src_dir", "raw_dixon")
@@ -145,7 +146,9 @@ class BiasCorr(Module):
             while len(img_data.shape) < 4:
                 img_data = np.expand_dims(img_data, axis=-1)
 
-            LOG.info(f" - Image with {img_data.shape[3]} volumes, processing each volume separately")
+            LOG.info(
+                f" - Image with {img_data.shape[3]} volumes, processing each volume separately"
+            )
             corrected_vols = []
 
             for vol_idx in range(img_data.shape[3]):
@@ -154,35 +157,53 @@ class BiasCorr(Module):
                 img.save_derived(img_data[..., vol_idx], vol_path)
 
                 # Run bias correction on single volume
-                retval = self.runcmd([
-                    "fast",
-                    "-n", "4",
-                    "-H", "0.1",
-                    "-I", "4",
-                    "-l", "20.0",
-                    "-B",
-                    "-o", self.outfile(f"{img.fname_noext}_vol{vol_idx}_biascorr"),
-                    vol_path,
-                ],
-                logfile=f"{img.fname_noext}_vol{vol_idx}_biascorr.log", raise_on_error=False)
+                retval = self.runcmd(
+                    [
+                        "fast",
+                        "-n",
+                        "4",
+                        "-H",
+                        "0.1",
+                        "-I",
+                        "4",
+                        "-l",
+                        "20.0",
+                        "-B",
+                        "-o",
+                        self.outfile(f"{img.fname_noext}_vol{vol_idx}_biascorr"),
+                        vol_path,
+                    ],
+                    logfile=f"{img.fname_noext}_vol{vol_idx}_biascorr.log",
+                    raise_on_error=False,
+                )
 
                 if retval != 0:
-                    LOG.warning(f" - Bias correction failed for volume {vol_idx + 1} of {img.fname} - using original volume for output")
+                    LOG.warning(
+                        f" - Bias correction failed for volume {vol_idx + 1} of {img.fname} - using original volume for output"
+                    )
                     corrected_vols.append(img_data[..., vol_idx])
                 else:
                     # Load corrected volume
-                    corrected_vol = self.inimg(self.name, f"{img.fname_noext}_vol{vol_idx}_biascorr_restore.nii.gz", src=self.OUTPUT)
+                    corrected_vol = self.inimg(
+                        self.name,
+                        f"{img.fname_noext}_vol{vol_idx}_biascorr_restore.nii.gz",
+                        src=self.OUTPUT,
+                    )
                     data = np.copy(corrected_vol.data)
                     data[~np.isfinite(data)] = 0  # Replace NaNs and infs with 0
                     if np.all(data == 0):
-                        LOG.warning(f" - Corrected volume {vol_idx + 1} of {img.fname} is all zeros after processing - using original volume for output")
+                        LOG.warning(
+                            f" - Corrected volume {vol_idx + 1} of {img.fname} is all zeros after processing - using original volume for output"
+                        )
                         corrected_vols.append(img_data[..., vol_idx])
                     else:
                         corrected_vols.append(data)
 
                 # Remove temporary files
                 os.remove(vol_path)
-                for path in glob(self.outfile(f"{img.fname_noext}_vol{vol_idx}_biascorr*.nii.gz")):
+                for path in glob(
+                    self.outfile(f"{img.fname_noext}_vol{vol_idx}_biascorr*.nii.gz")
+                ):
                     os.remove(path)
 
             # Stack volumes back into 4D
@@ -196,6 +217,7 @@ class BiasCorr(Module):
             output_path = self.outfile(f"{img.fname_noext}_biascorr_restore.nii.gz")
             img.save_derived(stacked_data, output_path)
             LOG.info(f" - Saved stacked output to {output_path}")
+
 
 class RoiZ(Module):
     def __init__(self, name="roiz", **kwargs):
@@ -216,13 +238,19 @@ class RoiZ(Module):
             img_data[:, :, slice_idx:, ...] = 0
             img.save_derived(img_data, self.outfile(img.fname))
 
+
 class FinalDixon(Module):
     def __init__(self, name="final_dixon", **kwargs):
         self._water_src = kwargs.get("water", "dixon_stitched")
         self._fat_src = kwargs.get("fat", "dixon_stitched")
         self._ff_src = kwargs.get("fat_fraction", "dixon_stitched")
         self._t2star_src = kwargs.get("t2star", "dixon_stitched")
-        Module.__init__(self, name, deps=[self._water_src, self._fat_src, self._ff_src, self._t2star_src], **kwargs)
+        Module.__init__(
+            self,
+            name,
+            deps=[self._water_src, self._fat_src, self._ff_src, self._t2star_src],
+            **kwargs,
+        )
 
     def process(self):
         water_img = self.single_inimg(self._water_src, "water.nii.gz")
@@ -235,15 +263,16 @@ class FinalDixon(Module):
                 continue
             img.save(self.outfile(img.fname))
 
+
 MODULES = [
     regrid.Stitch(
         name="dixon_stitched",
         img_dir="raw_dixon",
         imgs={
-            "raw_dixon_series_?_1.nii.gz" : "raw_dixon_1.nii.gz",
-            "raw_dixon_series_?_2.nii.gz" : "raw_dixon_2.nii.gz",
-            "raw_dixon_series_?_3.nii.gz" : "raw_dixon_3.nii.gz",
-            "raw_dixon_series_?.nii.gz" : "raw_dixon.nii.gz"
+            "raw_dixon_series_?_1.nii.gz": "raw_dixon_1.nii.gz",
+            "raw_dixon_series_?_2.nii.gz": "raw_dixon_2.nii.gz",
+            "raw_dixon_series_?_3.nii.gz": "raw_dixon_3.nii.gz",
+            "raw_dixon_series_?.nii.gz": "raw_dixon.nii.gz",
         },
         normalise=False,
     ),
@@ -273,28 +302,12 @@ MODULES = [
         fat_fraction="dixon_classify",
         t2star="dixon_classify",
     ),
-    maps.FatFractionDixon(
-        dixon_dir="dixon_final",
-        ff_name="fat_fraction"
-    ),
-    maps.T2starDixon(
-        dixon_dir="dixon_final",
-        t2star_name="t2star"
-    ),
-    RoiZ(
-        name="dixon_final_roiz",
-        src_dir="dixon_final",
-        proportion=66
-    ),
-
+    maps.FatFractionDixon(dixon_dir="dixon_final", ff_name="fat_fraction"),
+    maps.T2starDixon(dixon_dir="dixon_final", t2star_name="t2star"),
+    RoiZ(name="dixon_final_roiz", src_dir="dixon_final", proportion=66),
     # Segmentations
-    segmentations.LegDixon(
-        dixon_dir="dixon_final"
-    ),
-    segmentations.TotalSeg(
-        src_dir="dixon_final",
-        img_glob="water.nii.gz"
-    ),
+    segmentations.LegDixon(dixon_dir="dixon_final"),
+    segmentations.TotalSeg(src_dir="dixon_final", img_glob="water.nii.gz"),
     segmentations.LegDixonUsingTotalsegFemur(
         name="seg_leg_dixon_femur",
         dixon_dir="dixon_final",
@@ -311,25 +324,23 @@ MODULES = [
         src_dir="dixon_classify",
         src_glob="water.nii.gz",
     ),
-
     # Seg fixes
     seg_postprocess.SegFix(
         seg_dir="seg_leg_dixon",
         fix_dir_option="seg_leg_dixon_fix",
         segs={
-            "calf_muscle_l.nii.gz" : "%s/calf_muscle_l_fixed.nii.gz",
-            "calf_muscle_r.nii.gz" : "%s/calf_muscle_r_fixed.nii.gz",
-            "thigh_muscle_l.nii.gz" : "%s/thigh_muscle_l_fixed.nii.gz",
-            "thigh_muscle_r.nii.gz" : "%s/thigh_muscle_r_fixed.nii.gz",
-            "calf_sat_l.nii.gz" : "%s/calf_sat_l_fixed.nii.gz",
-            "calf_sat_r.nii.gz" : "%s/calf_sat_r_fixed.nii.gz",
-            "thigh_sat_l.nii.gz" : "%s/thigh_sat_l_fixed.nii.gz",
-            "thigh_sat_r.nii.gz" : "%s/thigh_sat_r_fixed.nii.gz",
+            "calf_muscle_l.nii.gz": "%s/calf_muscle_l_fixed.nii.gz",
+            "calf_muscle_r.nii.gz": "%s/calf_muscle_r_fixed.nii.gz",
+            "thigh_muscle_l.nii.gz": "%s/thigh_muscle_l_fixed.nii.gz",
+            "thigh_muscle_r.nii.gz": "%s/thigh_muscle_r_fixed.nii.gz",
+            "calf_sat_l.nii.gz": "%s/calf_sat_l_fixed.nii.gz",
+            "calf_sat_r.nii.gz": "%s/calf_sat_r_fixed.nii.gz",
+            "thigh_sat_l.nii.gz": "%s/thigh_sat_l_fixed.nii.gz",
+            "thigh_sat_r.nii.gz": "%s/thigh_sat_r_fixed.nii.gz",
         },
         map_dir="seg_leg_dixon",
-        map_fname="water.nii.gz"
+        map_fname="water.nii.gz",
     ),
-
     # Statistics
     statistics.AllRoiStats(
         name="muscle_map_stats_nobiascorr",
@@ -348,100 +359,60 @@ MODULES = [
     statistics.SegStats(
         name="stats",
         segs={
-            "calf_muscle_r" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "calf_muscle_r_nodil.nii.gz"
+            "calf_muscle_r": {
+                "dir": "seg_leg_dixon",
+                "glob": "calf_muscle_r_nodil.nii.gz",
             },
-            "calf_muscle_l" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "calf_muscle_l_nodil.nii.gz"
+            "calf_muscle_l": {
+                "dir": "seg_leg_dixon",
+                "glob": "calf_muscle_l_nodil.nii.gz",
             },
-            "thigh_muscle_r" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "thigh_muscle_r_nodil.nii.gz"
+            "thigh_muscle_r": {
+                "dir": "seg_leg_dixon",
+                "glob": "thigh_muscle_r_nodil.nii.gz",
             },
-            "thigh_muscle_l" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "thigh_muscle_l_nodil.nii.gz"
+            "thigh_muscle_l": {
+                "dir": "seg_leg_dixon",
+                "glob": "thigh_muscle_l_nodil.nii.gz",
             },
-            "calf_sat_r" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "calf_sat_r.nii.gz"
+            "calf_sat_r": {"dir": "seg_leg_dixon", "glob": "calf_sat_r.nii.gz"},
+            "calf_sat_l": {"dir": "seg_leg_dixon", "glob": "calf_sat_l.nii.gz"},
+            "thigh_sat_r": {"dir": "seg_leg_dixon", "glob": "thigh_sat_r.nii.gz"},
+            "thigh_sat_l": {"dir": "seg_leg_dixon", "glob": "thigh_sat_l.nii.gz"},
+            "calf_muscle": {"dir": "seg_leg_dixon", "glob": "calf_muscle_nodil.nii.gz"},
+            "calf_sat": {"dir": "seg_leg_dixon", "glob": "calf_sat.nii.gz"},
+            "thigh_muscle": {
+                "dir": "seg_leg_dixon",
+                "glob": "thigh_muscle_nodil.nii.gz",
             },
-            "calf_sat_l" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "calf_sat_l.nii.gz"
+            "thigh_sat": {"dir": "seg_leg_dixon", "glob": "thigh_sat.nii.gz"},
+            "muscle_r": {"dir": "seg_leg_dixon", "glob": "muscle_r_nodil.nii.gz"},
+            "sat_r": {"dir": "seg_leg_dixon", "glob": "sat_r.nii.gz"},
+            "muscle_l": {"dir": "seg_leg_dixon", "glob": "muscle_l_nodil.nii.gz"},
+            "sat_l": {"dir": "seg_leg_dixon", "glob": "sat_l.nii.gz"},
+            "total": {"dir": "seg_leg_dixon", "glob": "total.nii.gz"},
+            "pancreas": {
+                "dir": "totalseg",
+                "glob": "pancreas.nii.gz",
+                "params": ["ff_calc"],
             },
-            "thigh_sat_r" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "thigh_sat_r.nii.gz"
-            },
-            "thigh_sat_l" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "thigh_sat_l.nii.gz"
-            },
-            "calf_muscle" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "calf_muscle_nodil.nii.gz"
-            },
-            "calf_sat" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "calf_sat.nii.gz"
-            },
-            "thigh_muscle" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "thigh_muscle_nodil.nii.gz"
-            },
-            "thigh_sat" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "thigh_sat.nii.gz"
-            },
-            "muscle_r" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "muscle_r_nodil.nii.gz"
-            },
-            "sat_r" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "sat_r.nii.gz"
-            },
-            "muscle_l" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "muscle_l_nodil.nii.gz"
-            },
-            "sat_l" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "sat_l.nii.gz"
-            },
-            "total" : {
-                "dir" : "seg_leg_dixon",
-                "glob" : "total.nii.gz"
-            },
-            "pancreas" : {
-                "dir" : "totalseg",
-                "glob" : "pancreas.nii.gz",
-                "params" : ["ff_calc"]
-            },
-            "liver" : {
-                "dir" : "totalseg",
-                "glob" : "liver.nii.gz",
-                "params" : ["ff_calc"]
-            },
+            "liver": {"dir": "totalseg", "glob": "liver.nii.gz", "params": ["ff_calc"]},
         },
         params={
-            "ff_scanner" : {
-                "dir" : "fat_fraction",
-                "glob" : "fat_fraction_scanner.nii.gz",
-                "limits" : (0, 100),
+            "ff_scanner": {
+                "dir": "fat_fraction",
+                "glob": "fat_fraction_scanner.nii.gz",
+                "limits": (0, 100),
             },
-            "ff_calc" : {
-                "dir" : "fat_fraction",
-                "glob" : "fat_fraction_calc.nii.gz",
-                "limits" : (0, 100),
+            "ff_calc": {
+                "dir": "fat_fraction",
+                "glob": "fat_fraction_calc.nii.gz",
+                "limits": (0, 100),
             },
-            "t2star" : {
-                "dir" : "t2star_dixon",
-                "glob" : "t2star_exclude_fill.nii.gz",
-                "limits" : (2, 100),
+            "t2star": {
+                "dir": "t2star_dixon",
+                "glob": "t2star_exclude_fill.nii.gz",
+                "limits": (2, 100),
             },
         },
         stats=["n", "iqn", "iqmean", "median", "iqstd", "mode", "fwhm"],
@@ -451,100 +422,63 @@ MODULES = [
     statistics.SegStats(
         name="stats_newleg",
         segs={
-            "calf_muscle_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_muscle_r_nodil.nii.gz"
+            "calf_muscle_r": {
+                "dir": "seg_leg_dixon_femur",
+                "glob": "calf_muscle_r_nodil.nii.gz",
             },
-            "calf_muscle_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_muscle_l_nodil.nii.gz"
+            "calf_muscle_l": {
+                "dir": "seg_leg_dixon_femur",
+                "glob": "calf_muscle_l_nodil.nii.gz",
             },
-            "thigh_muscle_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_muscle_r_nodil.nii.gz"
+            "thigh_muscle_r": {
+                "dir": "seg_leg_dixon_femur",
+                "glob": "thigh_muscle_r_nodil.nii.gz",
             },
-            "thigh_muscle_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_muscle_l_nodil.nii.gz"
+            "thigh_muscle_l": {
+                "dir": "seg_leg_dixon_femur",
+                "glob": "thigh_muscle_l_nodil.nii.gz",
             },
-            "calf_sat_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_sat_r.nii.gz"
+            "calf_sat_r": {"dir": "seg_leg_dixon_femur", "glob": "calf_sat_r.nii.gz"},
+            "calf_sat_l": {"dir": "seg_leg_dixon_femur", "glob": "calf_sat_l.nii.gz"},
+            "thigh_sat_r": {"dir": "seg_leg_dixon_femur", "glob": "thigh_sat_r.nii.gz"},
+            "thigh_sat_l": {"dir": "seg_leg_dixon_femur", "glob": "thigh_sat_l.nii.gz"},
+            "calf_muscle": {
+                "dir": "seg_leg_dixon_femur",
+                "glob": "calf_muscle_nodil.nii.gz",
             },
-            "calf_sat_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_sat_l.nii.gz"
+            "calf_sat": {"dir": "seg_leg_dixon_femur", "glob": "calf_sat.nii.gz"},
+            "thigh_muscle": {
+                "dir": "seg_leg_dixon_femur",
+                "glob": "thigh_muscle_nodil.nii.gz",
             },
-            "thigh_sat_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_sat_r.nii.gz"
+            "thigh_sat": {"dir": "seg_leg_dixon_femur", "glob": "thigh_sat.nii.gz"},
+            "muscle_r": {"dir": "seg_leg_dixon_femur", "glob": "muscle_r_nodil.nii.gz"},
+            "sat_r": {"dir": "seg_leg_dixon_femur", "glob": "sat_r.nii.gz"},
+            "muscle_l": {"dir": "seg_leg_dixon_femur", "glob": "muscle_l_nodil.nii.gz"},
+            "sat_l": {"dir": "seg_leg_dixon_femur", "glob": "sat_l.nii.gz"},
+            "total": {"dir": "seg_leg_dixon_femur", "glob": "total_nodil.nii.gz"},
+            "pancreas": {
+                "dir": "totalseg",
+                "glob": "pancreas.nii.gz",
+                "params": ["ff_calc"],
             },
-            "thigh_sat_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_sat_l.nii.gz"
-            },
-            "calf_muscle" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_muscle_nodil.nii.gz"
-            },
-            "calf_sat" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_sat.nii.gz"
-            },
-            "thigh_muscle" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_muscle_nodil.nii.gz"
-            },
-            "thigh_sat" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_sat.nii.gz"
-            },
-            "muscle_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "muscle_r_nodil.nii.gz"
-            },
-            "sat_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "sat_r.nii.gz"
-            },
-            "muscle_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "muscle_l_nodil.nii.gz"
-            },
-            "sat_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "sat_l.nii.gz"
-            },
-            "total" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "total_nodil.nii.gz"
-            },
-            "pancreas" : {
-                "dir" : "totalseg",
-                "glob" : "pancreas.nii.gz",
-                "params" : ["ff_calc"]
-            },
-            "liver" : {
-                "dir" : "totalseg",
-                "glob" : "liver.nii.gz",
-                "params" : ["ff_calc"]
-            },
+            "liver": {"dir": "totalseg", "glob": "liver.nii.gz", "params": ["ff_calc"]},
         },
         params={
-            "ff_scanner" : {
-                "dir" : "fat_fraction",
-                "glob" : "fat_fraction_scanner.nii.gz",
-                "limits" : (0, 100),
+            "ff_scanner": {
+                "dir": "fat_fraction",
+                "glob": "fat_fraction_scanner.nii.gz",
+                "limits": (0, 100),
             },
-            "ff_calc" : {
-                "dir" : "fat_fraction",
-                "glob" : "fat_fraction_calc.nii.gz",
-                "limits" : (0, 100),
+            "ff_calc": {
+                "dir": "fat_fraction",
+                "glob": "fat_fraction_calc.nii.gz",
+                "limits": (0, 100),
             },
-            "t2star" : {
-                "dir" : "t2star_dixon",
-                "glob" : "t2star_exclude_fill.nii.gz",
-                "limits" : (2, 100),
+            "t2star": {
+                "dir": "t2star_dixon",
+                "glob": "t2star_exclude_fill.nii.gz",
+                "limits": (2, 100),
             },
         },
         stats=["n", "iqn", "iqmean", "median", "iqstd", "mode", "fwhm"],
@@ -553,100 +487,60 @@ MODULES = [
     statistics.SegStats(
         name="stats_newleg_dil",
         segs={
-            "calf_muscle_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_muscle_r.nii.gz"
+            "calf_muscle_r": {
+                "dir": "seg_leg_dixon_femur",
+                "glob": "calf_muscle_r.nii.gz",
             },
-            "calf_muscle_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_muscle_l.nii.gz"
+            "calf_muscle_l": {
+                "dir": "seg_leg_dixon_femur",
+                "glob": "calf_muscle_l.nii.gz",
             },
-            "thigh_muscle_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_muscle_r.nii.gz"
+            "thigh_muscle_r": {
+                "dir": "seg_leg_dixon_femur",
+                "glob": "thigh_muscle_r.nii.gz",
             },
-            "thigh_muscle_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_muscle_l.nii.gz"
+            "thigh_muscle_l": {
+                "dir": "seg_leg_dixon_femur",
+                "glob": "thigh_muscle_l.nii.gz",
             },
-            "calf_sat_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_sat_r.nii.gz"
+            "calf_sat_r": {"dir": "seg_leg_dixon_femur", "glob": "calf_sat_r.nii.gz"},
+            "calf_sat_l": {"dir": "seg_leg_dixon_femur", "glob": "calf_sat_l.nii.gz"},
+            "thigh_sat_r": {"dir": "seg_leg_dixon_femur", "glob": "thigh_sat_r.nii.gz"},
+            "thigh_sat_l": {"dir": "seg_leg_dixon_femur", "glob": "thigh_sat_l.nii.gz"},
+            "calf_muscle": {"dir": "seg_leg_dixon_femur", "glob": "calf_muscle.nii.gz"},
+            "calf_sat": {"dir": "seg_leg_dixon_femur", "glob": "calf_sat.nii.gz"},
+            "thigh_muscle": {
+                "dir": "seg_leg_dixon_femur",
+                "glob": "thigh_muscle.nii.gz",
             },
-            "calf_sat_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_sat_l.nii.gz"
+            "thigh_sat": {"dir": "seg_leg_dixon_femur", "glob": "thigh_sat.nii.gz"},
+            "muscle_r": {"dir": "seg_leg_dixon_femur", "glob": "muscle_r.nii.gz"},
+            "sat_r": {"dir": "seg_leg_dixon_femur", "glob": "sat_r.nii.gz"},
+            "muscle_l": {"dir": "seg_leg_dixon_femur", "glob": "muscle_l.nii.gz"},
+            "sat_l": {"dir": "seg_leg_dixon_femur", "glob": "sat_l.nii.gz"},
+            "total": {"dir": "seg_leg_dixon_femur", "glob": "total.nii.gz"},
+            "pancreas": {
+                "dir": "totalseg",
+                "glob": "pancreas.nii.gz",
+                "params": ["ff_calc"],
             },
-            "thigh_sat_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_sat_r.nii.gz"
-            },
-            "thigh_sat_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_sat_l.nii.gz"
-            },
-            "calf_muscle" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_muscle.nii.gz"
-            },
-            "calf_sat" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "calf_sat.nii.gz"
-            },
-            "thigh_muscle" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_muscle.nii.gz"
-            },
-            "thigh_sat" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "thigh_sat.nii.gz"
-            },
-            "muscle_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "muscle_r.nii.gz"
-            },
-            "sat_r" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "sat_r.nii.gz"
-            },
-            "muscle_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "muscle_l.nii.gz"
-            },
-            "sat_l" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "sat_l.nii.gz"
-            },
-            "total" : {
-                "dir" : "seg_leg_dixon_femur",
-                "glob" : "total.nii.gz"
-            },
-            "pancreas" : {
-                "dir" : "totalseg",
-                "glob" : "pancreas.nii.gz",
-                "params" : ["ff_calc"]
-            },
-            "liver" : {
-                "dir" : "totalseg",
-                "glob" : "liver.nii.gz",
-                "params" : ["ff_calc"]
-            },
+            "liver": {"dir": "totalseg", "glob": "liver.nii.gz", "params": ["ff_calc"]},
         },
         params={
-            "ff_scanner" : {
-                "dir" : "fat_fraction",
-                "glob" : "fat_fraction_scanner.nii.gz",
-                "limits" : (0, 100),
+            "ff_scanner": {
+                "dir": "fat_fraction",
+                "glob": "fat_fraction_scanner.nii.gz",
+                "limits": (0, 100),
             },
-            "ff_calc" : {
-                "dir" : "fat_fraction",
-                "glob" : "fat_fraction_calc.nii.gz",
-                "limits" : (0, 100),
+            "ff_calc": {
+                "dir": "fat_fraction",
+                "glob": "fat_fraction_calc.nii.gz",
+                "limits": (0, 100),
             },
-            "t2star" : {
-                "dir" : "t2star_dixon",
-                "glob" : "t2star_exclude_fill.nii.gz",
-                "limits" : (2, 100),
+            "t2star": {
+                "dir": "t2star_dixon",
+                "glob": "t2star_exclude_fill.nii.gz",
+                "limits": (2, 100),
             },
         },
         stats=["n", "iqn", "iqmean", "median", "iqstd", "mode", "fwhm"],
@@ -656,4 +550,6 @@ MODULES = [
 
 
 def add_options(parser):
-    parser.add_argument("--seg-leg-dixon-fix", help="Directory containing fixed leg masks")
+    parser.add_argument(
+        "--seg-leg-dixon-fix", help="Directory containing fixed leg masks"
+    )
