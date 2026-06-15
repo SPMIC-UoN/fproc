@@ -9,6 +9,7 @@ from fsort.image_file import ImageFile
 from fproc.options import ArgumentParser
 from fproc.pipeline import Pipeline
 from fproc.module import Module, StatsModule
+from fproc.modules import statistics
 
 __version__ = "0.0.1"
 
@@ -205,6 +206,7 @@ class ShapeMetrics(Module):
             "seg_liver_dixon",
             "seg_pancreas_t1w",
             "seg_spleen_dixon",
+            "seg_lungs_dixon",
         ]:
             segimgs = self.inimgs("qpdata", f"{seg}.nii.gz")
             if not segimgs:
@@ -230,6 +232,95 @@ class ShapeMetrics(Module):
         with open(self.outfile("shape_metrics.csv"), "w") as f:
             for name, value in stats.items():
                 f.write(f"{name},{value}\n")
+
+
+class RadiomicsKidney(statistics.Radiomics):
+    def __init__(self):
+        statistics.Radiomics.__init__(
+            self,
+            name="radiomics_kidney",
+            params={
+                "t1" : {"dir" : "../qpdata", "fname" : "t1_kidney_molli.nii.gz", "minval" : 200, "maxval" : 1400, "vol" : 0},
+            },
+            segs = {
+                "kidney_cortex" : {
+                    "dir" : "../qpdata",
+                    "glob" : "*cortex*clean.nii.gz",
+                },
+                "kidney_medulla" : {
+                    "dir" : "../qpdata",
+                    "glob" : "*medulla*clean.nii.gz",
+                },
+            },  
+            features={
+                "firstorder" : ["90Percentile", "TotalEnergy"],
+            },
+            image_types=[
+                "Original"
+            ],
+        )
+
+class RadiomicsPancreas(statistics.Radiomics):
+    def __init__(self):
+        statistics.Radiomics.__init__(
+            self,
+            name="radiomics_pancreas",
+            params={
+                "t1" : {"dir" : "../qpdata", "fname" : "t1_pancreas_molli.nii.gz", "minval" : 200, "maxval" : 1400, "vol" : 0},
+            },
+            segs = {
+                "pancreas" : {"dir" : "../qpdata", "fname" : "seg_pancreas_t1w.nii.gz"},
+            },  
+            features={
+                "firstorder" : ["90Percentile", "TotalEnergy"],
+            },
+            image_types=[
+                "Original"
+            ],
+        )
+
+class RadiomicsLiverSpleen(statistics.Radiomics):
+    def __init__(self):
+        statistics.Radiomics.__init__(
+            self,
+            name="radiomics_liver_spleen",
+            params={
+                "t1" : {"dir" : "../qpdata", "fname" : "t1_liver_molli.nii.gz", "minval" : 200, "maxval" : 1400, "vol" : 0},
+            },
+            segs = {
+                "liver" : {"dir" : "../qpdata", "fname" : "seg_liver_dixon.nii.gz"},
+                "spleen" : {"dir" : "../qpdata", "fname" : "seg_spleen_dixon.nii.gz"},
+            },  
+            features={
+                "firstorder" : ["90Percentile", "TotalEnergy"],
+            },
+            image_types=[
+                "Original"
+            ],
+        )
+
+class RadiomicsLung(statistics.Radiomics):
+    def __init__(self):
+        statistics.Radiomics.__init__(
+            self,
+            name="lung_radiomics",
+            params={
+                "water_dixon" : {"dir" : "../preproc", "glob" : "*/nifti/water.nii.gz"},
+            },
+            segs = {
+                "lung" : {"dir" : "../qpdata", "fname" : "seg_lungs_dixon.nii.gz"},
+            },  
+            features={
+                "firstorder" : ["Uniformity"],
+                "glcm" : ["Autocorrelation", "DifferenceVariance", "ClusterTendency"],
+                "glszm" : ["ZonePercentage", "ZoneEntropy"],
+                "glrlm" : ["RunPercentage", "RunEntropy"],
+                "ngtdm" : ["Coarseness"],
+            },
+            image_types=[
+                "Original"
+            ],
+        )
 
 class Stats(StatsModule):
     def __init__(self):
@@ -320,7 +411,11 @@ MODULES = [
     VAT(),
     ASAT(),
     ShapeMetrics(),
-    MolliHr()
+    MolliHr(),
+    RadiomicsKidney(),
+    RadiomicsPancreas(),
+    RadiomicsLiverSpleen(),
+    RadiomicsLung(),
 ]
 
 class DemistifiPostprocArgumentParser(ArgumentParser):
