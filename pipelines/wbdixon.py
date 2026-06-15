@@ -15,7 +15,7 @@ NAME = "wbdixon"
 
 MODULES = [
     # Maps
-    maps.FatFractionDixon(dixon_dir="", ff_name="ff"),
+    maps.FatFractionDixon(dixon_dir="", ff_name="ff", ff_calc_name="ff_calc"),
     maps.T2starDixon(dixon_dir=""),
 
     # Segmentations
@@ -118,12 +118,12 @@ MODULES = [
             "pancreas" : {
                 "dir" : "totalseg",
                 "glob" : "pancreas.nii.gz",
-                "params" : ["ff_scanner", "ff_calc"]
+                "params" : ["ff_calc"]
             },
             "liver" : {
                 "dir" : "totalseg",
                 "glob" : "liver.nii.gz",
-                "params" : ["ff_scanner", "ff_calc"]
+                "params" : ["ff_calc"]
             },
         },
         params={
