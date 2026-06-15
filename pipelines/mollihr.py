@@ -434,6 +434,7 @@ class T1Moco(Module):
     def process(self):
         t1_dir = self.kwargs.get("t1_dir", "t1_molli_5")
         t1_glob = self.kwargs.get("t1_glob", "*_%i_*t1_map.nii.gz")
+        t1_vol = self.kwargs.get("t1_vol", None)
         t1_maps = []
         t1_ref = None
         for n in range(1, 21):
@@ -442,7 +443,7 @@ class T1Moco(Module):
                 t1_maps.append(t1_map)
             else:
                 break
-        
+
             # Check consistent
             if t1_map.shape != t1_maps[0].shape:
                 self.no_data(f"T1 map {t1_map.fname} has different shape than first T1 map {t1_maps[0].fname} - aborting")
@@ -466,11 +467,28 @@ class T1Moco(Module):
         if t1_ref is None:
             self.no_data(f"No T1 maps found in {t1_dir} with 60 bpm and 35 degree flip angle")
 
-        t1_ref_data = t1_ref.data.squeeze(-1) if len(t1_ref.data.shape) == 4 else t1_ref.data
-        t1_data_3d = [t1_map.data.squeeze(-1) if len(t1_map.data.shape) == 4 else t1_map.data for t1_map in t1_maps]
+        if t1_vol is not None:
+            t1_ref_data = t1_ref.data[..., t1_vol]
+            t1_data_3d = [t1_map.data[..., t1_vol] for t1_map in t1_maps]
+        else:
+            t1_ref_data = t1_ref.data.squeeze(-1) if len(t1_ref.data.shape) == 4 else t1_ref.data
+            t1_data_3d = [t1_map.data.squeeze(-1) if len(t1_map.data.shape) == 4 else t1_map.data for t1_map in t1_maps]
         t1_data_stacked = np.stack(t1_data_3d, axis=-1)
-        t1_ref.save(self.outfile("t1_ref.nii.gz"))
+        t1_ref.save_derived(t1_ref_data, self.outfile("t1_ref.nii.gz"))
         t1_ref.save_derived(t1_data_stacked, self.outfile("t1_data_stacked.nii.gz"))
+
+        seg_dir = self.kwargs.get("seg_dir", "seg_kidney_t1_molli_5_clean")
+        if self.kwargs.get("mask", False):
+            LOG.info("Getting kidney mask from ref img")
+            kidney_mask = self.single_inimg(seg_dir, f"kidney*_{t1_ref.fname_noext}_all_t1.nii.gz", src=self.OUTPUT)
+            if kidney_mask is None:
+                self.no_data(f"No kidney mask found in {seg_dir} for T1 reference {t1_ref.fname_noext}")
+            LOG.info(f" - Masking using kidney_mask {kidney_mask.fname}")
+            import scipy.ndimage
+            kidney_mask = scipy.ndimage.binary_dilation(kidney_mask.data, structure=np.ones((3, 3, 3)), iterations=2)
+            t1_ref.save_derived(kidney_mask, self.outfile("kidney_mask.nii.gz"))
+        else:
+            kidney_mask = None
 
         LOG.info(f" - Doing slicewise MoCo on stacked T1 data")
         num_slices = t1_ref.shape[2]
@@ -480,6 +498,8 @@ class T1Moco(Module):
         for sl_idx in range(num_slices):
             def _ref_slice(*args, **kwargs):
                 slice_data = t1_ref_data[..., sl_idx]
+                if kidney_mask is not None:
+                    slice_data = slice_data * kidney_mask[..., sl_idx]
                 fit = np.repeat(slice_data[...,np.newaxis], len(t1_maps), axis=-1)
                 return fit, np.expand_dims(np.zeros_like(slice_data), axis=-1)
 
@@ -505,7 +525,6 @@ class T1Moco(Module):
         LOG.info(f" - Saved MoCo def field")
 
         LOG.info(f" - Copying kidney segs from reference into output")
-        seg_dir = self.kwargs.get("seg_dir", "seg_kidney_t1_molli_5_clean")
         segs = self.inimgs(seg_dir, f"kidney*_{t1_ref.fname_noext}*.nii.gz", src=self.OUTPUT)
         for seg in segs:
             fname = seg.fname.replace("_" + t1_ref.fname_noext, "")
@@ -597,9 +616,14 @@ MODULES = [
     seg_postprocess.KidneyT1Clean(name="seg_kidney_t1_molli_5_clean", srcdir="seg_kidney_t1_molli_5", t1_map_srcdir="t1_molli_5", t2w=False),
     seg_postprocess.KidneyT1Clean(name="seg_kidney_t1_molli_7_clean", srcdir="seg_kidney_t1_molli_7", t1_map_srcdir="t1_molli_7", t2w=False),
     # Alignment of T1maps
-    T1Moco(name="seg_kidney_t1_scanner_moco_vol", t1_dir="t1", t1_glob="t1_map_%i.nii.gz", seg_dir="seg_kidney_t1_clean"),
-    T1Moco(name="seg_kidney_t1_molli_5_moco_vol", t1_dir="t1_molli_5_thresh", t1_glob="*_%i_5_t1_map.nii.gz", seg_dir="seg_kidney_t1_molli_5_clean"),
-    T1Moco(name="seg_kidney_t1_molli_7_moco_vol", t1_dir="t1_molli_7_thresh", t1_glob="*_%i_t1_map.nii.gz", seg_dir="seg_kidney_t1_molli_7_clean"),
+    T1Moco(name="seg_kidney_t1_scanner_moco", t1_dir="t1", t1_glob="t1_map_%i.nii.gz", seg_dir="seg_kidney_t1_clean"),
+    T1Moco(name="seg_kidney_t1_molli_5_moco", t1_dir="t1_molli_5", t1_glob="*_%i_5_t1_map.nii.gz", seg_dir="seg_kidney_t1_molli_5_clean", use_t1_thresh=True),
+    T1Moco(name="seg_kidney_t1_molli_7_moco", t1_dir="t1_molli_7", t1_glob="*_%i_t1_map.nii.gz", seg_dir="seg_kidney_t1_molli_7_clean", use_t1_thresh=True),
+    T1Moco(name="seg_kidney_t1_scanner_moco_mask", t1_dir="t1", t1_glob="t1_map_%i.nii.gz", seg_dir="seg_kidney_t1_clean", mask=True),
+    T1Moco(name="seg_kidney_t1_molli_5_moco_mask", t1_dir="t1_molli_5", t1_glob="*_%i_5_t1_map.nii.gz", seg_dir="seg_kidney_t1_molli_5_clean", mask=True, use_t1_thresh=True),
+    T1Moco(name="seg_kidney_t1_molli_7_moco_mask", t1_dir="t1_molli_7", t1_glob="*_%i_t1_map.nii.gz", seg_dir="seg_kidney_t1_molli_7_clean", mask=True, use_t1_thresh=True),
+    T1Moco(name="seg_kidney_t1_molli_5_moco_molliraw", t1_dir="molli_raw_5", t1_glob="*_%i_5*.nii.gz", seg_dir="seg_kidney_t1_molli_5_clean", t1_vol=4),
+    T1Moco(name="seg_kidney_t1_molli_7_moco_molliraw", t1_dir="../fort/molli_raw", t1_glob="*_%i*.nii.gz", seg_dir="seg_kidney_t1_molli_7_clean", t1_vol=6),
     # Statistics
     SegStats(),
     SegStatsMolli5(),
