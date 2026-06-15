@@ -98,6 +98,7 @@ kwargs = {
             'fproc=fproc.main:main',
             'fproc-combine=fproc.combine:main',
             'fproc-flatten=fproc.flatten:main',
+            'fproc-postrun=fproc.postrun:main',
         ],
     },
     'classifiers' : [
