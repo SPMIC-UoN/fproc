@@ -1,3 +1,9 @@
+# Go totalseg only but leave radiomics and param interrogations???
+# t2w kidney stats make left/right for FF - DONE
+# r2star conversion from dixon t2star - DONE
+# drop interrogation of t2w kidney, but split kidney_dixon l/r DONE
+# t1 radiomics split cortex/medulla left/right DONE
+
 import glob
 import logging
 import os
@@ -59,18 +65,130 @@ class T1SE(Module):
             LOG.info(f" - Saving SE T1 map from {t1.fname}")
             t1.save(self.outfile("t1.nii.gz"))
 
-class Radiomics(statistics.Radiomics):
+
+class KidneyRadiomics(statistics.Radiomics):
+    # THis is needed for spleen pancreas and liver, and kidney cortex/medulla
+    # just TE and 90%ile original model only
+    # in actual demistifi as well
+    # for resus we have kidnely molli, others will not have these so won't have kidney
     def __init__(self):
         statistics.Radiomics.__init__(
             self,
+            name="kidney_radiomics",
             params={
-                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "minval" : 200, "maxval" : 1400},
-                "t1_se" : {"dir" : "t1_se", "fname" : "t1.nii.gz", "minval" : 200, "maxval" : 1400},
+                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "minval" : 1000, "maxval" : 2500},
+                "t1_se" : {"dir" : "t1_se_mdr_step2_stitch", "fname" : "t1_map.nii.gz", "minval" : 1000, "maxval" : 2500},
+            },
+            segs = {
+                "kidney_cortex_l" : {
+                    "dir" : "seg_kidney_t1_se_clean_native",
+                    "glob" : "*cortex_l*.nii.gz",
+                },
+                "kidney_cortex_r" : {
+                    "dir" : "seg_kidney_t1_se_clean_native",
+                    "glob" : "*cortex_r*.nii.gz",
+                },
+                "kidney_medulla_l" : {
+                    "dir" : "seg_kidney_t1_se_clean_native",
+                    "glob" : "*medulla_l*.nii.gz",
+                },
+                "kidney_medulla_r" : {
+                    "dir" : "seg_kidney_t1_se_clean_native",
+                    "glob" : "*medulla_r*.nii.gz",
+                },
+            },
+            features={
+                "firstorder" : ["90Percentile", "TotalEnergy"],
+            },
+            image_types=[
+                "Original"
+            ],
+        )
+
+class LiverRadiomics(statistics.Radiomics):
+    def __init__(self):
+        statistics.Radiomics.__init__(
+            self,
+            name="liver_radiomics",
+            params={
+                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "minval" : 500, "maxval" : 1300},
+                "t1_se" : {"dir" : "t1_se_mdr_step2_stitch", "fname" : "t1_map.nii.gz", "minval" : 500, "maxval" : 1300},
             },
             segs = {
                 "liver" : {"dir" : "seg_liver_dixon_fix", "fname" : "liver.nii.gz"},
-            }
+            },
+            features={
+                "firstorder" : ["90Percentile", "TotalEnergy"],
+            },
+            image_types=[
+                "Original"
+            ],
         )
+
+
+class SpleenRadiomics(statistics.Radiomics):
+    def __init__(self):
+        statistics.Radiomics.__init__(
+            self,
+            name="spleen_radiomics",
+            params={
+                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "minval" : 900, "maxval" : 1660},
+                "t1_se" : {"dir" : "t1_se_mdr_step2_stitch", "fname" : "t1_map.nii.gz", "minval" : 900, "maxval" : 1660},
+            },
+            segs = {
+                "spleen" : {"dir" : "seg_spleen_dixon", "fname" : "spleen.nii.gz"},
+            },
+            features={
+                "firstorder" : ["90Percentile", "TotalEnergy"],
+            },
+            image_types=[
+                "Original"
+            ],
+        )
+
+class PancreasRadiomics(statistics.Radiomics):
+    def __init__(self):
+        statistics.Radiomics.__init__(
+            self,
+            name="pancreas_radiomics",
+            params={
+                "t1_molli" : {"dir" : "t1_molli", "fname" : "t1_conf.nii.gz", "minval" : 400, "maxval" : 1300},
+                "t1_se" : {"dir" : "t1_se_mdr_step2_stitch", "fname" : "t1_map.nii.gz", "minval" : 400, "maxval" : 1300},
+            },
+            segs = {
+                "pancreas" : {"dir" : "totalseg", "fname" : "pancreas.nii.gz"},
+            },
+            features={
+                "firstorder" : ["90Percentile", "TotalEnergy"],
+            },
+            image_types=[
+                "Original"
+            ],
+        )
+
+class LungRadiomics(statistics.Radiomics):
+    def __init__(self):
+        statistics.Radiomics.__init__(
+            self,
+            name="lung_radiomics",
+            params={
+                "water_dixon" : {"dir" : "../dixon", "fname" : "water.nii.gz"},
+            },
+            segs = {
+                "lung" : {"dir" : "totalseg", "glob" : "*lung*dilated.nii.gz"},
+            },  
+            features={
+                "firstorder" : ["Uniformity"],
+                "glcm" : ["Autocorrelation", "DifferenceVariance", "ClusterTendency"],
+                "glszm" : ["ZonePercentage", "ZoneEntropy"],
+                "glrlm" : ["RunPercentage", "RunEntropy"],
+                "ngtdm" : ["Coarseness"],
+            },
+            image_types=[
+                "Original"
+            ],
+        )
+
 
 class KidneyStats(statistics.SegStats):
     def __init__(self):
@@ -166,8 +284,20 @@ class SegStats(statistics.SegStats):
                     "dir" : "seg_kidney_dixon",
                     "glob" : "kidney.nii.gz"
                 },
-                "pancreas" : {
+                "kidney_dixon_left" : {
+                    "dir" : "seg_kidney_dixon",
+                    "glob" : "kidney_left.nii.gz"
+                },
+                "kidney_dixon_right" : {
+                    "dir" : "seg_kidney_dixon",
+                    "glob" : "kidney_right.nii.gz"
+                },
+                "pancreas_ethrive" : {
                     "dir" : "seg_pancreas_ethrive_fix",
+                    "glob" : "pancreas.nii.gz",
+                },
+                "pancreas" : {
+                    "dir" : "totalseg",
                     "glob" : "pancreas.nii.gz",
                 },
                 "sat" : {
@@ -179,10 +309,6 @@ class SegStats(statistics.SegStats):
                     "dir" : "seg_vat_dixon",
                     "glob" : "vat.nii.gz",
                     "params" : [],
-                },
-                "kidney_t2w" : {
-                    "dir" : "seg_kidney_t2w",
-                    "glob" : "kidney_mask.nii.gz",
                 },
                 "kidney_cortex" : {
                     "dir" : "seg_kidney_t1_se_clean_native",
@@ -213,6 +339,10 @@ class SegStats(statistics.SegStats):
                 "t2star" : {
                     "dir" : "t2star_dixon",
                     "glob" : "t2star_exclude_fill.nii.gz",
+                },
+                "r2star" : {
+                    "dir" : "t2star_dixon",
+                    "glob" : "r2star_t2star_exclude_fill.nii.gz",
                 },
                 "ff" : {
                     "dir" : "fat_fraction",
@@ -451,9 +581,53 @@ MODULES = [
     ),
 
     # Statistics
-    Radiomics(),
+    KidneyRadiomics(),
+    LiverRadiomics(),
+    SpleenRadiomics(),
+    PancreasRadiomics(),
+    LungRadiomics(),
     SegStats(),
     KidneyStats(),
+    statistics.Radiomics(
+        name="shape_metrics_totalseg",
+        deps=["totalseg"],
+        params={
+            "water": {"dir": "dixon_classify", "fname": "water.nii.gz", "src": Module.OUTPUT},
+        },
+        segs={
+            "kidney_l": {
+                "dir": "totalseg",
+                "fname": "*kidney_left*.nii.gz",
+            },
+            "kidney_r": {
+                "dir": "totalseg",
+                "fname": "*kidney_right*.nii.gz",
+            },
+            "spleen": {
+                "dir": "totalseg",
+                "fname": "spleen.nii.gz",
+            },
+            "pancreas": {
+                "dir": "totalseg",
+                "fname": "pancreas.nii.gz",
+            },
+            "liver": {
+                "dir": "totalseg",
+                "fname": "liver.nii.gz",
+            },
+        },
+        features={
+            "shape": [
+                "SurfaceArea",
+                "VoxelVolume",
+                "SurfaceVolumeRatio",
+                "MajorAxisLength",
+                "MinorAxisLength",
+                "Elongation",
+                "Compactness1",
+            ],
+        },
+    ),
 ]
 
 def add_options(parser):
