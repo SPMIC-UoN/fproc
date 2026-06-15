@@ -593,6 +593,147 @@ class LegDixon(Module):
                     self.lightbox(water, mask, f"{name}_water")
 
 
+class MuscleMap(Module):
+    def __init__(self, name="muscle_map", **kwargs):
+        self._src_dir = kwargs.get("src_dir", "dixon")
+        deps = [self._src_dir]
+        Module.__init__(self, name, deps=deps, **kwargs)
+
+    def process(self):
+        src = self.kwargs.get("src", self.OUTPUT)
+        glob = self.kwargs.get("src_glob", "water.nii.gz")
+        img = self.inimg(self._src_dir, glob, src=src)
+        img.save_derived(img.data, self.outfile("input.nii.gz"))
+        cwd = os.getcwd()
+        try:
+            os.chdir(self.outfile(""))
+            self.runcmd(
+                [
+                    "mm_segment",
+                    "-i",
+                    self.outfile("input.nii.gz"),
+                    "-c", "auto",
+                ],
+                logfile=self.outfile("muscle_map.log"),
+            )
+        finally:
+            os.chdir(cwd)
+
+class LegDixonUsingTotalsegFemur(Module):
+    def __init__(self, name="seg_leg_dixon", **kwargs):
+        self._dixon_dir = kwargs.get("dixon_dir", "dixon")
+        self._totalseg_dir = kwargs.get("totalseg_dir", "totalseg")
+        Module.__init__(self, name, deps=[self._dixon_dir, self._totalseg_dir], **kwargs)
+
+    def process(self):
+        fat_glob = self.kwargs.get("fat_glob", "fat.nii.gz")
+        water_glob = self.kwargs.get("water_glob", "water.nii.gz")
+
+        fat = self.single_inimg(self._dixon_dir, fat_glob, src=self.INPUT)
+        water = self.single_inimg(self._dixon_dir, water_glob, src=self.INPUT)
+        if fat is None or water is None:
+            self.no_data(f"Could not find fat/water matching {fat_glob} {water_glob}")
+
+        femur_l_glob = self.kwargs.get("femur_l_glob", "femur_left.nii.gz")
+        femur_l = self.single_inimg(self._totalseg_dir, femur_l_glob, src=self.OUTPUT)
+        femur_r_glob = self.kwargs.get("femur_r_glob", "femur_right.nii.gz")
+        femur_r = self.single_inimg(self._totalseg_dir, femur_r_glob, src=self.OUTPUT)
+        if femur_l is None or femur_r is None:
+            LOG.warning(f"Could not find femur seg in {self._totalseg_dir} - continuing without femur mask")
+            femur_options = []
+        else:
+            femur_l = femur_l.reorient2std()
+            femur_l_data = self.blobs_by_size(femur_l.data)[0]
+            femur_slices = np.where(np.any(femur_l_data > 0, axis=(0, 1)))[0]
+            femur_bottom = femur_slices[0]
+            femur_top = femur_slices[-1]
+            LOG.info(f"Left femur from {femur_bottom} to {femur_top}")
+            LOG.info(str([s for s in femur_slices]))
+            femur_r = femur_r.reorient2std()
+            femur_r_data = self.blobs_by_size(femur_r.data)[0]
+            femur_slices = np.where(np.any(femur_r_data > 0, axis=(0, 1)))[0]
+            femur_bottom = min(femur_slices[0], femur_bottom)  # Take lowest of the two femurs as bottom
+            femur_top = max(femur_slices[-1], femur_top)  # Take highest of the two femurs as top
+            LOG.info(f"Right femur from {femur_bottom} to {femur_top}")
+            LOG.info(str([s for s in femur_slices]))
+            calf_top = femur_bottom + int(0.1 * (femur_top - femur_bottom))  # Add 10% of femur length to top of femur
+            femur_options = ["--thigh-start", str(femur_bottom), "--thigh-end", str(femur_top), "--calf-end", str(calf_top)]
+            LOG.info(f" - calf from 0 to {calf_top}, thigh from {femur_bottom} to {femur_top}")
+
+        fat_reorient_nii = nib.as_closest_canonical(fat.nii).as_reoriented(
+            np.array([[0, 1], [1, 1], [2, 1]])
+        )
+        fat_reorient_nii.to_filename(self.outfile("fat.nii.gz"))
+        water_reorient_nii = nib.as_closest_canonical(water.nii).as_reoriented(
+            np.array([[0, 1], [1, 1], [2, 1]])
+        )
+        water_reorient_nii.to_filename(self.outfile("water.nii.gz"))
+        fat = ImageFile(self.outfile("fat.nii.gz"), warn_json=False)
+        water = ImageFile(self.outfile("water.nii.gz"), warn_json=False)
+
+        outfile = self.outfile("leg.nii.gz")
+        retval = self.runcmd(
+            [
+                "leg_dixon_seg",
+                "--fat", fat.fpath,
+                "--water", water.fpath,
+                "--output", outfile,
+            ] + femur_options,
+            logfile=self.outfile("seg.log"),
+            raise_on_error=True,
+        )
+
+        if retval == 0:
+            seg = ImageFile(outfile, warn_json=False)
+            regions = {
+                "calf_muscle_r": [1],
+                "calf_sat_r": [2],
+                "calf_muscle_l": [3],
+                "calf_sat_l": [4],
+                "thigh_muscle_r": [5],
+                "thigh_sat_r": [6],
+                "thigh_muscle_l": [7],
+                "thigh_sat_l": [8],
+                "calf_muscle": [1, 3],
+                "calf_sat": [2, 4],
+                "thigh_muscle": [5, 7],
+                "thigh_sat": [6, 8],
+                "muscle_r": [1, 5],
+                "sat_r": [2, 6],
+                "muscle_l": [3, 7],
+                "sat_l": [4, 8],
+                "muscle_total": [1, 3, 5, 7],
+                "sat_total": [2, 4, 6, 8],
+                "total": [1, 2, 3, 4, 5, 6, 7, 8],
+            }
+            for name, region_idxs in regions.items():
+                mask = np.zeros_like(seg.data, dtype=np.int8)
+                for idx in region_idxs:
+                    seg_data = (seg.data == idx)
+                    if self.kwargs.get("largest_blob_only", False):
+                        seg_data_orig = seg_data
+                        seg_data = self.blobs_by_size(seg_data)[0]
+                        LOG.info(f" - Keeping only largest blob: original {np.sum(seg_data_orig)} voxels, largest blob {np.sum(seg_data)} voxels")
+                    mask[seg_data] = 1
+                if self.kwargs.get("dilate_muscle_masks", False) and "muscle" in name:  # Apply dilation only to muscle masks
+                    LOG.info(f"Applying dilation to {name}")
+                    seg.save_derived(mask, self.outfile(f"{name}_nodil.nii.gz"))
+                    mask = binary_dilation(mask)
+                if name == "total":
+                    # For the total (muscle + SAT) we want to dilate muscle only
+                    if self.kwargs.get("dilate_muscle_masks", False):
+                        seg.save_derived(mask, self.outfile(f"{name}_nodil.nii.gz"))
+                    muscle_dil = ImageFile(self.outfile("muscle_total.nii.gz"), warn_json=False)
+                    mask = mask | muscle_dil.data.astype(bool)
+                fname = self.outfile(f"{name}.nii.gz")
+                seg.save_derived(mask, fname)
+                mask = ImageFile(fname, warn_json=False)
+                if "sat" in name:
+                    self.lightbox(fat, mask, f"{name}_fat")
+                else:
+                    self.lightbox(water, mask, f"{name}_water")
+
+
 class OrganDixon(Module):
     def __init__(self, organ, **kwargs):
         self._dixon_dir = kwargs.get("dixon_dir", "dixon")
@@ -983,7 +1124,6 @@ class TotalSeg(Module):
             raise_on_error=True,
         )
 
-        fat_glob = self.kwargs.get("fat_glob", "fat.nii.gz")
         if not fat_glob:
             LOG.info(" - No fat image specified, skipping SAT segmentation")
         else:
