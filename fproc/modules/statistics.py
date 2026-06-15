@@ -61,8 +61,22 @@ class SegStats(Module):
         },
     }
 
-    def __init__(self, name="stats", segs={}, params={}, stats=[], out_name="stats.csv", default_limits=None, multi_mode="combine", allow_rotated=True, seg_volumes=False, overlays=True):
-        Module.__init__(self, name, deps=ALL_MODULES)
+    @staticmethod
+    def _deps_from_dirs(segs, params):
+        deps = []
+        for spec in segs.values():
+            if isinstance(spec, dict) and isinstance(spec.get("dir", None), str) and spec["dir"]:
+                deps.append(spec["dir"])
+        for spec in params.values():
+            if isinstance(spec, dict) and isinstance(spec.get("dir", None), str) and spec["dir"]:
+                deps.append(spec["dir"])
+        return sorted(set(deps))
+
+    def __init__(self, name="stats", segs={}, params={}, stats=[], out_name="stats.csv", default_limits=None, multi_mode="combine", allow_rotated=True, seg_volumes=False, overlays=True, **kwargs):
+        deps = kwargs.pop("deps", None)
+        if deps is None:
+            deps = self._deps_from_dirs(segs, params)
+        Module.__init__(self, name, deps=deps, **kwargs)
         self.segs = segs
         self.params = params
         self.stats = stats
@@ -189,8 +203,12 @@ class SegStats(Module):
     def _add_seg_vols(self, seg, seg_spec, stat_names, values):
         LOG.info(f" - Adding N/volume for segmentation {seg}")
         n, vol = 0, 0
+        roi_id = seg_spec.get("roi_id", None)
         for seg_img in self._imgs(seg_spec):
-            nvox = np.count_nonzero(seg_img.data)
+            if roi_id is None:
+                nvox = np.count_nonzero(seg_img.data)
+            else:
+                nvox = np.count_nonzero(np.isclose(seg_img.data, roi_id))
             n += nvox
             vol += nvox * seg_img.voxel_volume
         stat_names.append(seg + "_n")
@@ -204,6 +222,43 @@ class SegStats(Module):
         if not imgs:
             LOG.warn(f" - No images found matching {globexpr} in {src}/{subdir}")
         return imgs
+
+
+class AllRoiStats(SegStats):
+    """
+    Generate per-label segmentation volumes from labelled ROI images.
+    """
+
+    def __init__(self, name, roi_dir, roi_glob, roi_names=None, **kwargs):
+        self.roi_src = kwargs.pop("roi_src", Module.OUTPUT)
+        self.roi_names = roi_names if roi_names is not None else kwargs.pop("roi_names", None)
+        SegStats.__init__(self, name, **kwargs)
+        self.roi_dir = roi_dir
+        self.roi_glob = roi_glob
+
+    def process(self):
+        roi_imgs = self.inimgs(self.roi_dir, self.roi_glob, src=self.roi_src)
+        self.segs = {}
+        for roi_img in roi_imgs:
+            vals = np.unique(roi_img.data)
+            finite_vals = vals[np.isfinite(vals)]
+            int_vals = finite_vals[np.isclose(finite_vals, np.round(finite_vals))]
+            roi_ids = sorted({int(v) for v in int_vals if int(v) != 0})
+            LOG.info(f" - Found ROI IDs in {roi_img.fname}: {roi_ids}")
+
+            for roi_id in roi_ids:
+                seg_name = f"{roi_img.fname_noext}_{roi_id}"
+                if isinstance(self.roi_names, dict):
+                    seg_name = self.roi_names.get(roi_id, seg_name)
+
+                self.segs[seg_name] = {
+                    "dir": self.roi_dir,
+                    "glob": roi_img.fname,
+                    "src": self.roi_src,
+                    "seg_volumes": True,
+                    "roi_id": roi_id,
+                }
+        super().process()
 
 class Radiomics(Module):
     def __init__(self, name="radiomics", segs={}, params={}, out_name="radiomics.csv", **kwargs):
