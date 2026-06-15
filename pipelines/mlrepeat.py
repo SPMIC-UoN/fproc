@@ -7,25 +7,6 @@ from fproc.modules import segmentations, seg_postprocess, statistics, maps
 
 LOG = logging.getLogger(__name__)
 
-class PancreasSegRestricted(Module):
-    def __init__(self):
-        Module.__init__(self, "seg_pancreas_ethrive_restricted")
-
-    def process(self):
-        seg_orig = self.inimg("seg_pancreas_ethrive_fix_largestblob", "pancreas.nii.gz", is_depfile=True)
-        ff = self.inimg("fat_fraction", "fat_fraction_scanner.nii.gz", is_depfile=True)
-        ff_resamp = self.resample(ff, seg_orig, is_roi=False).get_fdata().squeeze()
-        ff_30 = ff_resamp < 30
-        ff_50 = ff_resamp < 50
-        seg_30 = np.logical_and(seg_orig.data > 0, ff_30)
-        seg_50 = np.logical_and(seg_orig.data > 0, ff_50)
-        LOG.info(" - Saving pancreas masks restricted by fat fraction")
-        seg_orig.save_derived(ff_resamp, self.outfile("fat_fraction.nii.gz"))
-        seg_orig.save_derived(ff_30, self.outfile("fat_fraction_lt_30.nii.gz"))
-        seg_orig.save_derived(ff_50, self.outfile("fat_fraction_lt_50.nii.gz"))
-        seg_orig.save_derived(seg_30, self.outfile("seg_pancreas_ff_lt_30.nii.gz"))
-        seg_orig.save_derived(seg_50, self.outfile("seg_pancreas_ff_lt_50.nii.gz"))
-
 class T1Kidney(Module):
     def __init__(self):
         Module.__init__(self, "t1_kidney")
@@ -36,49 +17,21 @@ class T1Kidney(Module):
         t1_conf = self.inimg("molli_kidney", "t1_conf.nii.gz")
         t1_conf.save(self.outfile("t1_conf.nii.gz"))
 
-class Radiomics(statistics.Radiomics):
-    def __init__(self):
-        statistics.Radiomics.__init__(
-            self,
-            params={
-                "t2star" : {"dir" : "t2star_dixon", "fname" : "t2star_exclude_fill.nii.gz", "minval" : 0},
-                "fat_fraction" : {"dir" : "fat_fraction", "fname" : "fat_fraction_scanner.nii.gz"},
-                "t1" : {"dir" : "t1_kidney", "fname" : "t1_map.nii.gz"},
-            },
-            segs = {
-                "pancreas" : {"dir" : "seg_pancreas_ethrive_fix", "fname" : "pancreas.nii.gz"},
-                "spleen" : {"dir" : "seg_spleen_dixon_102", "fname" : "spleen.nii.gz"},
-                "kidney" : {"dir" : "seg_kidney_t2w", "fname" : "kidney_mask.nii.gz"},
-            }
-        )
-
 class SegStats(statistics.SegStats):
     def __init__(self):
         statistics.SegStats.__init__(
             self, name="stats", 
             segs={
-                "liver_14" : {
-                    "dir" : "seg_liver_dixon_14",
+                "liver" : {
+                    "dir" : "totalseg",
                     "glob" : "liver.nii.gz"
                 },
-                "liver_452" : {
-                    "dir" : "seg_liver_dixon_452",
-                    "glob" : "liver.nii.gz"
-                },
-                "liver_423" : {
-                    "dir" : "seg_liver_dixon_423",
-                    "glob" : "liver.nii.gz"
-                },
-                "liver_427" : {
-                    "dir" : "seg_liver_dixon_427",
-                    "glob" : "liver.nii.gz"
-                },
-                "spleen_102" : {
-                    "dir" : "seg_spleen_dixon_102",
+                "spleen" : {
+                    "dir" : "totalseg",
                     "glob" : "spleen.nii.gz"
                 },
                 "pancreas" : {
-                    "dir" : "seg_pancreas_ethrive_fix",
+                    "dir" : "totalseg",
                     "glob" : "pancreas.nii.gz",
                 },
                 "kidney_cortex_l" : {
@@ -97,17 +50,17 @@ class SegStats(statistics.SegStats):
                     "dir" : "seg_kidney_t1_clean",
                     "glob" : "kidney_medulla_r_t1.nii.gz"
                 },
-                "kidney_left" : {
+                "tkv_left" : {
                     "dir" : "seg_kidney_t2w",
                     "glob" : "kidney_left_kidney.nii.gz"
                 },
-                "kidney_right" : {
+                "tkv_right" : {
                     "dir" : "seg_kidney_t2w",
                     "glob" : "kidney_right_kidney.nii.gz"
                 },
                 "sat" : {
-                    "dir" : "seg_sat_dixon",
-                    "glob" : "sat.nii.gz",
+                    "dir" : "totalseg",
+                    "glob" : "subcutaneous_fat.nii.gz",
                     "params" : [],
                 },
                 "vat" : {
@@ -115,40 +68,16 @@ class SegStats(statistics.SegStats):
                     "glob" : "vat.nii.gz",
                     "params" : [],
                 },
-                "kidney_dixon_422" : {
-                    "dir" : "seg_kidney_dixon_422",
-                    "glob" : "kidney.nii.gz"
+                "kidney_dixon" : {
+                    "dir" : "totalseg",
+                    "glob" : "kidneys.nii.gz"
                 },
-                "kidney_dixon_left_422" : {
-                    "dir" : "seg_kidney_dixon_422",
+                "kidney_dixon_left" : {
+                    "dir" : "totalseg",
                     "glob" : "kidney_left.nii.gz"
                 },
-                "kidney_dixon_right_422" : {
-                    "dir" : "seg_kidney_dixon_422",
-                    "glob" : "kidney_right.nii.gz"
-                },
-                "kidney_dixon_426" : {
-                    "dir" : "seg_kidney_dixon_426",
-                    "glob" : "kidney.nii.gz"
-                },
-                "kidney_dixon_left_426" : {
-                    "dir" : "seg_kidney_dixon_426",
-                    "glob" : "kidney_left.nii.gz"
-                },
-                "kidney_dixon_right_426" : {
-                    "dir" : "seg_kidney_dixon_426",
-                    "glob" : "kidney_right.nii.gz"
-                },
-                "kidney_dixon_450" : {
-                    "dir" : "seg_kidney_dixon_450",
-                    "glob" : "kidney.nii.gz"
-                },
-                "kidney_dixon_left_450" : {
-                    "dir" : "seg_kidney_dixon_450",
-                    "glob" : "kidney_left.nii.gz"
-                },
-                "kidney_dixon_right_450" : {
-                    "dir" : "seg_kidney_dixon_450",
+                "kidney_dixon_right" : {
+                    "dir" : "totalseg",
                     "glob" : "kidney_right.nii.gz"
                 },
                 "kidney_dixon_nofat" : {
@@ -188,6 +117,11 @@ class SegStats(statistics.SegStats):
                     "glob" : "t2star_exclude_fill.nii.gz",
                     "limits" : (2, 100),
                 },
+                "r2star" : {
+                    "dir" : "t2star_dixon",
+                    "glob" : "r2star_t2star_exclude_fill.nii.gz",
+                    "limits" : (10, 500),
+                },
                 "ff" : {
                     "dir" : "fat_fraction",
                     "glob" : "fat_fraction_scanner.nii.gz",
@@ -214,7 +148,7 @@ class SegStats(statistics.SegStats):
                     "glob" : "t1_map.nii.gz",
                 },
             },
-            stats=["n", "iqn", "iqmean", "median", "iqstd", "mode", "fwhm"],
+            stats=["n", "iqn", "iqmean", "median", "iqstd", "perc90", "te", "mode", "fwhm", ],
             seg_volumes=True,
         )
 
@@ -223,7 +157,8 @@ __version__ = "0.0.1"
 NAME = "ML_repeat"
 
 MODULES = [
-    # Parameter maps
+    ## Parameter maps
+
     maps.DixonDerived(),
     maps.FatFractionDixon(),
     maps.T2starDixon(),
@@ -233,69 +168,79 @@ MODULES = [
     CopyModule("b1_cor", in_name="b1"),
     T1Kidney(),
 
-    # Segmentations
+    ## Segmentations
+
     segmentations.BodyDixon(),
-    segmentations.SatDixon(),
-    segmentations.OrganDixon(organ="liver", dixon_dir="../fproc/dixon", name="seg_liver_dixon_14", model_id="14", inputs=["fat", "t2star", "water"]),
-    segmentations.OrganDixon(organ="liver", dixon_dir="../fproc/dixon", name="seg_liver_dixon_452", model_id="452", inputs=["fat", "op", "water"]),
-    segmentations.OrganDixon(organ="liver", dixon_dir="../fproc/dixon", name="seg_liver_dixon_423", model_id="423", inputs=["fat", "water"]),
-    segmentations.OrganDixon(organ="liver", dixon_dir="../fproc/dixon", name="seg_liver_dixon_427", model_id="427", inputs=["ip", "op"]),
-    segmentations.OrganDixon(organ="spleen", dixon_dir="../fproc/dixon", name="seg_spleen_dixon_102", model_id="102", inputs=["fat", "t2star", "water"]),
-    segmentations.OrganDixon(organ="kidney", dixon_dir="../fproc/dixon", name="seg_kidney_dixon_422", model_id="422", inputs=["fat", "fat_fraction", "t2star", "water"]),
-    segmentations.OrganDixon(organ="kidney", dixon_dir="../fproc/dixon", name="seg_kidney_dixon_426", model_id="426", inputs=["fat", "water"]),
-    segmentations.OrganDixon(organ="kidney", dixon_dir="../fproc/dixon", name="seg_kidney_dixon_450", model_id="450", inputs=["fat", "t2star", "water"]),
-    segmentations.PancreasEthrive(),
     segmentations.KidneyT2w(),
     segmentations.KidneyT1(map_dir="../fsort/t1_molli"),
+    seg_postprocess.KidneyT1Clean(),
     segmentations.TotalSeg(
         src_dir="../fsort/dixon",
-        img_glob="water.nii.gz"
+        img_glob="water.nii.gz",
+        dilate=1,
     ),
 
-    # Post-processing of segmentations
-    seg_postprocess.KidneyT1Clean(),
-    seg_postprocess.SegFix(
-        "seg_pancreas_ethrive",
-        fix_dir_option="pancreas_masks",
-        segs={
-            "pancreas.nii.gz" : "%s_*.nii.gz",
-        },
-        map_dir="dixon",
-        map_fname="water.nii.gz"
-    ),
-    seg_postprocess.SegFix(
-        "seg_liver_dixon_14",
-        fix_dir_option="liver_masks",
-        segs={
-            "liver.nii.gz" : "%s_*.nii.gz",
-        },
-        map_dir="dixon",
-        map_fname="water.nii.gz"
-    ),
-    seg_postprocess.LargestBlob("seg_pancreas_ethrive_fix", "pancreas.nii.gz"),
-    PancreasSegRestricted(),
     segmentations.VatDixon(
+        name="seg_vat_dixon",
+        ff_dir="fat_fraction",
         ff_glob="fat_fraction_scanner.nii.gz",
+        body_dir="seg_body_dixon",
+        sat_dir="totalseg",
+        sat_glob="subcutaneous_fat.nii.gz",
         organs={
-            "seg_liver_dixon_14" : "liver.nii.gz",
-            "seg_spleen_dixon_102" : "spleen.nii.gz",
-            "seg_pancreas_ethrive_fix_largestblob" : "pancreas.nii.gz",
-            "seg_kidney_t2w" : "kidney_mask.nii.gz"
-        }
+            "totalseg": "liver.nii.gz",
+            "totalseg": "spleen.nii.gz",
+            "totalseg": "pancreas.nii.gz",
+            "totalseg": "kidneys.nii.gz",
+        },
     ),
     segmentations.KidneyFat(
         name="seg_kidney_fat_dixon",
         ff_dir="fat_fraction",
         ff_glob="fat_fraction_scanner.nii.gz",
-        kidney_seg_dir="seg_kidney_dixon_422",
-        kidney_seg_glob="kidney.nii.gz",
+        kidney_seg_dir="totalseg",
+        kidney_seg_glob="kidneys.nii.gz",
         ff_thresh=15,
     ),
+
     # Statistics
-    Radiomics(),
+    statistics.Radiomics(
+        params={
+            "t2star" : {"dir" : "t2star_dixon", "fname" : "t2star_exclude_fill.nii.gz", "minval" : 0},
+            "fat_fraction" : {"dir" : "fat_fraction", "fname" : "fat_fraction_scanner.nii.gz"},
+            "t1" : {"dir" : "t1_kidney", "fname" : "t1_map.nii.gz"},
+        },
+        segs = {
+            "pancreas" : {"dir" : "totalseg", "fname" : "pancreas.nii.gz"},
+            "spleen" : {"dir" : "totalseg", "fname" : "spleen.nii.gz"},
+            "kidney" : {"dir" : "totalseg", "fname" : "kidneys.nii.gz"},
+        }
+    ),
+    statistics.Radiomics(
+        name="shape_metrics",
+        deps=["totalseg", "fat_fraction"],
+        params={
+            "ff": {"dir": "fat_fraction", "fname": "fat_fraction_scanner.nii.gz"},
+        },
+        segs={
+            "liver" : {"dir" : "totalseg", "fname" : "liver.nii.gz"},
+            "pancreas" : {"dir" : "totalseg", "fname" : "pancreas.nii.gz"},
+            "spleen" : {"dir" : "totalseg", "fname" : "spleen.nii.gz"},
+            "kidney_left" : {"dir" : "totalseg", "fname" : "kidney_left.nii.gz"},
+            "kidney_right" : {"dir" : "totalseg", "fname" : "kidney_right.nii.gz"},
+        },
+        features={
+            "shape": [
+                "SurfaceArea",
+                "VoxelVolume",
+                "SurfaceVolumeRatio",
+                "MajorAxisLength",
+                "MinorAxisLength",
+                "Elongation",
+                "Compactness1",
+            ],
+        },
+    ),
+
     SegStats(),
 ]
-
-def add_options(parser):
-    parser.add_argument("--pancreas-masks", help="Directory containing manual pancreas masks")
-    parser.add_argument("--liver-masks", help="Directory containing manual liver masks")
