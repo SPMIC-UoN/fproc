@@ -85,9 +85,9 @@ class SegStats(Module):
     def __init__(
         self,
         name="stats",
-        segs={},
-        params={},
-        stats=[],
+        segs=None,
+        params=None,
+        stats=None,
         out_name="stats.csv",
         default_limits=None,
         multi_mode="combine",
@@ -96,6 +96,9 @@ class SegStats(Module):
         overlays=True,
         **kwargs,
     ):
+        segs = {} if segs is None else segs
+        params = {} if params is None else params
+        stats = [] if stats is None else stats
         deps = kwargs.pop("deps", None)
         if deps is None:
             deps = self._deps_from_dirs(segs, params)
@@ -174,6 +177,7 @@ class SegStats(Module):
         if seg_overrides:
             seg_spec.update(seg_overrides)
             LOG.debug(f" - Found segmentation overrides: {seg_overrides}: {seg_spec}")
+        roi_id = seg_spec.get("roi_id", None)
 
         voxel_volume = 1.0  # In case there are no parameter images
         param_imgs = self._imgs(param_spec)
@@ -186,8 +190,15 @@ class SegStats(Module):
                     seg_img, param_img, is_roi=True, allow_rotated=self.allow_rotated
                 )
                 res_data = seg_nii_res.get_fdata()
-                orig_count = np.count_nonzero(seg_img.data)
-                res_count = np.count_nonzero(res_data)
+                if roi_id is None:
+                    orig_mask = seg_img.data > 0
+                    res_mask = res_data > 0
+                else:
+                    orig_mask = np.isclose(seg_img.data, roi_id)
+                    res_mask = np.isclose(res_data, roi_id)
+
+                orig_count = np.count_nonzero(orig_mask)
+                res_count = np.count_nonzero(res_mask)
                 n_found += 1 if res_count > 0 else 0
                 LOG.debug(
                     f" - Param {param_img.fname}, Seg {seg_img.fname} count {res_count} orig {orig_count}"
@@ -200,11 +211,12 @@ class SegStats(Module):
                     )
                 if self.multi_mode == "best":
                     if res_count > best_count:
-                        stats_data = [param_img.data[res_data > 0]]
+                        stats_data = [param_img.data[res_mask]]
                         res_niis = [seg_nii_res]
+                        best_count = res_count
                 elif self.multi_mode == "combine":
                     if res_count > 0:
-                        stats_data.append(param_img.data[res_data > 0])
+                        stats_data.append(param_img.data[res_mask])
                         res_niis.append(seg_nii_res)
                 if res_count > 0 and self.overlays:
                     self.lightbox(
@@ -282,16 +294,23 @@ class AllRoiStats(SegStats):
     """
 
     def __init__(self, name, roi_dir, roi_glob, roi_names=None, **kwargs):
+        if "deps" in kwargs:
+            raise TypeError("AllRoiStats does not accept 'deps' in kwargs")
+        if "params" in kwargs:
+            raise TypeError("AllRoiStats does not accept 'params' in kwargs")
+
         self.roi_src = kwargs.pop("roi_src", Module.OUTPUT)
         self.roi_names = (
             roi_names if roi_names is not None else kwargs.pop("roi_names", None)
         )
-        SegStats.__init__(self, name, **kwargs)
+        SegStats.__init__(self, name, deps=[roi_dir], params={}, **kwargs)
         self.roi_dir = roi_dir
         self.roi_glob = roi_glob
 
     def process(self):
         roi_imgs = self.inimgs(self.roi_dir, self.roi_glob, src=self.roi_src)
+        if not roi_imgs:
+            self.no_data(f"No ROI images found matching {self.roi_glob} in {self.roi_dir}")
         self.segs = {}
         for roi_img in roi_imgs:
             vals = np.unique(roi_img.data)
@@ -305,6 +324,17 @@ class AllRoiStats(SegStats):
                 if isinstance(self.roi_names, dict):
                     seg_name = self.roi_names.get(roi_id, seg_name)
 
+                if seg_name in self.segs:
+                    base_name = seg_name
+                    seg_name = f"{base_name}_{roi_img.fname_noext}"
+                    suffix = 2
+                    while seg_name in self.segs:
+                        seg_name = f"{base_name}_{roi_img.fname_noext}_{suffix}"
+                        suffix += 1
+                    LOG.warn(
+                        f" - ROI name collision for '{base_name}' (id {roi_id}); using '{seg_name}'"
+                    )
+
                 self.segs[seg_name] = {
                     "dir": self.roi_dir,
                     "glob": roi_img.fname,
@@ -317,9 +347,16 @@ class AllRoiStats(SegStats):
 
 class Radiomics(Module):
     def __init__(
-        self, name="radiomics", segs={}, params={}, out_name="radiomics.csv", **kwargs
+        self,
+        name="radiomics",
+        segs=None,
+        params=None,
+        out_name="radiomics.csv",
+        **kwargs,
     ):
         Module.__init__(self, name, **kwargs)
+        segs = {} if segs is None else segs
+        params = {} if params is None else params
         self.segs = segs
         self.params = params
         self.out_name = out_name
@@ -579,83 +616,6 @@ class ISNR(Module):
 
                     isnr = snr.Isnr(img.data, img.affine).isnr
                     f.write(f"{img.fname_noext}_isnr,{isnr}\n")
-
-
-# class NumericListMetadata(Module):
-#     def __init__(self, name, **kwargs):
-#         Module.__init__(self, name, **kwargs)
-
-#     def process(self):
-#         srcdir = self.kwargs.get("srcdir", None)
-#         glob = self.kwargs.get("glob", None)
-#         if srcdir is None or glob is None:
-#             self.no_data("Must provide srcdir and glob for metadata extraction")
-
-#         imgs = self.inimgs(srcdir, glob)
-#         if not imgs:
-#             self.no_data(f"No images found in {srcdir} matching {glob}")
-
-#         metadata = self.kwargs.get("metadata", {})
-#         if not metadata:
-#             self.no_data("No metadata fields specified")
-
-#         md_values = {}
-#         for name, spec in metadata.items():
-#             field = spec.get("field", None)
-#             md_type = spec.get("type", float)
-#             md_proc = spec.get("proc", "none")
-#             if not field:
-#                 LOG.warn(f"No field specified for metadata {name} - ignoring")
-#                 continue
-#             values = []
-#             for img in imgs:
-#                 value = getattr(img, field, None)
-#                 if value is None:
-#                     LOG.warn(f"Metadata field {field} not found in {img.fname}")
-#                     continue
-
-#                 try:
-#                     value = md_type(value)
-#                     if md_type in (list, tuple):
-#                         values.extend(list(value))
-#                     else:
-#                         values.append(value)
-#                 except:
-#                     LOG.warn(f"Could not interpret field {img.fname}.{field} as type{md_type}")
-
-#             if md_proc == "none":
-#                 md_value = ",".join([str(v) for v in values])
-#             elif md_proc == "first":
-#                 md_value = values[0]
-#             elif md_proc == "unique":
-
-#                 md_values[name] = values
-
-
-#         hr = np.unique(hr)
-#         if len(hr) > 1:
-#             LOG.warn(f"Multiple heart rates found: {hr} - using first")
-#             hr = hr[0]
-#         elif len(hr) == 0:
-#             LOG.warn("No heart rate found")
-#             hr = ""
-#         else:
-#             hr = hr[0]
-#             LOG.info(f" - Found heart rate: {hr}")
-
-#         tis = sorted([float(v) for v in np.unique(tis) if float(v) > 0])
-#         LOG.info(f" - Found TIs: {tis}")
-#         if len(tis) >= 3:
-#             ti1, ti2, spacing = tis[0], tis[1], tis[2] - tis[0]
-#         else:
-#             ti1, ti2, spacing = "", "", ""
-#             LOG.warn(f"Not enough TIs found: {tis}")
-
-#         with open(self.outfile("t1_molli_md.csv"), "w") as f:
-#             f.write(f"t1_molli_heart_rate,{hr}\n")
-#             f.write(f"t1_molli_ti1,{ti1}\n")
-#             f.write(f"t1_molli_ti2,{ti2}\n")
-#             f.write(f"t1_molli_ti_spacing,{spacing}\n")
 
 
 class KidneyCystStats(Module):
