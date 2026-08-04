@@ -78,7 +78,7 @@ class Stitch(Module):
                         f"Image {img.fname} has {img_data.shape[3]} volumes but expected {nvols} based on previous images - cannot stitch"
                     )
 
-            if norm:
+            if norm is True:
                 # If we are normalising, update the per-volume intensity range
                 for vol in range(nvols):
                     pc1, pc99 = np.percentile(img_data[..., vol], 1), np.percentile(
@@ -100,7 +100,7 @@ class Stitch(Module):
             while len(img_data.shape) < 4:
                 img_data = np.expand_dims(img_data, axis=-1)
 
-            if norm:
+            if norm is True:
                 for vol in range(nvols):
                     p1, p99 = np.percentile(img_data[..., vol], 1), np.percentile(
                         img_data[..., vol], 99
@@ -117,6 +117,18 @@ class Stitch(Module):
                     img_data[..., vol] = (img_data[..., vol] - p1) * (t99 - t1) / (
                         p99 - p1
                     ) + t1
+            elif norm and isinstance(norm, str):
+                # Normalise using metadata attribute
+                norm_factor = getattr(img, norm, None)
+                if norm_factor is None:
+                    LOG.warning(
+                        f" - Image {img.fname} does not have metadata attribute {norm} - skipping normalisation"
+                    )
+                else:
+                    LOG.info(
+                        f" - Normalising {img.fname} using {norm} metadata attribute with value {norm_factor}"
+                    )
+                    img_data /= norm_factor**2
 
             if crop_slices:
                 LOG.info(
