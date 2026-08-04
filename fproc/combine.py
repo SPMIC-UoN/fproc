@@ -57,8 +57,8 @@ def main():
             continue
         subj_stats = OrderedDict()
         subj_stats["subjid"] = subjid
-        add_csv_stats(subjid, subjdir, csv_paths, subj_stats)
-        add_kv_stats(subjid, subjdir, paths, subj_stats)
+        add_csv_stats(subjid, subjdir, csv_paths, subj_stats, allow_text=options.allow_text)
+        add_kv_stats(subjid, subjdir, paths, subj_stats, allow_text=options.allow_text)
         stats.append(subj_stats)
 
     with open(options.output, "w") as f:
@@ -79,7 +79,7 @@ def main():
             writer.writerow(row_pruned)
 
 
-def add_kv_stats(subjid, subjdir, paths, subj_stats):
+def add_kv_stats(subjid, subjdir, paths, subj_stats, allow_text=False):
     for rel_path in paths:
         fglob = os.path.join(subjdir, rel_path)
         fnames = list(glob.glob(fglob))
@@ -115,12 +115,15 @@ def add_kv_stats(subjid, subjdir, paths, subj_stats):
                                 parts[1].strip() != ""
                                 and parts[0].strip().lower() != "subjid"
                             ):
-                                LOG.warn(
-                                    f" - {fname}: Ignoring line: {line}, value was not blank, date or numeric"
-                                )
+                                if allow_text:
+                                    subj_stats[parts[0]] = parts[1]
+                                else:
+                                    LOG.warn(
+                                        f" - {fname}: Ignoring line: {line}, value was not blank, date or numeric"
+                                    )
 
 
-def add_csv_stats(subjid, subjdir, paths, subj_stats):
+def add_csv_stats(subjid, subjdir, paths, subj_stats, allow_text=False):
     for rel_path in paths:
         fglob = os.path.join(subjdir, rel_path)
         fnames = list(glob.glob(fglob))
@@ -157,6 +160,9 @@ def add_csv_stats(subjid, subjdir, paths, subj_stats):
                     subj_stats[k] = float(v)
                 except ValueError:
                     if k.strip().lower() != "subjid":
-                        LOG.warn(
-                            f" - {fname}: Ignoring key: {k}, value {v} was not numeric"
-                        )
+                        if allow_text:
+                            subj_stats[k] = v
+                        else:
+                            LOG.warn(
+                                f" - {fname}: Ignoring key: {k}, value {v} was not numeric"
+                            )
