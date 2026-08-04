@@ -138,6 +138,12 @@ class StatsCombineArgumentParser(argparse.ArgumentParser):
             help="If specified, columns will be ignored if there are no nonzero values for any subject",
         )
         self.add_argument(
+            "--allow-text",
+            action="store_true",
+            default=False,
+            help="If specified, allow text values (not just numeric/date)",
+        )
+        self.add_argument(
             "--overwrite",
             help="Overwrite existing output",
             action="store_true",
