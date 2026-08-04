@@ -34,14 +34,14 @@ class FlirtAlignOnly(Module):
         imgs_to_align = self.inimgs(self._in_dir, self._in_glob, src=self.OUTPUT)
         run_flirt = True
         if not imgs_to_align:
-            LOG.warn(
+            LOG.warning(
                 f" - No image found matching {self._in_dir}/{self._in_glob} - nothing to align"
             )
             run_flirt = False
 
         ref_img = self.single_inimg(self._ref_dir, self._ref_glob, src=self.OUTPUT)
         if ref_img is None:
-            LOG.warn(
+            LOG.warning(
                 f" - No ref image - no alignment will be performed - assuming images already aligned"
             )
             run_flirt = False
@@ -60,7 +60,7 @@ class FlirtAlignOnly(Module):
                 src=self.OUTPUT,
             )
             if weight_mask is None:
-                LOG.warn(
+                LOG.warning(
                     " - No weight mask found - will not be able to use as input weighting"
                 )
             else:
@@ -109,7 +109,7 @@ class FlirtAlignOnly(Module):
                         / weight_mask_res_data.size
                     )
                     if vol_frac_after / vol_frac_before < 0.2:
-                        LOG.warn(
+                          LOG.warning(
                             f" - Weight mask volume fraction reduced by more than 80% - not using"
                         )
                     else:
@@ -118,7 +118,7 @@ class FlirtAlignOnly(Module):
 
                 if (
                     self.kwargs.get("reg_2d", True)
-                    or any([d == 1 for d in img.shape[:3]]) == 1
+                    or any([d == 1 for d in img.shape[:3]])
                 ):
                     LOG.info(" - Using 2D registration")
                     flirt_opts["twod"] = True

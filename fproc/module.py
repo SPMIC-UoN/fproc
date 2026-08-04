@@ -91,7 +91,7 @@ class Module:
             else:
                 raise ModuleError(f" - Expected file {fpath} did not exist")
         else:
-            LOG.debug(f"infile: {fpath}")
+            LOG.info(f"infile: {fpath}")
             return fpath
 
     def infiles(self, dir, globexpr, src=None, is_depfile=False):
