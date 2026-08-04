@@ -57,8 +57,8 @@ class ScanDates(Module):
         if isinstance(dob, list):
             dob = dob[0]
 
-        scan_date = scan_date.lower().split("t")[0]
-        dob = dob.lower().split("t")[0]
+        scan_date = str(scan_date).lower().split("t")[0]
+        dob = str(dob).lower().split("t")[0]
         scan_key = self.kwargs.get("scan_key", "scan_date")
         dob_key = self.kwargs.get("dob_key", "dob")
         with open(self.outfile(f"{self.name}.csv"), "w") as f:
