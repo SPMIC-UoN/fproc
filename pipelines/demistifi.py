@@ -8,7 +8,7 @@ from dbdicom.wrappers.skimage import _volume_features
 from fsort.image_file import ImageFile
 from fproc.options import ArgumentParser
 from fproc.pipeline import Pipeline
-from fproc.module import Module, StatsModule
+from fproc.module import Module
 from fproc.modules import statistics
 
 __version__ = "0.0.1"
@@ -366,9 +366,9 @@ class RadiomicsLung(statistics.Radiomics):
         )
 
 
-class Stats(StatsModule):
+class Stats(statistics.SegStats):
     def __init__(self):
-        StatsModule.__init__(
+        statistics.SegStats.__init__(
             self,
             segs={
                 "cortex_l_nomdr": {
