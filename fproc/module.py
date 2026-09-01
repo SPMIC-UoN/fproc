@@ -8,6 +8,8 @@ import math
 import os
 import shutil
 import subprocess
+import re
+from datetime import datetime
 
 import nibabel as nib
 import numpy as np
@@ -65,7 +67,26 @@ class Module:
         donefile = os.path.join(outdir, "done.txt")
         if os.path.isfile(donefile):
             try:
-                return os.path.getmtime(donefile)
+                # Try to read an explicit timestamp in the done file of the
+                # form '<module> completed at <YYYY-MM-DD HH:MM:SS.SSSS>' and
+                # use that as the completion time. Fall back to file mtime.
+                with open(donefile, "r", encoding="utf-8", errors="ignore") as fh:
+                    text = fh.read()
+                m = re.search(r"(?P<module>.+?)\s+completed at\s+(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)", text)
+                if m:
+                    ts_str = m.group("ts")
+                    try:
+                        dt = datetime.fromisoformat(ts_str)
+                    except Exception:
+                        # Fallback: try without fractional seconds
+                        try:
+                            dt = datetime.strptime(ts_str.split(".")[0], "%Y-%m-%d %H:%M:%S")
+                        except Exception:
+                            LOG.warning("Could not parse timestamp '%s' in %s", ts_str, donefile)
+                            return os.path.getmtime(donefile)
+                    return dt.timestamp()
+                else:
+                    return os.path.getmtime(donefile)
             except Exception as e:
                 LOG.warning(f"Error getting last done time from {donefile}: {e}")
                 return None
@@ -91,7 +112,7 @@ class Module:
             else:
                 raise ModuleError(f" - Expected file {fpath} did not exist")
         else:
-            LOG.info(f"infile: {fpath}")
+            LOG.debug(f"infile: {fpath}")
             return fpath
 
     def infiles(self, dir, globexpr, src=None, is_depfile=False):
