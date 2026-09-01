@@ -12,7 +12,7 @@ COHORTS = [
     ("full cohort", "", os.path.join(STUDYDIR, "subjects_to_report.txt")),
 ]
 
-class NormalizeRawDixon(Module):
+class ScaleRawDixon(Module):
     def __init__(self, name="raw_dixon_norm", **kwargs):
         Module.__init__(self, name, deps=["raw_dixon_singlevols"], **kwargs)
 
@@ -23,24 +23,24 @@ class NormalizeRawDixon(Module):
         for glob, factor in spec.items():
             for img in self.inimgs(dir, glob, src=src):
                 if factor is None:
-                    LOG.info(f" - {img.fname}: no normalization")
+                    LOG.info(f" - {img.fname}: no scaling")
                     img_data = img.data
                 elif isinstance(factor, str):
                     value = getattr(img, factor, 1.0)
-                    LOG.info(f" - {img.fname}: normalization factor = {factor}: {value}")
+                    LOG.info(f" - {img.fname}: scaling factor = {factor}: {value}")
                     img_data = img.data / value
                 elif isinstance(factor, (int, float)):
-                    LOG.info(f" - {img.fname}: normalization factor = {factor}")
+                    LOG.info(f" - {img.fname}: scaling factor = {factor}")
                     img_data = img.data / factor
                 elif isinstance(factor, (list, tuple)):
                     img_data = img.data
                     for f in factor:
                         if isinstance(f, str):
                             value = getattr(img, f, 1.0)
-                            LOG.info(f" - {img.fname}: normalization factor = {f}: {value}")
+                            LOG.info(f" - {img.fname}: scaling factor = {f}: {value}")
                             img_data /= value
                         elif isinstance(f, (int, float)):
-                            LOG.info(f" - {img.fname}: normalization factor = {f}")
+                            LOG.info(f" - {img.fname}: scaling factor = {f}")
                             img_data /= f
                         else:
                             self.bad_data("Invalid factor type: {}".format(type(f)))    
@@ -51,7 +51,7 @@ class NormalizeRawDixon(Module):
 
 
 # Tweak pipeline to rescale dixon images
-MODULES.insert(1, NormalizeRawDixon(
+MODULES.insert(1, ScaleRawDixon(
     spec = {
         "raw_dixon_series_?_1.nii.gz": None,
         "raw_dixon_series_?_2.nii.gz": ["PhilipsRWVSlope", "PhilipsRWVSlope"],
