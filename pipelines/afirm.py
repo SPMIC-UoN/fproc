@@ -12,6 +12,7 @@
 import logging
 import os
 
+from scipy import ndimage
 import numpy as np
 
 from fsort.image_file import ImageFile
@@ -37,7 +38,7 @@ OUTNAME = NAME
 
 COHORTS = [
     ("full cohort", "", None),
-    ("baseline cohort", "baseline_", os.path.join(STUDYDIR, "baseline.txt")),
+    ("baseline cohort", "baseline_", os.path.join(STUDYDIR, "baseline_cohort.txt")),
     ("y2 cohort", "y2_", os.path.join(STUDYDIR, "y2_cohort_20260422.txt")),
 ]
 
@@ -82,6 +83,7 @@ OUTFILES = {
     "shape": [
         "fproc/scan_dates/scan_dates.csv",
         "fproc/seg_kidney_t2w_vols/volumes.csv",
+        "fproc/seg_kidney_t2w_vols_nocyst/volumes.csv",
         "fproc/tkv_shape_metrics/shape_metrics.csv",
         "fproc/tkv_radiomics/radiomics.csv",
         "fproc/wkv_volumes/stats.csv",
@@ -157,6 +159,21 @@ class Stats(statistics.SegStats):
                     "dir": "seg_kidney_t1_clean",
                     "glob": "*_r.nii.gz",
                     "params": ["b1_stim"],
+                },
+                "kidney_dixon": {
+                    "dir": "totalseg_cor",
+                    "glob": "kidneys.nii.gz",
+                    "params": ["ff_lt20"],
+                },
+                "kidney_dixon_l": {
+                    "dir": "totalseg_cor",
+                    "glob": "kidney_left.nii.gz",
+                    "params": ["ff_lt20"],
+                },
+                "kidney_dixon_r": {
+                    "dir": "totalseg_cor",
+                    "glob": "kidney_right.nii.gz",
+                    "params": ["ff_lt20"],
                 },
                 "tkv_l": {
                     "dir": "seg_kidney_t2w_fix",
@@ -252,6 +269,18 @@ class Stats(statistics.SegStats):
                         "kidney_medulla_r": {"dir": "seg_kidney_t1_mdr_clean_native"},
                     },
                 },
+                "t1_molli_mdr_proc": {
+                    "dir": "t1_molli_mdr_stitch",
+                    "glob": "*map*.nii.gz",
+                    "seg_overrides": {
+                        "kidney_cortex_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_cortex_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_cortex": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_medulla": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_medulla_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_medulla_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                    },
+                },
                 "t1_se_nomdr": {
                     "dir": "t1_se_nomdr_stitch",
                     "glob": "*map*.nii.gz",
@@ -304,6 +333,18 @@ class Stats(statistics.SegStats):
                         "kidney_medulla_r": {"dir": "seg_kidney_t1_mdr_clean_native"},
                     },
                 },
+                "mtr_mdr_proc": {
+                    "dir": "mtr",
+                    "glob": "mtr.nii.gz",
+                    "seg_overrides": {
+                        "kidney_cortex_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_cortex_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_cortex": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_medulla": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_medulla_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_medulla_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                    },
+                },
                 "b0": {
                     "dir": "b0",
                     "glob": "b0.nii.gz",
@@ -334,6 +375,12 @@ class Stats(statistics.SegStats):
                 "ff_cor": {
                     "dir": "ff_dixon_cor",
                     "glob": "fat_fraction.nii.gz",
+                },
+                "ff_lt20": {
+                    "dir": "ff_dixon_cor",
+                    "glob": "fat_fraction.nii.gz",
+                    "limits": (0, 20),
+                    "segs": ["kidney_dixon", "kidney_dixon_l", "kidney_dixon_r"]
                 },
                 "ff_ax": {
                     "dir": "ff_dixon_ax",
@@ -1018,6 +1065,147 @@ class DixonCorBest(Module):
                 water_img.save_derived(water_data, self.outfile("water.nii.gz"))
                 fat_img.save_derived(fat_data, self.outfile("fat.nii.gz"))
 
+class T1DataSmoothed(Module):
+    """
+    To MOLLI Philips (DER/NOT/NEW) and GE (CBG) ONLY: Add spatial smoothing of 2 mm (so -s 0.85 in fsl) 
+    to both the scanner generated maps and raw data with fits re-run model, and segmentations done on 
+    smoothed data to estimate metrics from smoothed data
+    """
+
+    def __init__(self, name="t1_data_smoothed", **kwargs):
+        Module.__init__(self, name, **kwargs)
+
+    def process(self):
+        dir = self.kwargs.get("dir", "t1_molli_raw")
+        glob = self.kwargs.get("glob", "t1_molli_raw*.nii.gz")
+        t1_imgs = self.inimgs(dir, glob)
+        if not t1_imgs:
+            self.no_data(f"No raw MOLLI data found in {dir}/{glob}")
+        
+        for img in t1_imgs:
+            if img.vendor in ("philips", "ge"):
+                LOG.info(f" - Smoothing raw MOLLI data for {img.fname} (vendor: {img.vendor})") 
+                sigma = [0.85 / v for v in img.nii.header.get_zooms()[:2]]
+                while len(sigma) < img.data.ndim:
+                    sigma.append(0)
+
+                smoothed_data = ndimage.gaussian_filter(img.data, sigma=sigma)
+            else:
+                LOG.info(f" - Skipping smoothing for {img.fname} (vendor: {img.vendor})")
+                smoothed_data = img.data
+            img.save_derived(smoothed_data, self.outfile(img.fname))
+
+class CortexMedullaPostproc(Module):
+    """
+    Sue/Charlotte's post-processing of cortex/medulla segmentations
+    """
+
+    def __init__(self, name="cortex_medulla_postproc", **kwargs):
+        self.src_dir = kwargs.get("src_dir", "seg_kidney_t1")
+        Module.__init__(self, name, deps=[self.src_dir], **kwargs)
+
+    def process(self):
+        cortex_glob = self.kwargs.get("cortex_glob", "kidney_cortex.nii.gz")
+        medulla_glob = self.kwargs.get("medulla_glob", "kidney_medulla.nii.gz")
+        cortex = self.single_inimg(self.src_dir, cortex_glob, src=self.OUTPUT)
+        medulla = self.single_inimg(self.src_dir, medulla_glob, src=self.OUTPUT)
+        
+        if not cortex or not medulla:
+            self.no_data(
+                f"No cortex/medulla segmentation found in {self.src_dir}/{cortex_glob} or {self.src_dir}/{medulla_glob}"
+            )
+        elif not np.allclose(cortex.affine, medulla.affine):
+            self.no_data(
+                f"Cortex and medulla segmentations have different affines: {cortex.affine} vs {medulla.affine}"
+            )
+        elif not np.allclose(cortex.shape, medulla.shape):
+            self.no_data(
+                f"Cortex and medulla segmentations have different shapes: {cortex.shape} vs {medulla.shape}"
+            )
+
+        LOG.info(f" - Post-processing cortex/medulla segmentations from {cortex.fname} and {medulla.fname}")
+        t1s = self.inimgs("t1_molli", "*.nii.gz", src=self.OUTPUT)
+        vendors = [t1.vendor for t1 in t1s if t1.vendor is not None]
+        vendor = vendors[0] if vendors else None
+        LOG.info(f" - T1 vendor: {vendor}")
+        
+        # sum masks
+        total_mask = np.logical_or(cortex.data > 0, medulla.data > 0).astype(np.int8)
+        medulla.save_derived(total_mask, self.outfile("kidney_total_mask.nii.gz"))
+
+        # Reduce to two largest blobs
+        blobs = self.blobs_by_size(total_mask)
+        total_mask = np.zeros_like(total_mask, dtype=np.int8)
+        for blob in blobs:
+            LOG.info(f" - Blob size: {np.count_nonzero(blob)} voxels")
+
+        for blob in blobs[:2]:
+            total_mask[blob > 0] = 1
+        medulla.save_derived(total_mask, self.outfile("kidney_total_mask_largest2.nii.gz"))
+
+        if vendor in ("philips", "ge"):
+            LOG.info(f" - Skipping erosion for vendor {vendor}")
+            eroded_mask = total_mask
+        else:
+            # Erode with spherical kernel of radius 3mm using image voxel sizes
+            from scipy.ndimage import binary_erosion
+            voxel_sizes = cortex.pixelspacing
+
+            # Radius in mm
+            radius_mm = 3.0
+
+            # Compute radius in voxels along each axis and kernel extents
+            rx = int(np.ceil(radius_mm / voxel_sizes[0]))
+            ry = int(np.ceil(radius_mm / voxel_sizes[1]))
+            rz = int(np.ceil(radius_mm / voxel_sizes[2]))
+            LOG.info(f" - Computing spherical kernel of radius {radius_mm} mm (voxel sizes: {voxel_sizes}) -> kernel extents: ({rx}, {ry}, {rz}) voxels")
+
+            x = (np.arange(-rx, rx + 1) * voxel_sizes[0]).reshape((-1, 1, 1))
+            y = (np.arange(-ry, ry + 1) * voxel_sizes[1]).reshape((1, -1, 1))
+            z = (np.arange(-rz, rz + 1) * voxel_sizes[2]).reshape((1, 1, -1))
+
+            d2 = x * x + y * y + z * z
+            LOG.info(f" - Spherical kernel shape: {d2.shape}, distance squared:\n {d2}")
+            structure = (d2 <= (radius_mm * radius_mm)).astype(np.int8)
+            LOG.info(f" - Eroding total mask with spherical kernel of radius {radius_mm} mm (kernel shape: {structure})")
+
+            eroded_mask = binary_erosion(total_mask, structure=structure).astype(np.int8)
+            medulla.save_derived(eroded_mask, self.outfile("kidney_total_mask_eroded.nii.gz"))
+
+            from scipy.ndimage import distance_transform_edt
+
+            def erode_by_physical_distance(mask, radius_mm, voxel_size):
+                """
+                Erode a binary 3D mask by a specified physical distance.
+                voxel_size is (z, y, x) in mm.
+                """
+                distance = distance_transform_edt(mask, sampling=voxel_size)
+                return distance > radius_mm
+
+            eroded_mask = erode_by_physical_distance(
+                total_mask,
+                radius_mm=radius_mm,
+                voxel_size=voxel_sizes
+            )
+            medulla.save_derived(eroded_mask, self.outfile("kidney_total_mask_eroded2.nii.gz"))
+
+        medulla_data = (eroded_mask - cortex.data).astype(np.int8)
+        medulla_data[medulla_data < 0] = 0
+
+        #cortex_data = np.logical_and(medulla_data == 0, total_mask > 0).astype(np.int8)
+        cortex_data = np.logical_and(cortex.data > 0, total_mask > 0).astype(np.int8)
+
+        cortex.save_derived(cortex_data, self.outfile(cortex.fname))
+        medulla.save_derived(medulla_data, self.outfile(medulla.fname))
+
+        cortex_data_l = self.split_lr(cortex_data, cortex.affine, side="l")
+        cortex.save_derived(cortex_data_l, self.outfile("kidney_cortex_l_t1.nii.gz"))
+        cortex_data_r = self.split_lr(cortex_data, cortex.affine, side="r")
+        cortex.save_derived(cortex_data_r, self.outfile("kidney_cortex_r_t1.nii.gz"))
+        medulla_data_l = self.split_lr(medulla_data, medulla.affine, side="l")
+        medulla.save_derived(medulla_data_l, self.outfile("kidney_medulla_l_t1.nii.gz"))
+        medulla_data_r = self.split_lr(medulla_data, medulla.affine, side="r")
+        medulla.save_derived(medulla_data_r, self.outfile("kidney_medulla_r_t1.nii.gz"))
 
 MODULES = [
     misc.ScanDates(
@@ -1034,9 +1222,11 @@ MODULES = [
     ),
     DixonCorBest(),
     # Parameter maps
+    T1DataSmoothed(name="t1_raw_smoothed", dir="../fsort/t1_molli_raw", glob="t1_molli_raw*.nii.gz"),
+    T1DataSmoothed(name="t1_maps_smoothed", dir="../fsort/t1_molli", glob="t1_*.nii.gz"),
     maps.T1Molli(
         name="t1_molli",
-        molli_dir="../fsort/t1_molli",
+        molli_dir="../fproc/t1_maps_smoothed",
         molli_glob="t1_molli_raw*.nii.gz",
         t1_thresh=(0, 5000),
         tis=[117.0, 201.0, 1117.0, 1201.0, 2117.0, 2201.0, 3117.0, 4117.0],
@@ -1044,7 +1234,7 @@ MODULES = [
     ),
     maps.T1Molli(
         name="t1_molli_mdr",
-        molli_dir="../fsort/t1_molli_raw",
+        molli_dir="../fproc/t1_raw_smoothed",
         molli_glob="t1_molli_raw*.nii.gz",
         mdr=True,
         use_scanner_maps=False,
@@ -1053,7 +1243,7 @@ MODULES = [
     ),
     maps.T1Molli(
         name="t1_molli_nomdr",
-        molli_dir="../fsort/t1_molli_raw",
+        molli_dir="../fproc/t1_raw_smoothed",
         molli_glob="t1_molli_raw*.nii.gz",
         mdr=False,
         use_scanner_maps=False,
@@ -1078,7 +1268,6 @@ MODULES = [
     ),
     maps.T1SE(
         name="t1_se_mdr_step2",
-        deps=["t1_se_mdr"],
         se_dir="t1_se_mdr",
         tis=np.arange(100, 2001, 100),
         tss=53.7,
@@ -1217,6 +1406,12 @@ MODULES = [
             "seg_kidney_dixon_ax": "kidney.nii.gz",
         },
     ),
+    segmentations.TotalSeg(
+        name="totalseg_cor",
+        src_dir="../fproc/dixon_cor_best",
+        dilate=1,
+        csv_suffix="_cor",
+    ),
     segmentations.VatDixon(
         name="seg_vat_dixon_cor_local",
         ff_dir="ff_dixon_cor",
@@ -1229,12 +1424,6 @@ MODULES = [
             "seg_pancreas_ethrive_largestblob": "pancreas.nii.gz",
             "seg_kidney_dixon_cor": "kidney.nii.gz",
         },
-    ),
-    segmentations.TotalSeg(
-        name="totalseg_cor",
-        src_dir="../fproc/dixon_cor_best",
-        dilate=1,
-        csv_suffix="_cor",
     ),
     segmentations.TotalSeg(
         name="totalseg_ax", src_dir="dixon_ax", dilate=1, csv_suffix="_ax"
@@ -1443,6 +1632,25 @@ MODULES = [
         t2w_glob="t2w.nii.gz",
         t2w_src=Module.INPUT,
     ),
+    seg_postprocess.RemoveFromSeg(
+        "seg_kidney_t2w_nocyst",
+        seg_dir="seg_kidney_t2w_fix",
+        segs=[
+            "*left*.nii.gz",
+            "*right*.nii.gz",
+            "*mask*.nii.gz",
+        ],
+        remove_dir="seg_kidney_cyst_t2w_trace",
+        remove_segs=[
+            "kidney_cyst_fixed.nii.gz"
+        ]
+    ),
+    CortexMedullaPostproc(
+        name="seg_kidney_t1_mdr_clean_native_proc",
+        src_dir="seg_kidney_t1_mdr_clean_native",
+        cortex_glob="kidney_cortex_t1.nii.gz",
+        medulla_glob="kidney_medulla_t1.nii.gz",
+    ),
     seg_postprocess.SegVolumes(
         "seg_kidney_t2w_vols",
         seg_dir="seg_kidney_t2w_fix",
@@ -1450,6 +1658,15 @@ MODULES = [
             "kv_left": "*left*.nii.gz",
             "kv_right": "*right*.nii.gz",
             "kv_mask": "*mask*.nii.gz",
+        },
+    ),
+    seg_postprocess.SegVolumes(
+        "seg_kidney_t2w_vols_nocyst",
+        seg_dir="seg_kidney_t2w_nocyst",
+        segs={
+            "kv_left_nocyst": "*left*.nii.gz",
+            "kv_right_nocyst": "*right*.nii.gz",
+            "kv_mask_nocyst": "*mask*.nii.gz",
         },
     ),
     segmentations.KidneyCortexMedullaT2w(
@@ -1511,6 +1728,16 @@ MODULES = [
         ff_thresh=15,
         seg_dir="seg_kidney_pelvis_trace",
         seg_glob="kidney_pelvis*.nii.gz",
+    ),
+    seg_postprocess.SegFix(
+        "seg_kidney_pelvis_fat_trace",
+        fix_dir_option="seg_kidney_pelvis_fat_trace_fix",
+        segs={
+            "kidney_pelvis_left_fat.nii.gz": "%s/*left_fat*fix*.nii.gz",
+            "kidney_pelvis_right_fat.nii.gz": "%s/*right_fat*fix*.nii.gz",
+            "kidney_pelvis_left_nofat.nii.gz": "%s/*left_nofat*fix*.nii.gz",
+            "kidney_pelvis_right_nofat.nii.gz": "%s/*right_nofat*fix*.nii.gz",
+        },
     ),
     seg_postprocess.SplitLR(
         srcdir="seg_kidney_cyst_t2w_trace",
@@ -2094,22 +2321,22 @@ MODULES = [
                 "params": [],
             },
             "kidney_pelvis_fat_l_trace": {
-                "dir": "seg_kidney_pelvis_fat_trace",
+                "dir": "seg_kidney_pelvis_fat_trace_fix",
                 "glob": "kidney_pelvis_left_fat.nii.gz",
                 "params": ["ff"],
             },
             "kidney_pelvis_fat_r_trace": {
-                "dir": "seg_kidney_pelvis_fat_trace",
+                "dir": "seg_kidney_pelvis_fat_trace_fix",
                 "glob": "kidney_pelvis_right_fat.nii.gz",
                 "params": ["ff"],
             },
             "kidney_pelvis_nofat_l_trace": {
-                "dir": "seg_kidney_pelvis_fat_trace",
+                "dir": "seg_kidney_pelvis_fat_trace_fix",
                 "glob": "kidney_pelvis_left_nofat.nii.gz",
                 "params": [],
             },
             "kidney_pelvis_nofat_r_trace": {
-                "dir": "seg_kidney_pelvis_fat_trace",
+                "dir": "seg_kidney_pelvis_fat_trace_fix",
                 "glob": "kidney_pelvis_right_nofat.nii.gz",
                 "params": [],
             },
@@ -2305,4 +2532,7 @@ def add_options(parser):
     )
     parser.add_argument(
         "--seg-organs-trace", help="Directory containing TRACE organ segmentations"
+    )
+    parser.add_argument(
+        "--seg-kidney-pelvis-fat-trace-fix", help="Directory containing TRACE kidney pelvis segmentations"
     )
