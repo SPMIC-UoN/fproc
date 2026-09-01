@@ -5,7 +5,8 @@ import os
 from fsort import ImageFile
 from fproc.options import ArgumentParser
 from fproc.pipeline import Pipeline
-from fproc.module import Module, CopyModule, StatsModule
+from fproc.module import Module, CopyModule
+from fproc.modules import statistics
 
 import numpy as np
 import skimage
@@ -593,9 +594,9 @@ class AdcMap(Module):
                 map.save(self.outfile("adc.nii.gz"))
 
 
-class Stats(StatsModule):
+class Stats(statistics.SegStats):
     def __init__(self):
-        StatsModule.__init__(
+        statistics.SegStats.__init__(
             self,
             name="stats",
             segs={

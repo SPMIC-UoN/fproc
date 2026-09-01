@@ -7,7 +7,8 @@ import scipy
 from fsort.image_file import ImageFile
 from fproc.options import ArgumentParser
 from fproc.pipeline import Pipeline
-from fproc.module import Module, StatsModule
+from fproc.module import Module
+from fproc.modules import statistics as stat_modules
 import fproc.stats as stats
 
 __version__ = "0.0.1"
@@ -234,9 +235,9 @@ class Deformation(Module):
                 stats_file.write(f"{name},{str(value)}\n")
 
 
-class Stats(StatsModule):
+class Stats(stat_modules.SegStats):
     def __init__(self):
-        StatsModule.__init__(
+        stat_modules.SegStats.__init__(
             self,
             segs={
                 "cortex_l_nomdr": {

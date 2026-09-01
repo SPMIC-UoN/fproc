@@ -2,7 +2,7 @@ import logging
 
 from fproc.options import ArgumentParser
 from fproc.pipeline import Pipeline
-from fproc.module import Module, StatsModule
+from fproc.module import Module
 
 import numpy as np
 
