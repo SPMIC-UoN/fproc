@@ -337,7 +337,12 @@ class T1Molli(Module):
                 LOG.info(
                     f" - Processing MOLLI data from {img.fname} using MDR={mdr}, MOLLI corrections={molli}, parameters={parameters}"
                 )
-                if tis_use_md or tis is None:
+                if not img.inversiontimedelay and tis is None:
+                    LOG.warning(
+                        " - No TIs found in metadata and no default provided - skipping this image"
+                    )
+                    continue
+                elif img.inversiontimedelay and tis_use_md:
                     # Consider TIs to be equivalent if they are with 10ms of each other
                     img_tis = (
                         np.array(
