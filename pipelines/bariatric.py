@@ -13,6 +13,24 @@ __version__ = "0.0.1"
 
 LOG = logging.getLogger(__name__)
 
+# Configuration
+NAME = "bariatric"
+STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
+OUTNAME = NAME
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "": [
+        "fproc/stats/stats.csv",
+    ],
+    "totalseg": [
+        "fproc/totalseg/volumes.csv",
+        "fproc/totalseg/volumes_dilated.csv"
+    ],
+}
 
 class PancreasSegEro(Module):
     def __init__(self):
@@ -193,7 +211,17 @@ class SegStats(statistics.SegStats):
                 "kidney_dixon": {
                     "dir": "seg_kidney_dixon",
                     "glob": "kidney.nii.gz",
-                    "params": [],  # Volumes only
+                    "params": ["ff_lt20"],
+                },
+                "kidney_dixon_left": {
+                    "dir": "seg_kidney_dixon",
+                    "glob": "kidney_left.nii.gz",
+                    "params": ["ff_lt20"],
+                },
+                "kidney_dixon_right": {
+                    "dir": "seg_kidney_dixon",
+                    "glob": "kidney_right.nii.gz",
+                    "params": ["ff_lt20"],
                 },
             },
             params={
@@ -206,6 +234,12 @@ class SegStats(statistics.SegStats):
                     "dir": "fat_fraction",
                     "glob": "fat_fraction_scanner.nii.gz",
                     "limits": (0, 100),
+                },
+                "ff_lt20": {
+                    "dir": "fat_fraction",
+                    "glob": "fat_fraction_scanner.nii.gz",
+                    "limits": (0, 20),
+                    "segs": ["kidney_dixon", "kidney_dixon_left", "kidney_dixon_right"],
                 },
                 "t1_liver": {
                     "dir": "t1_liver",
