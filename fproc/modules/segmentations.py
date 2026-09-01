@@ -1195,6 +1195,26 @@ class TotalSeg(Module):
         )
         kidney_left.save_derived(kidney_combined, self.outfile("kidneys.nii.gz"))
 
+        if self.kwargs.get("restrict_torso_fat", True):
+            # Restrict torso_fat to above the femur
+            femur_l = self.single_inimg(self.name, "femur_left.nii.gz", src=self.OUTPUT)
+            femur_r = self.single_inimg(self.name, "femur_right.nii.gz", src=self.OUTPUT)
+            if femur_l is None or femur_r is None:
+                LOG.error(f" - Missing totalseg femur segs - will not restrict torso_fat to above femur")
+                femur_data = None
+            else:
+                femur_data = femur_l.data + femur_r.data
+                torso_fat = self.single_inimg(self.name, "torso_fat.nii.gz", src=self.OUTPUT)
+                if torso_fat is None:
+                    LOG.error(f" - Missing totalseg torso_fat seg - will not restrict torso_fat to above femur")
+                else:
+                    # Find the top slice of the femur
+                    top_slice = np.max(np.where(femur_data > 0)[2])
+                    LOG.info(f" - Top slice of femur: {top_slice}")
+                    torso_fat_data = np.copy(torso_fat.data)
+                    torso_fat_data[:, :, :top_slice, ...] = 0
+                    torso_fat.save_derived(torso_fat_data.astype(np.int8), self.outfile("torso_fat.nii.gz"))
+
         # Generate overlays and calculate volumes
         segs_of_interest = self.kwargs.get("segs", None)
         nifti_files = glob.glob(self.outfile("*.nii.gz"))
