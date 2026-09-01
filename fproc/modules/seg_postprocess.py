@@ -12,7 +12,7 @@ import scipy
 import nibabel as nib
 
 from fsort import ImageFile
-from fproc.module import Module
+from fproc.module import Module, ModuleError
 
 LOG = logging.getLogger(__name__)
 
@@ -569,3 +569,59 @@ class KidneyCystClean(Module):
             )
         else:
             LOG.warn("No T2w map found - will not create lightbox image")
+
+class RemoveFromSeg(Module):
+    def __init__(self, name, seg_dir, segs, remove_dir, remove_segs, **kwargs):
+        if not seg_dir:
+            raise ModuleError(f"No seg_dir provided for RemoveFromSeg {name}")
+        if not segs:
+            raise ModuleError(f"No seg patterns provided for RemoveFromSeg {name}")
+        if not remove_segs:
+            raise ModuleError(f"No remove seg patterns provided for RemoveFromSeg {name}")
+
+        self._name = name
+        self._seg_dir = seg_dir
+        self._segs = segs
+        self._remove_dir = remove_dir
+        self._remove_segs = remove_segs
+        deps = [self._seg_dir]
+        if self._remove_dir:
+            deps.append(self._remove_dir)
+        Module.__init__(self, name, deps=deps, **kwargs)
+
+    def process(self):
+        for seg_pattern in self._segs:
+            seg_imgs = self.inimgs(self._seg_dir, seg_pattern, src=self.OUTPUT)
+            if not seg_imgs:
+                LOG.info(f" - No segmentations found matching {self._seg_dir}/{seg_pattern}")
+                continue
+
+            for seg in seg_imgs:
+                LOG.info(f" - Processing segmentation {seg.fname} for removal")
+                combined_remove = None
+                # Collect all remove masks, resampled into seg space
+                for rem_glob in self._remove_segs:
+                    rem_img = self.single_inimg(self._remove_dir, rem_glob, src=self.OUTPUT, warn=False)
+                    if rem_img is None:
+                        LOG.debug(f" - No remove mask {rem_glob} found in {self._remove_dir} for {seg.fname}")
+                        continue
+                    try:
+                        rem_resampled_nii = self.resample(rem_img, seg, is_roi=True, allow_rotated=True)
+                        rem_mask = (rem_resampled_nii.get_fdata() > 0)
+                        if combined_remove is None:
+                            combined_remove = rem_mask.astype(bool)
+                        else:
+                            combined_remove = np.logical_or(combined_remove, rem_mask)
+                    except Exception:
+                        LOG.exception(f"Failed to resample remove mask {rem_img.fname} into {seg.fname} space")
+
+                if combined_remove is None:
+                    LOG.info(f" - No remove masks found for {seg.fname}; saving original")
+                    seg.save(self.outfile(seg.fname))
+                    continue
+
+                # Apply removal: clear voxels in segmentation where any remove mask is True
+                seg_data = np.copy(seg.data)
+                seg_data[combined_remove] = 0
+                LOG.info(f" - Removing {np.count_nonzero(combined_remove)} voxels from {seg.fname}")
+                seg.save_derived(seg_data.astype(np.int32), self.outfile(seg.fname))
