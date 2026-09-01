@@ -5,7 +5,7 @@ import scipy
 
 from fproc.options import ArgumentParser
 from fproc.pipeline import Pipeline
-from fproc.module import Module, StatsModule
+from fproc.module import Module
 
 __version__ = "0.0.1"
 
