@@ -206,7 +206,10 @@ def main():
 
         # Process standard output files
         for file_id, paths in pipeline.OUTFILES.items():
-            base_name = f"{pipeline.NAME}_{cohort_prefix}{file_id}_{dateout}"
+            if not cohort_prefix and not file_id:
+                base_name = f"{pipeline.NAME}_{dateout}"
+            else:
+                base_name = f"{pipeline.NAME}_{cohort_prefix}{file_id}_{dateout}"
             csv_path = os.path.join(output_base, f"{base_name}.csv")
             xlsx_path = os.path.join(output_base, f"{base_name}.xlsx")
             run_fproc_combine(
