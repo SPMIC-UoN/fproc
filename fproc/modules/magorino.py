@@ -708,7 +708,7 @@ class Magorino(Module):
         t2star_dir = self.kwargs.get('t2star_dir', 't2star')
         echos_glob = self.kwargs.get('echos_glob', 't2star_e_*.nii.gz')
         expected_echos = self.kwargs.get('expected_echos', None)
-        field_strength = float(self.kwargs.get('field_strength', 3.0))
+        field_strength = self.kwargs.get('field_strength', None)
         indent = int(self.kwargs.get('indent', 0))
         sigma = self.kwargs.get('sigma', None)
         method = self.kwargs.get('method', 'all')
@@ -721,6 +721,13 @@ class Magorino(Module):
             self.no_data('No MAGORINO multi-echo data found')
         elif expected_echos and len(echos) != expected_echos:
             self.bad_data(f'Expected {expected_echos} echos, got {len(echos)}')
+
+        if field_strength is not None:
+            field_strength = float(field_strength)
+            LOG.info(f' - Using user-specified field strength: {field_strength} T')
+        else:
+            field_strength = float(echos[0].magneticfieldstrength)
+            LOG.info(f' - Using field strength from DICOM: {field_strength} T')
 
         echos.sort(key=lambda img: img.EchoTime)
         imgdata = [echo.data for echo in echos]
