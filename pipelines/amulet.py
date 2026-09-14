@@ -139,7 +139,7 @@ MODULES = [
     DwiB0(),
     magorino.Magorino(
         t2star_dir="../fsort/t2star",
-        t2star_glob="t2star_e_*.nii.gz",
+        echos_glob="t2star_series_*",
     ),
     maps.FatFractionDixon(
         dixon_dir="t1w_core_fat_water",
