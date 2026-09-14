@@ -1209,11 +1209,15 @@ class TotalSeg(Module):
                     LOG.error(f" - Missing totalseg torso_fat seg - will not restrict torso_fat to above femur")
                 else:
                     # Find the top slice of the femur
-                    top_slice = np.max(np.where(femur_data > 0)[2])
-                    LOG.info(f" - Top slice of femur: {top_slice}")
-                    torso_fat_data = np.copy(torso_fat.data)
-                    torso_fat_data[:, :, :top_slice, ...] = 0
-                    torso_fat.save_derived(torso_fat_data.astype(np.int8), self.outfile("torso_fat.nii.gz"))
+                    femur_locs = np.where(femur_data > 0)
+                    if len(femur_locs[2]) == 0:
+                        LOG.info(f" - No femur voxels found in femur segs - will not restrict torso_fat to above femur")
+                    else:
+                        top_slice = np.max(femur_locs[2])
+                        LOG.info(f" - Top slice of femur: {top_slice}")
+                        torso_fat_data = np.copy(torso_fat.data)
+                        torso_fat_data[:, :, :top_slice, ...] = 0
+                        torso_fat.save_derived(torso_fat_data.astype(np.int8), self.outfile("torso_fat.nii.gz"))
 
         # Generate overlays and calculate volumes
         segs_of_interest = self.kwargs.get("segs", None)
