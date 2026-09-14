@@ -127,37 +127,37 @@ class Stats(statistics.SegStats):
             default_limits="3t",
             segs={
                 "kidney_cortex": {
-                    "dir": "seg_kidney_t1_clean",
-                    "glob": "*cortex*.nii.gz",
+                    "dir": "seg_kidney_t1_mdr_align_t2star",
+                    "glob": "*cortex_t1.nii.gz",
                 },
                 "kidney_cortex_l": {
-                    "dir": "seg_kidney_t1_clean",
-                    "glob": "*cortex_l*.nii.gz",
+                    "dir": "seg_kidney_t1_mdr_align_t2star",
+                    "glob": "*cortex_l_t1.nii.gz",
                 },
                 "kidney_cortex_r": {
-                    "dir": "seg_kidney_t1_clean",
-                    "glob": "*cortex_r*.nii.gz",
+                    "dir": "seg_kidney_t1_mdr_align_t2star",
+                    "glob": "*cortex_r_t1.nii.gz",
                 },
                 "kidney_medulla": {
-                    "dir": "seg_kidney_t1_clean",
-                    "glob": "*medulla*.nii.gz",
+                    "dir": "seg_kidney_t1_mdr_align_t2star",
+                    "glob": "*medulla_t1.nii.gz",
                 },
                 "kidney_medulla_l": {
-                    "dir": "seg_kidney_t1_clean",
-                    "glob": "*medulla_l*.nii.gz",
+                    "dir": "seg_kidney_t1_mdr_align_t2star",
+                    "glob": "*medulla_l_t1.nii.gz",
                 },
                 "kidney_medulla_r": {
-                    "dir": "seg_kidney_t1_clean",
-                    "glob": "*medulla_r*.nii.gz",
+                    "dir": "seg_kidney_t1_mdr_align_t2star",
+                    "glob": "*medulla_r_t1.nii.gz",
                 },
                 "kidney_l": {
-                    "dir": "seg_kidney_t1_clean",
-                    "glob": "*_l.nii.gz",
+                    "dir": "seg_kidney_t1_mdr_align_t2star",
+                    "glob": "*_l_t1.nii.gz",
                     "params": ["b1_stim"],
                 },
                 "kidney_r": {
-                    "dir": "seg_kidney_t1_clean",
-                    "glob": "*_r.nii.gz",
+                    "dir": "seg_kidney_t1_mdr_align_t2star",
+                    "glob": "*_r_t1.nii.gz",
                     "params": ["b1_stim"],
                 },
                 "kidney_dixon": {
@@ -273,12 +273,12 @@ class Stats(statistics.SegStats):
                     "dir": "t1_molli_mdr_stitch",
                     "glob": "*map*.nii.gz",
                     "seg_overrides": {
-                        "kidney_cortex_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
-                        "kidney_cortex_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
-                        "kidney_cortex": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
-                        "kidney_medulla": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
-                        "kidney_medulla_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
-                        "kidney_medulla_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_cortex_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
+                        "kidney_cortex_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
+                        "kidney_cortex": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
+                        "kidney_medulla": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
+                        "kidney_medulla_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
+                        "kidney_medulla_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
                     },
                 },
                 "t1_se_nomdr": {
@@ -337,12 +337,12 @@ class Stats(statistics.SegStats):
                     "dir": "mtr",
                     "glob": "mtr.nii.gz",
                     "seg_overrides": {
-                        "kidney_cortex_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
-                        "kidney_cortex_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
-                        "kidney_cortex": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
-                        "kidney_medulla": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
-                        "kidney_medulla_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
-                        "kidney_medulla_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc"},
+                        "kidney_cortex_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
+                        "kidney_cortex_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
+                        "kidney_cortex": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
+                        "kidney_medulla": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
+                        "kidney_medulla_l": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
+                        "kidney_medulla_r": {"dir": "seg_kidney_t1_mdr_clean_native_proc_fix"},
                     },
                 },
                 "b0": {
@@ -1485,6 +1485,7 @@ MODULES = [
         out_fname="spleen.nii.gz",
     ),
     segmentations.TraceSeg(name="traceseg", src_dir="t2w", img_glob="t2w.nii.gz"),
+    segmentations.TraceSeg(name="seg_kidney_cyst_t1w_trace", src_dir="t1w", img_glob="t1w.nii.gz"),
     SegKidneyWhole(),
     # Manual fixes
     seg_postprocess.SplitLR(
@@ -1650,6 +1651,56 @@ MODULES = [
         src_dir="seg_kidney_t1_mdr_clean_native",
         cortex_glob="kidney_cortex_t1.nii.gz",
         medulla_glob="kidney_medulla_t1.nii.gz",
+    ),
+    seg_postprocess.SegFix(
+        "seg_kidney_t1_mdr_clean_native_proc",
+        fix_dir_option="seg_kidney_t1_mdr_fix",
+        segs={
+            "*cortex_l_t1.nii.gz": {
+                "glob": "%s/*/*cortex*.nii.gz",
+                "side": "left",
+                "fname": "kidney_cortex_l_t1.nii.gz",
+            },
+            "*cortex_r_t1.nii.gz": {
+                "glob": "%s/*/*cortex*.nii.gz",
+                "side": "right",
+                "fname": "kidney_cortex_r_t1.nii.gz",
+            },
+            "*cortex_t1.nii.gz": {
+                "glob": "%s/*/*cortex*.nii.gz",
+                "fname": "kidney_cortex_t1.nii.gz",
+            },
+            "*medulla_l_t1.nii.gz": {
+                "glob": "%s/*/*medulla*.nii.gz",
+                "side": "left",
+                "fname": "kidney_medulla_l_t1.nii.gz",
+            },
+            "*medulla_r_t1.nii.gz": {
+                "glob": "%s/*/*medulla*.nii.gz",
+                "side": "right",
+                "fname": "kidney_medulla_r_t1.nii.gz",
+            },
+            "*medulla_t1.nii.gz": {
+                "glob": "%s/*/*medulla*.nii.gz",
+                "fname": "kidney_medulla_t1.nii.gz",
+            },
+        },
+        map_dir="t1_molli_mdr_stitch",
+        map_fname="t1_map.nii.gz",
+    ),
+    align.FlirtAlignOnly(
+        name="seg_kidney_t1_mdr_align_t2star",
+        in_dir="t1_molli_mdr_stitch",
+        in_glob="t1_map.nii.gz",
+        ref_dir="t2star",
+        ref_glob="last_echo.nii.gz",
+        weight_mask_dir="seg_kidney_t2w_fix",
+        weight_mask="kidney_mask.nii.gz",
+        weight_mask_dil=6,
+        also_align={
+            "seg_kidney_t1_mdr_clean_native_proc": "kidney*.nii.gz",
+            "t1_molli_mdr_stitch": "t1_conf.nii.gz",
+        },
     ),
     seg_postprocess.SegVolumes(
         "seg_kidney_t2w_vols",
@@ -2124,38 +2175,40 @@ MODULES = [
     ),
     statistics.Radiomics(
         name="t1_radiomics_left",
-        deps=["t1_scaled", "t2", "seg_kidney_t1_clean_native"],
+        deps=["t1_scaled", "t2", "seg_kidney_t1_clean_native", "t1_molli_mdr_stitch", "seg_kidney_t1_mdr_clean_native_proc"],
         params={
             "t1": {"dir": "t1_scaled", "fname": "t1_conf_scaled_left.nii.gz"},
+            "t1_mdr": {"dir": "t1_molli_mdr_stitch", "fname": "t1_map.nii.gz"},
             "t2_exp": {"dir": "t2", "fname": "t2_exp.nii.gz"},
             "t2_stim": {"dir": "t2", "fname": "t2_stim.nii.gz"},
         },
         segs={
             "cortex_l": {
-                "dir": "seg_kidney_t1_clean_native",
+                "dir": "seg_kidney_t1_mdr_clean_native_proc",
                 "fname": "*cortex_l*.nii.gz",
             },
             "medulla_l": {
-                "dir": "seg_kidney_t1_clean_native",
+                "dir": "seg_kidney_t1_mdr_clean_native_proc",
                 "fname": "*medulla_l*.nii.gz",
             },
         },
     ),
     statistics.Radiomics(
         name="t1_radiomics_right",
-        deps=["t1_scaled", "t2", "seg_kidney_t1_clean_native"],
+        deps=["t1_scaled", "t2", "seg_kidney_t1_clean_native", "t1_molli_mdr_stitch", "seg_kidney_t1_mdr_clean_native_proc"],
         params={
             "t1": {"dir": "t1_scaled", "fname": "t1_conf_scaled_right.nii.gz"},
+            "t1_mdr": {"dir": "t1_molli_mdr_stitch", "fname": "t1_map.nii.gz"},
             "t2_exp": {"dir": "t2", "fname": "t2_exp.nii.gz"},
             "t2_stim": {"dir": "t2", "fname": "t2_stim.nii.gz"},
         },
         segs={
             "cortex_r": {
-                "dir": "seg_kidney_t1_clean_native",
+                "dir": "seg_kidney_t1_mdr_clean_native_proc",
                 "fname": "*cortex_r*.nii.gz",
             },
             "medulla_r": {
-                "dir": "seg_kidney_t1_clean_native",
+                "dir": "seg_kidney_t1_mdr_clean_native_proc",
                 "fname": "*medulla_r*.nii.gz",
             },
         },
@@ -2522,6 +2575,9 @@ def add_options(parser):
     )
     parser.add_argument(
         "--seg-kidney-t2w-fix", help="Directory containing manual T2w kidney masks"
+    )
+    parser.add_argument(
+        "--seg-kidney-t1-mdr-fix", help="Directory containing manual T1 MDR kidney masks"
     )
     parser.add_argument(
         "--seg-kidney-t1-fix",
