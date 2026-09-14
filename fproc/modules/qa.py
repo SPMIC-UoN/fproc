@@ -18,6 +18,14 @@ LOG = logging.getLogger(__name__)
 import pandas as pd
 import pydicom
 import xnat_nott
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    REPORTLAB_AVAILABLE = True
+except Exception:
+    REPORTLAB_AVAILABLE = False
 
 FLOAT_TOLERANCE = 0.001
 KNOWN_VENDORS = ["philips", "siemens", "ge"]
@@ -38,6 +46,11 @@ class QA(Module):
         fname = self.outfile("qa_results.csv")
         overall = True
         fail_text = ""
+        # Collect per-image results for CSV and per-subject PDFs
+        results_list = []
+        # Prefer an explicit subject id from pipeline options if available
+        subjid = self.pipeline.options.subjid
+
         with open(fname, "w") as f:
             for vendor, checks in vendor_checks.items():
                 LOG.info(f"Vendor: {vendor}")
@@ -48,12 +61,19 @@ class QA(Module):
                         result = len(imgs) > 0
                         result_str = "PASS" if result else "FAIL"
                         overall = overall and result
+                        test_fail_text = ""
                         if not result:
-                            test_fail_text += f"Missing image: {check.image_types}"
+                            test_fail_text = f"Missing image: {check.image_types}"
                             fail_text += test_fail_text + " / "
-                        else:
-                            test_fail_text = ""
-                        f.write(f"{' '.join(check.image_types)},,Exists,{result_str},{test_fail_text}\n")
+                        f.write(f"{ ' '.join(check.image_types) },,Exists,{result_str},{test_fail_text}\n")
+                        # Record exists check as a result entry (one entry per check)
+                        results_list.append({
+                            "fname": " ".join(check.image_types),
+                            "vendor": vendor,
+                            "check": "Exists",
+                            "result": result_str,
+                            "fail_text": test_fail_text,
+                        })
                         continue
                     elif not imgs:
                         LOG.debug(f"No images found for {vendor} {check.image_types}")
@@ -64,20 +84,32 @@ class QA(Module):
                         check_text, result, reason = self.check_image(img, check)
                         result_str = "PASS" if result else "FAIL"
                         overall = overall and result
+                        test_fail_text = ""
                         if not result:
                             test_fail_text = img.fname + " " + check_text.replace(",", " ")
                             if reason:
                                 test_fail_text += f'[{reason.replace(",", " ")}]'
                             fail_text += test_fail_text + " / "
-                        else:
-                            test_fail_text = ""
                         f.write(f"{img.fname},{vendor},{check_text},{result_str},{test_fail_text}\n")
-            
+                        results_list.append({
+                            "fname": img.fname,
+                            "vendor": vendor,
+                            "check": check_text,
+                            "result": result_str,
+                            "fail_text": test_fail_text,
+                        })
+
             f.write(f"ALL FILES,,ALL CHECKS,{'PASS' if overall else 'FAIL'},\n")
 
         with open(self.outfile("qa.csv"), "w") as f:
             f.write(f"result,{'PASS' if overall else 'FAIL'}\n")
             f.write(f"fail_reasons,{fail_text.rstrip(' / ')}\n")
+
+        # Generate per-subject PDF reports if reportlab is available
+        if REPORTLAB_AVAILABLE:
+            self._generate_subject_pdfs(results_list, subject=subjid)
+        else:
+            LOG.info("ReportLab not available - skipping PDF report generation")
 
 
     def load_config(self, config_file, sheet="Sheet1"):
@@ -241,3 +273,82 @@ class QA(Module):
         f1 = float(('%.' + str(num_sf) + 'g') % f1)
         f2 = float(('%.' + str(num_sf) + 'g') % f2)
         return abs(f1 - f2) < FLOAT_TOLERANCE
+
+    def _generate_subject_pdfs(self, results_list, subject=None):
+        """Generate a single PDF report for the given subject.
+
+        The pipeline always operates on a single subject (`subjid`), so this
+        function writes one PDF using the provided `subject` as header and
+        the entire `results_list` as the table contents.
+        """
+        if not results_list:
+            LOG.info("No per-image results to include in PDFs")
+            return
+
+        subject_id = subject or "unknown"
+        styles = getSampleStyleSheet()
+
+        pdf_path = self.outfile(f"{subject_id}_qa_report.pdf")
+        # Reduce margins to fit more content horizontally
+        left_margin = right_margin = 18
+        top_margin = bottom_margin = 18
+        doc = SimpleDocTemplate(
+            pdf_path, pagesize=A4, leftMargin=left_margin, rightMargin=right_margin, topMargin=top_margin, bottomMargin=bottom_margin
+        )
+        elems = []
+
+        title = styles["Title"]
+        normal = styles["Normal"]
+        elems.append(Paragraph(f"QA Report: {subject_id}", title))
+        elems.append(Spacer(1, 6))
+        elems.append(Paragraph(f"Generated: {datetime.datetime.now().isoformat()}", normal))
+        elems.append(Spacer(1, 12))
+
+        # Table header
+        table_data = [["File", "Vendor", "Check", "Result", "Notes"]]
+
+        # Create a smaller paragraph style for wrapped cells
+        styles = getSampleStyleSheet()
+        small = ParagraphStyle("Small", parent=styles["Normal"], fontSize=8, leading=10)
+
+        for rec in results_list:
+            table_data.append([
+                Paragraph(str(rec.get("fname", "")), small),
+                Paragraph(str(rec.get("vendor", "")), small),
+                Paragraph(str(rec.get("check", "")), small),
+                Paragraph(str(rec.get("result", "")), small),
+                Paragraph(str(rec.get("fail_text", "")), small),
+            ])
+
+        # Compute column widths to fit A4 minus margins
+        page_width = A4[0]
+        usable_width = page_width - (left_margin + right_margin)
+        # Proportions: File 25%, Vendor 12%, Check 38%, Result 8%, Notes 17%
+        col_proportions = [0.25, 0.12, 0.38, 0.08, 0.17]
+        colWidths = [usable_width * p for p in col_proportions]
+
+        table = Table(table_data, colWidths=colWidths, repeatRows=1, hAlign="LEFT")
+        # Style: header background, grid, and highlight FAIL rows
+        tbl_style = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#d9d9d9")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ]
+
+        # Apply background for fail rows using the original results_list values
+        for i, rec in enumerate(results_list, start=1):
+            res = str(rec.get("result", "")).upper()
+            if res != "PASS":
+                tbl_style.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#ffe6e6")))
+
+        table.setStyle(TableStyle(tbl_style))
+        elems.append(table)
+
+        try:
+            doc.build(elems)
+            LOG.info(f"Wrote PDF report: {pdf_path}")
+        except Exception as e:
+            LOG.exception(f"Failed to write PDF report for {subject_id}: {e}")
