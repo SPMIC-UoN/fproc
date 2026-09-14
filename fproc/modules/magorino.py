@@ -706,7 +706,7 @@ class Magorino(Module):
 
     def process(self):
         t2star_dir = self.kwargs.get('t2star_dir', 't2star')
-        echos_glob = self.kwargs.get('echos_glob', 't2star_e_*.nii.gz')
+        echos_glob = self.kwargs.get('echos_glob', 't2star_*')
         expected_echos = self.kwargs.get('expected_echos', None)
         field_strength = self.kwargs.get('field_strength', None)
         indent = int(self.kwargs.get('indent', 0))
@@ -716,59 +716,67 @@ class Magorino(Module):
         roi_y = self.kwargs.get('roi_y', (10, 30))
         roi_z = self.kwargs.get('roi_z', None)
 
-        echos = self.inimgs(t2star_dir, echos_glob)
-        if not echos:
-            self.no_data('No MAGORINO multi-echo data found')
-        elif expected_echos and len(echos) != expected_echos:
-            self.bad_data(f'Expected {expected_echos} echos, got {len(echos)}')
+        # Get all sequences to fit
+        e1_glob = echos_glob + "_e_1.nii.gz"
+        LOG.info(f"Looking for first echo of each sequence: {t2star_dir}/{e1_glob}")
+        e1_imgs = self.inimgs(t2star_dir, e1_glob, src=self.INPUT)
+        for e1_img in e1_imgs:
+            sequence_prefix =  e1_img.fname_noext[:-4][len(echos_glob)-1:]
+            sequence_glob = e1_img.fname_noext[:-1] + "*.nii.gz"
+            LOG.info(f"Getting echos for sequence {sequence_prefix}: {sequence_glob}")
+            echos = self.inimgs(t2star_dir, sequence_glob, src=self.INPUT)
+            if not echos:
+                self.no_data('No MAGORINO multi-echo data found')
+            elif expected_echos and len(echos) != expected_echos:
+                self.bad_data(f'Expected {expected_echos} echos, got {len(echos)}')
 
-        if field_strength is not None:
-            field_strength = float(field_strength)
-            LOG.info(f' - Using user-specified field strength: {field_strength} T')
-        else:
-            field_strength = float(echos[0].magneticfieldstrength)
-            LOG.info(f' - Using field strength from DICOM: {field_strength} T')
+            if field_strength is not None:
+                field_strength = float(field_strength)
+                LOG.info(f' - Using user-specified field strength: {field_strength} T')
+            else:
+                field_strength = float(echos[0].magneticfieldstrength)
+                LOG.info(f' - Using field strength from DICOM: {field_strength} T')
 
-        echos.sort(key=lambda img: img.EchoTime)
-        imgdata = [echo.data for echo in echos]
-        tes = np.array([echo.EchoTime for echo in echos], dtype=np.float64)
-        if np.all(tes < 1):
-            LOG.info(' - Looks like TEs were specified in seconds - converting to ms')
-            tes = tes * 1000.0
+            echos.sort(key=lambda img: img.EchoTime)
+            imgdata = [echo.data for echo in echos]
+            tes = np.array([echo.EchoTime for echo in echos], dtype=np.float64)
+            if np.all(tes < 1):
+                LOG.info(' - Looks like TEs were specified in seconds - converting to ms')
+                tes = tes * 1000.0
 
-        src = echos[-1]
-        data = np.stack(imgdata, axis=-1).astype(np.float64)
-        methods = ('gaussian', 'rician') if method == 'all' else (method,)
-        if any(m not in ('gaussian', 'rician') for m in methods):
-            self.bad_data(f'Unsupported MAGORINO method selection: {method}')
+            src = echos[-1]
+            data = np.stack(imgdata, axis=-1).astype(np.float64)
+            methods = ('gaussian', 'rician') if method == 'all' else (method,)
+            if any(m not in ('gaussian', 'rician') for m in methods):
+                self.bad_data(f'Unsupported MAGORINO method selection: {method}')
 
-        LOG.info(f' - Found {len(echos)} echoes for MAGORINO fit')
-        LOG.info(f' - TEs (ms): {tes}')
-        LOG.info(f' - Methods: {methods}')
-        LOG.info(f' - Field strength: {field_strength} T')
-        LOG.info(f' - GPU available: {_GPU_AVAILABLE}')
-        src.save_derived(src.data, self.outfile('last_echo.nii.gz'))
+            LOG.info(f' - Found {len(echos)} echoes for MAGORINO fit')
+            LOG.info(f' - TEs (ms): {tes}')
+            LOG.info(f' - Methods: {methods}')
+            LOG.info(f' - Field strength: {field_strength} T')
+            LOG.info(f' - GPU available: {_GPU_AVAILABLE}')
+            src.save_derived(src.data, self.outfile(f'last_echo_{sequence_prefix}.nii.gz'))
 
-        sigma = self._resolve_sigma(data, tes, field_strength, sigma, roi_x, roi_y, roi_z)
-        LOG.info(f' - Using sigma={sigma:.3f}')
+            sigma = self._resolve_sigma(data, tes, field_strength, sigma, roi_x, roi_y, roi_z)
+            LOG.info(f' - Using sigma={sigma:.3f}')
 
-        shapes, pdff_grid, r2_grid = precompute_signal_shapes(tes, field_strength)
-        all_maps = {}
-        for slice_idx in range(data.shape[2]):
-            LOG.info(f' - Fitting slice {slice_idx + 1}/{data.shape[2]}')
-            all_maps[slice_idx] = fit_image(
-                data,
-                tes,
-                field_strength,
-                sigma,
-                slice_idx=slice_idx,
-                indent=indent,
-                methods=methods,
-                verbose=False,
-                _precomputed=(shapes, pdff_grid, r2_grid),
-            )
+            shapes, pdff_grid, r2_grid = precompute_signal_shapes(tes, field_strength)
+            all_maps = {}
+            for slice_idx in range(data.shape[2]):
+                LOG.info(f' - Fitting slice {slice_idx + 1}/{data.shape[2]}')
+                all_maps[slice_idx] = fit_image(
+                    data,
+                    tes,
+                    field_strength,
+                    sigma,
+                    slice_idx=slice_idx,
+                    indent=indent,
+                    methods=methods,
+                    verbose=False,
+                    _precomputed=(shapes, pdff_grid, r2_grid),
+                )
 
-        self._save_volumes(src, all_maps, methods)
+            self._save_volumes(src, sequence_prefix, all_maps, methods)
 
     def _resolve_sigma(self, data, tes, field_strength, sigma, roi_x, roi_y, roi_z):
         if sigma is not None:
@@ -798,7 +806,7 @@ class Magorino(Module):
             self.bad_data(f'ROI range must have two values, got {roi_range}')
         return parts[0], parts[1]
 
-    def _save_volumes(self, src, all_maps, methods):
+    def _save_volumes(self, src, prefix, all_maps, methods):
         map_keys = [
             key for key, value in all_maps[0].items()
             if isinstance(value, np.ndarray)
@@ -815,7 +823,9 @@ class Magorino(Module):
             for slice_idx, maps in all_maps.items():
                 volume[:, :, slice_idx] = maps[key].astype(np.float32)
             out_data = volume * 100.0 if key in pdff_keys else volume
-            src.save_derived(out_data, self.outfile(f'{key.lower()}.nii.gz'))
+            param = key[:key.index("_")].lower()
+            fit_method = key[key.index("_")+1:]
+            src.save_derived(out_data, self.outfile(f'{param}_{prefix}_{fit_method}.nii.gz'))
 
         for fit_method in methods:
             r2_key = f'R2_{fit_method}'
@@ -824,8 +834,8 @@ class Magorino(Module):
             for slice_idx, maps in all_maps.items():
                 r2_data[:, :, slice_idx] = r2star_ms_to_s(maps[r2_key]).astype(np.float32)
                 t2_data[:, :, slice_idx] = t2star_ms(maps[r2_key]).astype(np.float32)
-            src.save_derived(r2_data, self.outfile(f'r2star_{fit_method}.nii.gz'))
-            src.save_derived(t2_data, self.outfile(f't2star_{fit_method}.nii.gz'))
+            src.save_derived(r2_data, self.outfile(f'r2star_{prefix}_{fit_method}.nii.gz'))
+            src.save_derived(t2_data, self.outfile(f't2star_{prefix}_{fit_method}.nii.gz'))
 
 
 # ---------------------------------------------------------------------------
