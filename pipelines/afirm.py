@@ -1485,7 +1485,6 @@ MODULES = [
         out_fname="spleen.nii.gz",
     ),
     segmentations.TraceSeg(name="traceseg", src_dir="t2w", img_glob="t2w.nii.gz"),
-    segmentations.TraceSeg(name="seg_kidney_cyst_t1w_trace", src_dir="t1w", img_glob="t1w.nii.gz"),
     SegKidneyWhole(),
     # Manual fixes
     seg_postprocess.SplitLR(
@@ -2453,9 +2452,29 @@ MODULES = [
                 "glob": "kidney_mask.nii.gz",
                 "params": [],
             },
+            "kidney_paren_l_model1": {
+                "dir": "seg_kidney_t2w_model1",
+                "glob": "kidney_left_kidney.nii.gz",
+                "params": [],
+            },
+            "kidney_paren_r_model1": {
+                "dir": "seg_kidney_t2w_model1",
+                "glob": "kidney_right_kidney.nii.gz",
+                "params": [],
+            },
             "kidney_paren_model2": {
-                "dir": "seg_kidney_t2w",
+                "dir": "seg_kidney_t2w_model2",
                 "glob": "kidney_mask.nii.gz",
+                "params": [],
+            },
+            "kidney_paren_l_model2": {
+                "dir": "seg_kidney_t2w_model2",
+                "glob": "kidney_left_kidney.nii.gz",
+                "params": [],
+            },
+            "kidney_paren_r_model2": {
+                "dir": "seg_kidney_t2w_model2",
+                "glob": "kidney_right_kidney.nii.gz",
                 "params": [],
             },
             "kidney_pelvis_defin": {
