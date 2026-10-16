@@ -744,6 +744,12 @@ class Magorino(Module):
                 LOG.info(' - Looks like TEs were specified in seconds - converting to ms')
                 tes = tes * 1000.0
 
+            if not np.all([d.shape == imgdata[0].shape for d in imgdata]):
+                LOG.warning("Echo volumes have inconsistent shape - ignoring")
+                LOG.warning(str([d.shape for d in imgdata]))
+                LOG.warning(str([echo.fname for echo in echos]))
+                continue
+
             src = echos[-1]
             data = np.stack(imgdata, axis=-1).astype(np.float64)
             methods = ('gaussian', 'rician') if method == 'all' else (method,)
