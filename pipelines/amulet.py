@@ -13,6 +13,7 @@ from fproc.modules import (
     misc,
     qa,
     magorino,
+    seg_postprocess,
 )
 
 __version__ = "0.0.1"
@@ -127,14 +128,15 @@ class DwiB0(Module):
 
 
 MODULES = [
-    qa.QA(config="/spmstore/project/LiverMRI/amulet/qa_config.xlsx"),
     misc.ScanDates(
         "scan_dates",
+        scan_date_attr="scandatebestguess",
         input={
             "../fsort/t1w_in": "*.nii.gz",
             "../fsort/t2w_fs": "*.nii.gz",
         },
     ),
+    qa.QA(config="/spmstore/project/LiverMRI/amulet/qa_config.xlsx"),
     T1wFatWater(),
     DwiB0(),
     magorino.Magorino(
@@ -178,6 +180,16 @@ MODULES = [
         src_dir="../fproc/dwi_core_minbval",
         water_glob="dwi_core_minbval.nii.gz",
         fat_glob=None,
+    ),
+    seg_postprocess.SegFix(
+        "t2w_core_totalseg",
+        fix_dir_option="t2w_core_totalseg_fix",
+        segs={
+            "liver.nii.gz": {
+                "glob": "%s/*liver_fix*.nii.gz",
+                "fname": "liver.nii.gz",
+            },
+        }
     ),
     statistics.Radiomics(
         name="t1w_core_liver_shape",
@@ -224,12 +236,12 @@ MODULES = [
     ),
     statistics.Radiomics(
         name="t2w_core_liver_shape",
-        deps=["t2w_core_totalseg"],
+        deps=["t2w_core_totalseg_fix"],
         params={
             "t2w_core": {"dir": "../fsort/t2w_core", "fname": "t2w_core.nii.gz"},
         },
         segs={
-            "liver": {"dir": "t2w_core_totalseg", "fname": "liver.nii.gz"},
+            "liver": {"dir": "t2w_core_totalseg_fix", "fname": "liver.nii.gz"},
         },
         features={
             "shape": [
@@ -313,12 +325,12 @@ MODULES = [
     ),
     statistics.Radiomics(
         name="t2w_core_radiomics",
-        deps=["t2w_core_totalseg"],
+        deps=["t2w_core_totalseg_fix"],
         params={
             "t2w_core": {"dir": "../fsort/t2w_core", "fname": "t2w_core.nii.gz"},
         },
         segs={
-            "liver": {"dir": "t2w_core_totalseg", "fname": "liver.nii.gz"},
+            "liver": {"dir": "t2w_core_totalseg_fix", "fname": "liver.nii.gz"},
         },
         image_types=["Original"],
     ),
@@ -359,7 +371,7 @@ MODULES = [
                 "params" : [],
             },
             "liver_t2w_core": {
-                "dir": "t2w_core_totalseg",
+                "dir": "t2w_core_totalseg_fix",
                 "glob": "liver.nii.gz",
                 "params" : [],
             },
@@ -411,3 +423,8 @@ MODULES = [
         },
     ),
 ]
+
+def add_options(parser):
+    parser.add_argument(
+        "--t2w-core-totalseg-fix", help="Directory containing manual fixed t2w core liver masks"
+    )
