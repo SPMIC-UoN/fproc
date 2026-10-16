@@ -64,6 +64,7 @@ class SegFix(Module):
                 fix_glob = fix_spec.get("glob", None)
                 select_side = fix_spec.get("side", None)
                 ignore_missing = fix_spec.get("ignore_missing", False)
+                select_label = fix_spec.get("label", None)
                 fname = fix_spec.get("fname", fname)
             seg_img = self.single_inimg(
                 self._seg_dir,
@@ -114,6 +115,10 @@ class SegFix(Module):
                             )
                     elif not fname:
                         fname = fixed_img.fname
+
+                    if select_label:
+                        LOG.info(f" - Selecting label {select_label}")
+                        fixed_data = (fixed_data == select_label).astype(np.int32)
 
                     LOG.info(f" - Saving fixed segmentation from {fname} as int")
                     fixed_img = fixed_img.save_derived(
