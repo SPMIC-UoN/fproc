@@ -36,6 +36,7 @@ OUTFILES = {
     "": [
         "stats_muscle/stats.csv",
         "stats_muscle_dil/stats.csv",
+        "stats_muscle_map/stats.csv",
         "stats_sat/stats.csv",
         "stats_organs/stats.csv",
     ],
@@ -151,6 +152,30 @@ MUSCLE_MAP_ROIS = {
     8161: "left_fibula",
     8162: "right_fibula",
 }
+
+CALF_MUSCLES = [
+    "anterior_compartment",
+    "deep_posterior_compartment",
+    "lateral_compartment",
+    "soleus",
+    "gastrocnemius",
+]
+
+THIGH_MUSCLES = [
+    "vastus_lateralis",
+    "vastus_intermedius",
+    "vastus_medialis",
+    "rectus_femoris",
+    "sartorius",
+    "gracilis",
+    "semimembranosus",
+    "semitendinosus",
+    "biceps_femoris_long_head",
+    "biceps_femoris_short_head",
+    "adductor_magnus",
+    "adductor_longus",
+    "adductor_brevis",
+]
 
 
 class BiasCorr(Module):
@@ -315,6 +340,35 @@ class MakeDixonSeriesSingleVolume(Module):
                     out_vol_idx += 1
             idx += 1
 
+
+class MuscleMapCalfThigh(Module):
+    """
+    Generate left/right calf and thigh muscle masks from MuscleMap label output
+    """
+
+    def __init__(self, name="muscle_map_calf_thigh", **kwargs):
+        self._src_dir = kwargs.get("src_dir", "muscle_map")
+        Module.__init__(self, name, deps=[self._src_dir], **kwargs)
+
+    def process(self):
+        src_glob = self.kwargs.get("src_glob", "*_dseg.nii.gz")
+        dseg = self.single_inimg(self._src_dir, src_glob, src=self.OUTPUT)
+        if dseg is None:
+            self.no_data(f"No MuscleMap segmentation found matching {src_glob}")
+
+        label_ids = {name: label for label, name in MUSCLE_MAP_ROIS.items()}
+        dseg_data = np.round(dseg.data).astype(np.int32)
+        for region, muscles in (("calf", CALF_MUSCLES), ("thigh", THIGH_MUSCLES)):
+            for side, side_name in (("l", "left"), ("r", "right")):
+                labels = [label_ids[f"{side_name}_{muscle}"] for muscle in muscles]
+                mask = np.isin(dseg_data, labels).astype(np.uint8)
+                out_fname = self.outfile(f"{region}_muscle_{side}.nii.gz")
+                LOG.info(
+                    f" - Saving {region} muscle ({side_name}) with {np.count_nonzero(mask)} voxels to {out_fname}"
+                )
+                dseg.save_derived(mask, out_fname)
+
+
 MODULES = [
     MakeDixonSeriesSingleVolume(),
     regrid.Stitch(
@@ -375,6 +429,11 @@ MODULES = [
         name="muscle_map_nobiascorr",
         src_dir="dixon_classify",
         src_glob="water.nii.gz",
+    ),
+    MuscleMapCalfThigh(src_dir="muscle_map"),
+    MuscleMapCalfThigh(
+        name="muscle_map_calf_thigh_nobiascorr",
+        src_dir="muscle_map_nobiascorr",
     ),
     # Seg fixes
     seg_postprocess.SegFix(
@@ -562,6 +621,49 @@ MODULES = [
                 "dir": "t2star_dixon",
                 "glob": "t2star_exclude_fill.nii.gz",
                 "limits": (2, 100),
+            },
+        },
+        stats=["n", "iqn", "iqmean", "median", "iqstd", "mode", "fwhm"],
+        seg_volumes=True,
+    ),
+    statistics.SegStats(
+        name="stats_muscle_map",
+        segs={
+            "calf_muscle_r_mm": {
+                "dir": "muscle_map_calf_thigh_nobiascorr",
+                "glob": "calf_muscle_r.nii.gz",
+            },
+            "calf_muscle_l_mm": {
+                "dir": "muscle_map_calf_thigh_nobiascorr",
+                "glob": "calf_muscle_l.nii.gz",
+            },
+            "thigh_muscle_r_mm": {
+                "dir": "muscle_map_calf_thigh_nobiascorr",
+                "glob": "thigh_muscle_r.nii.gz",
+            },
+            "thigh_muscle_l_mm": {
+                "dir": "muscle_map_calf_thigh_nobiascorr",
+                "glob": "thigh_muscle_l.nii.gz",
+            },
+            "calf_muscle_mm": {
+                "dir": "muscle_map_calf_thigh_nobiascorr",
+                "glob": "calf_muscle_*.nii.gz",
+            },
+            "thigh_muscle_mm": {
+                "dir": "muscle_map_calf_thigh_nobiascorr",
+                "glob": "thigh_muscle_*.nii.gz",
+            },
+        },
+        params={
+            "ff_scanner": {
+                "dir": "fat_fraction",
+                "glob": "fat_fraction_scanner.nii.gz",
+                "limits": (0, 50),
+            },
+            "ff_calc": {
+                "dir": "fat_fraction",
+                "glob": "fat_fraction_calc.nii.gz",
+                "limits": (0, 50),
             },
         },
         stats=["n", "iqn", "iqmean", "median", "iqstd", "mode", "fwhm"],
