@@ -350,12 +350,12 @@ MODULES = [
             "kidney_left": {
                 "dir": "totalseg",
                 "glob": "kidney_left.nii.gz",
-                "params": ["ff"],
+                "params": ["ff_lt20"],
             },
             "kidney_right": {
                 "dir": "totalseg",
                 "glob": "kidney_right.nii.gz",
-                "params": ["ff"],
+                "params": ["ff_lt20"],
             },
             "pancreas": {
                 "dir": "totalseg",
@@ -384,6 +384,12 @@ MODULES = [
             "ff": {
                 "dir": "fat_fraction",
                 "glob": "fat_fraction_scanner.nii.gz",
+            },
+            "ff_lt20": {
+                "dir": "fat_fraction",
+                "glob": "fat_fraction_scanner.nii.gz",
+                "limits": (0, 20),
+                "segs": ["kidney", "kidney_left", "kidney_right"]
             },
             "t1_molli": {
                 "dir": "t1_molli",
