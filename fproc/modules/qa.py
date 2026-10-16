@@ -274,6 +274,25 @@ class QA(Module):
         f2 = float(('%.' + str(num_sf) + 'g') % f2)
         return abs(f1 - f2) < FLOAT_TOLERANCE
 
+    def _get_scan_date(self):
+        """
+        :return: Scan date from scan_dates module output if available, else None.
+                 The scan date is the first row of the CSV (key may vary by pipeline)
+        """
+        fname = self.kwargs.get("scan_dates_file", "scan_dates/scan_dates.csv")
+        fpath = os.path.join(self.pipeline.options.output, fname)
+        if not os.path.exists(fpath):
+            LOG.info(f" - Scan dates file {fpath} not found - not including scan date in report")
+            return None
+        try:
+            with open(fpath) as f:
+                row = f.readline().strip().split(",", 1)
+            if len(row) == 2 and row[1].strip():
+                return row[1].strip()
+        except Exception as e:
+            LOG.warning(f" - Failed to read scan date from {fpath}: {e}")
+        return None
+
     def _generate_subject_pdfs(self, results_list, subject=None):
         """Generate a single PDF report for the given subject.
 
@@ -301,6 +320,9 @@ class QA(Module):
         normal = styles["Normal"]
         elems.append(Paragraph(f"QA Report: {subject_id}", title))
         elems.append(Spacer(1, 6))
+        scan_date = self._get_scan_date()
+        if scan_date:
+            elems.append(Paragraph(f"Scan date: {scan_date}", normal))
         elems.append(Paragraph(f"Generated: {datetime.datetime.now().isoformat()}", normal))
         elems.append(Spacer(1, 12))
 
