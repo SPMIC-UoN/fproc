@@ -6,14 +6,12 @@ import os
 
 import numpy as np
 
-from fsort.image_file import ImageFile
 from fproc.module import Module
 from fproc.modules import (
     maps,
     segmentations,
     statistics,
     seg_postprocess,
-    regrid,
     align,
     misc,
 )
@@ -23,7 +21,45 @@ __version__ = "0.0.1"
 LOG = logging.getLogger(__name__)
 
 NAME = "ceus"
+STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
+OUTNAME = NAME
 
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "kidney": [
+        "fproc/stats/stats.csv",
+        "fproc/t1_molli_md/t1_molli_md.csv",
+    ],
+    "t1_radiomics_right": [
+        "fproc/t1_radiomics_right/radiomics.csv",
+    ],
+    "t1_radiomics_left": [
+        "fproc/t1_radiomics_left/radiomics.csv",
+    ],
+    "organs": [
+        "fproc/stats_dixon/stats.csv",
+        "fproc/kidney_dixon_shape_metrics/shape_metrics.csv",
+        "fproc/kidney_dixon_radiomics/radiomics.csv"
+    ],
+    "shape": [
+        "fproc/seg_kidney_t2w_vols/volumes.csv",
+        "fproc/tkv_shape_metrics/shape_metrics.csv",
+        "fproc/tkv_radiomics/radiomics.csv",
+        "fproc/seg_kidney_cyst_t2w_clean/kidney_cyst.csv",
+        "fproc/organ_dixon_radiomics/radiomics.csv",
+    ],
+    "totalseg": [
+        "fproc/totalseg/volumes.csv",
+        "fproc/totalseg/volumes_dilated.csv",
+        "fproc/kidney_dixon_shape_metrics_totalseg/shape_metrics.csv",
+        "fproc/spleen_shape_metrics_totalseg/shape_metrics.csv",
+        "fproc/pancreas_shape_metrics_totalseg/shape_metrics.csv",
+        "fproc/liver_shape_metrics_totalseg/shape_metrics.csv",
+    ],
+}
 
 class Stats(statistics.SegStats):
     def __init__(self):
@@ -146,6 +182,11 @@ class Stats(statistics.SegStats):
                 "ff": {
                     "dir": "ff_dixon",
                     "glob": "fat_fraction.nii.gz",
+                },
+                "ff_lt20": {
+                    "dir": "ff_dixon",
+                    "glob": "fat_fraction.nii.gz",
+                    "limits": (0, 20),
                 },
             },
             stats=[
