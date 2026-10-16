@@ -29,13 +29,15 @@ class ScanDates(Module):
         if not input:
             self.no_data("No input directories specified")
 
+        # Metadata attribute containing the scan date, e.g. ScanDateBestGuess from fsort
+        scan_date_attr = self.kwargs.get("scan_date_attr", "acquisitiondatetime")
         scan_date = None
         for in_dir, in_glob in input.items():
             imgs = self.inimgs(in_dir, in_glob, src=self.OUTPUT)
             if imgs:
-                scan_date = imgs[0].acquisitiondatetime
+                scan_date = getattr(imgs[0], scan_date_attr)
                 if scan_date:
-                    LOG.info(f" - Found scan date: {scan_date} in {imgs[0].fname}")
+                    LOG.info(f" - Found scan date: {scan_date} in {imgs[0].fname} ({scan_date_attr})")
                     break
 
         if not scan_date:
