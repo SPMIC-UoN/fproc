@@ -28,7 +28,9 @@ class FlirtAlignOnly(Module):
         self._in_glob = in_glob
         self._ref_dir = ref_dir
         self._ref_glob = ref_glob
-        Module.__init__(self, name, deps=[self._in_dir, self._ref_dir], **kwargs)
+        self._also_align = kwargs.get("also_align", {})
+        also_align_deps = list(self._also_align.keys())
+        Module.__init__(self, name, deps=[self._in_dir, self._ref_dir] + also_align_deps, **kwargs)
 
     def process(self):
         imgs_to_align = self.inimgs(self._in_dir, self._in_glob, src=self.OUTPUT)
@@ -142,7 +144,7 @@ class FlirtAlignOnly(Module):
             img_align.to_filename(align_fname)
 
             if run_flirt:
-                for also_dir, also_glob in self.kwargs.get("also_align", {}).items():
+                for also_dir, also_glob in self._also_align.items():
                     extra_imgs = self.inimgs(also_dir, also_glob, src=self.OUTPUT)
                     for extra_img in extra_imgs:
                         if extra_img.affine_matches(img):
@@ -176,7 +178,7 @@ class FlirtAlignOnly(Module):
         if not imgs_to_align or not run_flirt:
             LOG.info(f" - No images aligned - saving extras as they are")
             # If no maps just save extra images as they are
-            for also_dir, also_glob in self.kwargs.get("also_align", {}).items():
+            for also_dir, also_glob in self._also_align.items():
                 extra_imgs = self.inimgs(also_dir, also_glob, src=self.OUTPUT)
                 for extra_img in extra_imgs:
                     align_fname = self.outfile(extra_img.fname)
