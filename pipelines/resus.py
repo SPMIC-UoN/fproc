@@ -380,6 +380,12 @@ class SegStats(statistics.SegStats):
                     "dir": "fat_fraction",
                     "glob": "fat_fraction_scanner.nii.gz",
                 },
+                "ff_lt20": {
+                    "dir": "fat_fraction",
+                    "glob": "fat_fraction_scanner.nii.gz",
+                    "limits": (0, 20),
+                    "segs": ["kidney_dixon", "kidney_dixon_left", "kidney_dixon_right"]
+                },
                 "t1_molli": {
                     "dir": "t1_molli",
                     "glob": "t1_conf.nii.gz",
@@ -517,7 +523,31 @@ class MRERemoveConf(Module):
 
 __version__ = "0.0.1"
 
+# Configuration
 NAME = "resus"
+STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
+OUTNAME = NAME
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "": [
+        "fproc/stats/stats.csv",
+        "fproc/kidney_radiomics/radiomics.csv",
+        "fproc/liver_radiomics/radiomics.csv",
+        "fproc/spleen_radiomics/radiomics.csv",
+        "fproc/pancreas_radiomics/radiomics.csv",
+        "fproc/kidney_stats/stats.csv",
+        "fproc/lung_radiomics/radiomics.csv",
+    ],
+    "totalseg": [
+        "fproc/totalseg/volumes.csv",
+        "fproc/totalseg/volumes_dilated.csv",
+        "fproc/shape_metrics_totalseg/radiomics.csv",
+    ],
+}
 
 MODULES = [
     maps.DixonClassify(dixon_src="../raw_dixon"),

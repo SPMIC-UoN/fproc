@@ -1,12 +1,31 @@
 import logging
-
-import numpy as np
+import os
 
 from fproc.module import Module, CopyModule
 from fproc.modules import segmentations, seg_postprocess, statistics, maps
 
 LOG = logging.getLogger(__name__)
 
+# Configuration
+NAME = "mlrepeat"
+STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
+OUTNAME = NAME
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "": [
+        "fproc/stats/stats.csv",
+        "fproc/radiomics/radiomics.csv",
+    ],
+    "totalseg": [
+        "fproc/totalseg/volumes.csv",
+        "fproc/totalseg/volumes_dilated.csv",
+        "fproc/shape_metrics/radiomics.csv"
+    ],
+}
 
 class T1Kidney(Module):
     def __init__(self):
@@ -118,6 +137,11 @@ class SegStats(statistics.SegStats):
                     "glob": "fat_fraction_scanner.nii.gz",
                     "limits": (0, 100),
                 },
+                "ff_lt20": {
+                    "dir": "fat_fraction",
+                    "glob": "fat_fraction_scanner.nii.gz",
+                    "limits": (0, 20),
+                },
                 "b0_ax": {
                     "dir": "b0_ax",
                     "glob": "b0.nii.gz",
@@ -155,8 +179,6 @@ class SegStats(statistics.SegStats):
 
 
 __version__ = "0.0.1"
-
-NAME = "ML_repeat"
 
 MODULES = [
     ## Parameter maps
