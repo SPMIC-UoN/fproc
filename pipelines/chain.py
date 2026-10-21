@@ -28,6 +28,27 @@ NAME = "chain"
 STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
 OUTNAME = NAME
 
+BATCH = {
+    "modules": [
+        "conda-img",
+        "leg-seg-dixon-img",
+        "leg-dixon-seg-img",
+        "nnunetv2-img",
+        "totalseg-img",
+        "musclemap-img",
+    ],
+    "time": "06:00:00",
+    "partition": "ampere-mq",
+    "gpu": True,
+    "mem_per_cpu": "32g",
+    "subjects": 100,
+    "input_subfolder": "",
+    "output_subfolder": "",
+    "extra_fproc_args": [
+        "--leg-dixon-model=/software/imaging/body_pipelines/trained_models//leg_dixon",
+    ],
+}
+
 COHORTS = [
     ("full cohort", "", None),
 ]
@@ -398,6 +419,16 @@ MODULES = [
         name="dixon_classify",
         model="/spmstore/project/RenalMRI/dixon_classifier/dixon_classifier_20250626.h5",
         fixes="/spmstore/project/RenalMRI/chain/dixon_classify_fix.csv",
+        dixon_src="dixon_stitched",
+        dixon_glob="raw_dixon*.nii.gz",
+    ),
+    maps.DixonClassifyNew(
+        name="dixon_classify_biascorr_new",
+        dixon_src="dixon_stitched_biascorr",
+        dixon_glob="raw_dixon*_biascorr_restore.nii.gz",
+    ),
+    maps.DixonClassifyNew(
+        name="dixon_classify_new",
         dixon_src="dixon_stitched",
         dixon_glob="raw_dixon*.nii.gz",
     ),

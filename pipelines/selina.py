@@ -8,6 +8,22 @@ NAME = "selina"
 STUDYDIR = os.path.join("/gpfs01/spmstore/project/LiverMRI", NAME)
 OUTNAME = NAME
 
+BATCH = {
+    "modules": [
+        "cuda-12.2.2",
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "nnunetv2-img",
+        "conda-img",
+        "totalseg-img",
+        "traceseg-img",
+    ],
+    "time": "48:00:00",
+    "gpu": True,
+    "mem_per_cpu": "80g",
+    "subjects": 100,
+}
+
 COHORTS = [
     ("full cohort", "", None),
 ]
