@@ -29,9 +29,11 @@ class SegFix(Module):
         Module.__init__(self, name, deps=[self._seg_dir], **kwargs)
 
     def process(self):
-        fix_dir_option = self.kwargs.get("fix_dir_option", self.name + "_fix")
+        fix_dir = self.kwargs.get("fix_dir", None)
+        if not fix_dir:
+            fix_dir_option = self.kwargs.get("fix_dir_option", self.name + "_fix")
+            fix_dir = getattr(self.pipeline.options, fix_dir_option, None)
         fixed_segs = None
-        fix_dir = getattr(self.pipeline.options, fix_dir_option, None)
         try_to_fix = False
         if not fix_dir:
             LOG.info(
