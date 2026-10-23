@@ -1,6 +1,7 @@
 # FORTIFY pipeline
 
 import logging
+import os
 
 import numpy as np
 
@@ -18,7 +19,45 @@ __version__ = "0.0.1"
 
 LOG = logging.getLogger(__name__)
 
-NAME = "afirm"
+NAME = "fortify"
+STUDYDIR = "/spmstore/project/RenalMRI/fortify/"
+OUTNAME = NAME
+
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "nnunetv2-img",
+        "totalseg-img",
+        "traceseg-img",
+    ],
+    "time": "24:00:00",
+    "mem_per_cpu": "32g",
+    "subjects": 20,
+    "extra_fproc_args": [
+        "--kidney-t1-model=/software/imaging/body_pipelines/trained_models//kidney_t1_molli_min_max.pt",
+        "--kidney-t2w-model=/software/imaging/body_pipelines/trained_models//t2w_seg.h5",
+        "--seg-kidney-t2w-fix", os.path.join(STUDYDIR, "T2W_FIXED_MASKS"),
+    ],
+}
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "kidney": [
+        "fproc/kidney_stats/stats.csv",
+        "fproc/kidney_stats_rpt/stats.csv",
+		"fproc/kidney_cyst_stats_trace/kidney_cyst.csv",
+    ],
+    "shape": [
+        "fproc/tkv_volumes/stats.csv",
+        "fproc/tkv_radiomics/radiomics.csv",
+		"fproc/wkv_volumes/stats.csv",
+		"fproc/wkv_radiomics/radiomics.csv",
+    ],
+}
 
 
 class KidneyStats(statistics.SegStats):

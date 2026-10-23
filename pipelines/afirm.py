@@ -36,6 +36,32 @@ NAME = "afirm"
 STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
 OUTNAME = NAME
 
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "nnunetv2-img",
+        "conda-img",
+        "totalseg-img",
+        "traceseg-img",
+    ],
+    "subjects": 750,
+    "time": "72:00:00",
+    "mem_per_cpu": "64g",
+    "extra_fproc_args": [
+        "--cyst-masks",
+        "/spmstore/project/RenalMRI/afirm//fixed_cyst_masks",
+        "--kidney-t1-model=/software/imaging/body_pipelines/trained_models//kidney_t1_molli_min_max.pt",
+        "--kidney-t2w-model=/software/imaging/body_pipelines/trained_models//kidney_t2w_afirm_platnum_v02.h5",
+        "--seg-kidney-t2w-fix=/spmstore/project/RenalMRI/afirm//DEFINITIVETKVMASKS_RENAMED",
+        "--seg-kidney-pelvis-fat-trace-fix=/spmstore/project/RenalMRI/afirm//FAT_FIXES",
+        "--seg-kidney-cyst-trace=/spmstore/project/RenalMRI/afirm//TRACE_DATA_RENAMED",
+        "--seg-organs-trace=/spmstore/project/RenalMRI/afirm//TRACE_ORGANS_RENAMED",
+        "--seg-kidney-t1-mdr-fix=/spmstore/project/RenalMRI/afirm//SEG_KIDNEY_T1_FIXES",
+        "--t1-scale-factors=/spmstore/project/RenalMRI/afirm//afirm_t1_scale_factors_newids.csv",
+    ],
+}
+
 COHORTS = [
     ("full cohort", "", None),
     ("baseline cohort", "baseline_", os.path.join(STUDYDIR, "baseline_cohort.txt")),

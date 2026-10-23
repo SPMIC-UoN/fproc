@@ -14,6 +14,23 @@ NAME = "renalonc"
 STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
 OUTNAME = NAME
 
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "nnunetv2-img",
+        "totalseg-img",
+        "traceseg-img",
+    ],
+    "time": "48:00:00",
+    "mem_per_cpu": "64g",
+    "subjects": 2,
+    "extra_fproc_args": [
+        "--kidney-t1-model=/software/imaging/body_pipelines/trained_models//kidney_t1_molli_min_max.pt",
+        "--kidney-t2w-model=/software/imaging/body_pipelines/trained_models//t2w_seg.h5"
+    ],
+}
+
 COHORTS = [
     ("full cohort", "", None),
 ]

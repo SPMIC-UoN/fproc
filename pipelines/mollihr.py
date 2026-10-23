@@ -10,6 +10,44 @@ from fproc.modules import maps, segmentations, statistics, seg_postprocess
 
 LOG = logging.getLogger(__name__)
 
+__version__ = "0.0.1"
+
+NAME = "mollihr"
+STUDYDIR = "/gpfs01/spmstore/project/RenalMRI/mollihr"
+OUTNAME = NAME
+
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "nnunetv2-img",
+        "ukbbseg-img",
+    ],
+    "time": "08:00:00",
+    "mem_per_cpu": "16g",
+    "subjects": 10,
+    "extra_fproc_args": [
+        "--kidney-t1-model=/software/imaging/body_pipelines/trained_models//kidney_t1_molli_min_max.pt",
+        "--seg-fix", os.path.join(STUDYDIR, "fixed_masks"),
+     ],
+}
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "": [
+        "fproc/stats/stats.csv",
+    ],
+    "molli_5": [
+        "fproc/stats_molli_5/stats.csv",
+    ],
+    "molli_7": [
+        "fproc/stats_molli_7/stats.csv",
+    ],
+}
+
 
 class T1(Module):
     def __init__(self):
@@ -541,11 +579,6 @@ class T1Moco(Module):
             fname = seg.fname.replace("_" + t1_ref.fname_noext, "")
             LOG.info(f" - {seg.fname} -> {fname}")
             seg.save(self.outfile(fname))
-
-
-__version__ = "0.0.1"
-
-NAME = "mollihr"
 
 
 class T1Thresh(Module):

@@ -14,6 +14,25 @@ __version__ = "0.0.1"
 
 LOG = logging.getLogger(__name__)
 
+NAME = "empa_diffusion"
+STUDYDIR = "/spmstore/project/RenalMRI/empa/"
+OUTNAME = NAME
+
+BATCH = {
+    "modules": [
+    ],
+    "subjects": 250,
+    "input_subfolder" : "",
+    "output_subfolder" : "",
+    "extra_fproc_args": [
+        "--preproc-outputs", os.path.join(STUDYDIR, "output_flat"),
+    ],
+}
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
 
 class DiffusionOverlays(Module):
     def __init__(self):

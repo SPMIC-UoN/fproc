@@ -1645,6 +1645,25 @@ class TractographyFSL(Module):
 __version__ = "0.0.1"
 
 NAME = "diffad"
+STUDYDIR = "/gpfs01/imgshare/ADNI/msc"
+OUTNAME = NAME
+
+BATCH = {
+    "modules": [
+        "brc-pipelines-img/1.7.1",
+        "freesurfer-img/7.4.1",
+        "ants-img/2.6.2",
+        "tortoise-img",
+        "c3d-img",
+        "singularity",
+    ],
+    "conda_env": "fproc",
+    "time": "01:00:00",
+    "mem_per_cpu": "32g",
+    "subjects": 10,
+    "input_subfolder": "",
+    "output_subfolder": "",
+}
 
 MODULES = [
     # BrcPipeline(),

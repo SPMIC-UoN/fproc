@@ -11,7 +11,29 @@ LOG = logging.getLogger(__name__)
 __version__ = "0.0.1"
 
 NAME = "wbdixon_full"
+STUDYDIR = "/spmstore/project/RenalMRI/wbdixon_full"
+OUTNAME = NAME
 
+BATCH = {
+    "modules": [
+        "conda-img",
+        "leg-seg-dixon-img",
+        "nnunetv2-img",
+        "totalseg-img",
+    ],
+    "time": "12:00:00",
+    "mem_per_cpu": "32g",
+    "subjects": 4,
+    "input_subfolder": "",
+    "output_subfolder": ""
+}
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+}
 
 class RoiZ(Module):
     def __init__(self, name="roiz", **kwargs):

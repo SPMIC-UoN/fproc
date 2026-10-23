@@ -13,6 +13,37 @@ LOG = logging.getLogger(__name__)
 __version__ = "1.0.0"
 
 NAME = "wbdixon"
+STUDYDIR = "/spmstore/project/RenalMRI/wbdixon/"
+OUTNAME = NAME
+
+BATCH = {
+    "modules": [
+        "leg-seg-dixon-img",
+        "nnunetv2-img",
+        "totalseg-img",
+    ],
+    "time": "06:00:00",
+    "mem_per_cpu": "32g",
+    "subjects": 100,
+    "input_subfolder": "",
+    "output_subfolder": "",
+    "extra_fproc_args": [
+        "--seg-leg-dixon-fix=/spmstore/project/RenalMRI/wbdixon/fixed_masks",
+    ],
+}
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "": [
+        "stats/stats.csv",
+    ],
+    "totalseg" : [
+        "totalseg/volumes.csv"
+    ]
+}
 
 MODULES = [
     # Maps

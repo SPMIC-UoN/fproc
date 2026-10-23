@@ -16,6 +16,23 @@ __version__ = "0.0.1"
 
 LOG = logging.getLogger(__name__)
 
+NAME = "csi"
+STUDYDIR = "/home/bbzmsc/data/daniel_c/"
+OUTNAME = NAME
+
+BATCH = {
+    "modules": [
+        "ants",
+        "freesurfer",
+        "fsl",
+    ],
+    "conda_env": "csi",
+    "time": "24:00:00",
+    "mem_per_cpu": "32g",
+    "subjects": 10,
+    "input_subfolder": "",
+    "output_subfolder": "",
+}
 
 class StrucPreproc(Module):
     """

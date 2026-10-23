@@ -24,6 +24,26 @@ NAME = "ceus"
 STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
 OUTNAME = NAME
 
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "nnunetv2-img",
+        "totalseg-img",
+        "conda-img",
+    ],
+    "time": "24:00:00",
+    "mem_per_cpu": "32g",
+    "subjects": 40,
+    "extra_fproc_args": [
+        "--cyst-masks",
+        "/spmstore/project/RenalMRI/ceus//fixed_cyst_masks",
+        "--kidney-t1-model=/software/imaging/body_pipelines/trained_models//kidney_t1_molli_min_max.pt",
+        "--kidney-t2w-model=/software/imaging/body_pipelines/trained_models//t2w_seg.h5",
+        "--seg-kidney-t2w-fix=/spmstore/project/RenalMRI/ceus//fixed_masks_new",
+    ],
+}
+
 COHORTS = [
     ("full cohort", "", None),
 ]

@@ -9,6 +9,33 @@ __version__ = "0.0.1"
 
 LOG = logging.getLogger(__name__)
 
+NAME = "mdrtest"
+STUDYDIR = "/gpfs01/spmstore/project/RenalMRI/mdrtest"
+OUTNAME = NAME
+
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+    ],
+    "time": "48:00:00",
+    "mem_per_cpu": "16g",
+    "subjects": 5,
+    "input_subfolder" : "",
+    "output_subfolder" : "",
+    "extra_fproc_args": [
+       "--datadir", os.path.join(STUDYDIR, "data")
+    ],
+}
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "": [
+        "fproc/stats/stats.csv",
+    ]
+}
 
 class Nifti(Module):
     def __init__(self):

@@ -8,6 +8,25 @@ NAME = "rapamune"
 STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
 OUTNAME = NAME
 
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "conda-img",
+        "nnunetv2-img",
+        "ukbbseg-img",
+        "totalseg-img",
+        "leg-seg-dixon-img",
+        "leg-dixon-seg-img",
+        "musclemap-img",
+    ],
+    "time": "12:00:00",
+    "mem_per_cpu": "32g",
+    "subjects": 100,
+    "input_subfolder": "",
+    "output_subfolder": ""
+}
+
 COHORTS = [
     ("full cohort", "", os.path.join(STUDYDIR, "subjects_to_report.txt")),
 ]

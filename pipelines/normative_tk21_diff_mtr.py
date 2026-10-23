@@ -7,6 +7,32 @@ __version__ = "0.0.1"
 LOG = logging.getLogger(__name__)
 
 NAME = "normative_tk21_diff_mtr"
+STUDYDIR = "/spmstore/project/RenalMRI/normative_tk21_diff_mtr/"
+OUTNAME = NAME
+
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+    ],
+    "time": "24:00:00",
+    "mem_per_cpu": "32g",
+    "subjects": 65,
+    "input_subfolder" : "",
+    "output_subfolder" : "",
+    "extra_fproc_args": [
+       "datadir", STUDYDIR
+   ],
+}
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "": [
+        "stats/stats.csv",
+    ],
+}
 
 
 class Stats(statistics.SegStats):

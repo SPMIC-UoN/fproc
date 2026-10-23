@@ -1,20 +1,46 @@
+"""
+Supplementary demistifi pipeline
+
+FIXME does not directly handle the different groups
+
+GROUP=KIDNEY_DISEASE_FULL
+GROUP=NO_KIDNEY_DISEASE_FULL
+GROUP=NO_KIDNEY_DATA_FULL
+GROUP=THE_REST
+
+FIXME does not implement the whole demistifi pipeline which is still not ported to fproc
+"""
 import logging
-import os
-
-import numpy as np
-import skimage
-from dbdicom.wrappers.skimage import _volume_features
-
-from fsort.image_file import ImageFile
-from fproc.options import ArgumentParser
-from fproc.pipeline import Pipeline
-from fproc.module import Module
-from fproc.modules import statistics
 
 __version__ = "0.0.1"
 
 LOG = logging.getLogger(__name__)
 
+NAME = "demistifi"
+STUDYDIR = "/imgshare/ukbiobank/demistifi_output_sessions"
+OUTNAME = NAME
+
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+    ],
+    "time": "04:00:00",
+    "mem_per_cpu": "80g",
+    "input_subfolder": "",
+}
+
+OUTFILES = {
+    "hr": [
+        "fproc/molli_hr/hr_timings.csv",
+    ],
+    "": [
+        "fproc/radiomics_kidney/radiomics.csv",
+        "fproc/radiomics_pancreas/radiomics.csv",
+        "fproc/radiomics_liver_spleen/radiomics.csv",
+        "fproc/lung_radiomics/radiomics.csv"
+    ],
+}
 
 class VAT(Module):
     """
@@ -459,23 +485,3 @@ MODULES = [
     RadiomicsLiverSpleen(),
     RadiomicsLung(),
 ]
-
-
-class DemistifiPostprocArgumentParser(ArgumentParser):
-    def __init__(self):
-        ArgumentParser.__init__(self, "demistifi_postproc", __version__)
-
-
-class DemistifiPostproc(Pipeline):
-    def __init__(self):
-        Pipeline.__init__(
-            self,
-            "demistifi_postproc",
-            __version__,
-            DemistifiPostprocArgumentParser(),
-            MODULES,
-        )
-
-
-if __name__ == "__main__":
-    DemistifiPostproc().run()

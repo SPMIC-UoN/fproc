@@ -1,9 +1,5 @@
 # ADMIRE pipeline
 
-from scipy import ndimage
-import numpy as np
-
-from fsort.image_file import ImageFile
 from fproc.module import Module
 from fproc.modules import (
     maps,
@@ -19,12 +15,30 @@ from afirm import T1DataSmoothed, DixonCorBest, T1MolliMetadata
 
 __version__ = "0.0.1"
 
-
 # Configuration
 NAME = "admire"
 STUDYDIR = "/gpfs01/spmstore/project/RenalMRI/admire_pipeline"
 OUTNAME = NAME
 
+# Batch submission configuration
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "nnunetv2-img",
+        "conda-img",
+        "totalseg-img",
+        "traceseg-img",
+    ],
+    "subjects": 10,
+    "time": "48:00:00",
+    "mem_per_cpu": "64g",
+    "extra_fproc_args": [
+        "--seg-kidney-fix=/spmstore/project/RenalMRI/admire_pipeline//kidney_masks",
+    ],
+}
+
+# Output spreadsheet configuration
 COHORTS = [
     ("full cohort", "", None),
 ]

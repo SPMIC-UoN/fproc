@@ -18,7 +18,47 @@ __version__ = "0.0.1"
 LOG = logging.getLogger(__name__)
 
 NAME = "memri"
+STUDYDIR = "/gpfs01/spmstore/project/RenalMRI/memri"
+OUTNAME = NAME
 
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "nnunetv2-img",
+    ],
+    "time": "24:00:00",
+    "mem_per_cpu": "32g",
+    "subjects": 75,
+    "extra_fproc_args": [
+        "--kidney-t1-model=/software/imaging/body_pipelines/trained_models//kidney_t1_molli_min_max.pt",
+        "--kidney-t2w-model=/software/imaging/body_pipelines/trained_models//t2w_seg.h5",
+        "--seg-kidney-t2w-fix", os.path.join(STUDYDIR, "MASK_FIX"),
+        "--seg-kidney-t1-fix", os.path.join(STUDYDIR, "T1_seg_fix"),
+    ],
+}
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "kidney": [
+        "fproc/stats/stats.csv",
+        "fproc/t1_molli_md/t1_molli_md.csv",
+    ],
+    "t1_radiomics_left" : [
+        "fproc/t1_radiomics_left/radiomics.csv",
+    ],
+    "t1_radiomics_right" : [
+        "fproc/t1_radiomics_right/radiomics.csv",
+    ],
+    "shape" : [
+        "fproc/seg_kidney_t2w_vols/volumes.csv",
+        "fproc/tkv_shape_metrics/shape_metrics.csv",
+        "fproc/tkv_radiomics/radiomics.csv",
+    ],
+}
 
 class Stats(statistics.SegStats):
     def __init__(self):

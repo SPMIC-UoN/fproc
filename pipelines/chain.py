@@ -17,7 +17,7 @@ import os
 import numpy as np
 
 from fproc.module import Module
-from fproc.modules import maps, statistics, regrid, segmentations, seg_postprocess
+from fproc.modules import maps, statistics, regrid, segmentations
 
 LOG = logging.getLogger(__name__)
 
@@ -44,9 +44,6 @@ BATCH = {
     "subjects": 100,
     "input_subfolder": "",
     "output_subfolder": "",
-    "extra_fproc_args": [
-        "--leg-dixon-model=/software/imaging/body_pipelines/trained_models//leg_dixon",
-    ],
 }
 
 COHORTS = [
@@ -403,11 +400,11 @@ MODULES = [
             "raw_dixon_series_?.nii.gz": "raw_dixon.nii.gz",
         },
     ),
-    BiasCorr(
-        name="dixon_stitched_biascorr",
-        src_dir="dixon_stitched",
-        src_glob="raw_dixon*.nii.gz",
-    ),
+    #BiasCorr(
+    #    name="dixon_stitched_biascorr",
+    #    src_dir="dixon_stitched",
+    #    src_glob="raw_dixon*.nii.gz",
+    #),
     maps.DixonClassify(
         name="dixon_classify_biascorr",
         model="/spmstore/project/RenalMRI/dixon_classifier/dixon_classifier_20250626.h5",
@@ -450,7 +447,7 @@ MODULES = [
         dixon_dir="dixon_final",
         totalseg_dir="totalseg",
         largest_blob_only=True,
-        dilate_muscle_masks=True,
+        dilate_muscle_masks=True
     ),
     segmentations.MuscleMap(
         src_dir="dixon_final",
@@ -465,23 +462,6 @@ MODULES = [
     MuscleMapCalfThigh(
         name="muscle_map_calf_thigh_nobiascorr",
         src_dir="muscle_map_nobiascorr",
-    ),
-    # Seg fixes
-    seg_postprocess.SegFix(
-        seg_dir="seg_leg_dixon",
-        fix_dir_option="seg_leg_dixon_fix",
-        segs={
-            "calf_muscle_l.nii.gz": "%s/calf_muscle_l_fixed.nii.gz",
-            "calf_muscle_r.nii.gz": "%s/calf_muscle_r_fixed.nii.gz",
-            "thigh_muscle_l.nii.gz": "%s/thigh_muscle_l_fixed.nii.gz",
-            "thigh_muscle_r.nii.gz": "%s/thigh_muscle_r_fixed.nii.gz",
-            "calf_sat_l.nii.gz": "%s/calf_sat_l_fixed.nii.gz",
-            "calf_sat_r.nii.gz": "%s/calf_sat_r_fixed.nii.gz",
-            "thigh_sat_l.nii.gz": "%s/thigh_sat_l_fixed.nii.gz",
-            "thigh_sat_r.nii.gz": "%s/thigh_sat_r_fixed.nii.gz",
-        },
-        map_dir="seg_leg_dixon",
-        map_fname="water.nii.gz",
     ),
     # Statistics
     statistics.AllRoiStats(
@@ -701,9 +681,3 @@ MODULES = [
         seg_volumes=True,
     ),
 ]
-
-
-def add_options(parser):
-    parser.add_argument(
-        "--seg-leg-dixon-fix", help="Directory containing fixed leg masks"
-    )

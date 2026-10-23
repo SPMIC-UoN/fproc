@@ -20,11 +20,29 @@ __version__ = "0.0.1"
 
 LOG = logging.getLogger(__name__)
 
-# Configuration
+# Basic configuration
 NAME = "amulet"
 STUDYDIR = os.path.join("/gpfs01/spmstore/project/LiverMRI", NAME)
 OUTNAME = NAME
 
+# Supplementary data
+T2W_FIX_DIR = os.path.join(STUDYDIR, "T2w_core_fixedmasks")
+
+# Batch submission configuration
+BATCH = {
+    "modules": [
+        "cuda-12.2.2",
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "nnunetv2-img",
+        "conda-img",
+        "totalseg-img",
+        "traceseg-img",
+    ],
+    "subjects": 180,
+}
+
+# Output spreadsheet configuration
 COHORTS = [
     ("full cohort", "", None),
 ]
@@ -183,7 +201,7 @@ MODULES = [
     ),
     seg_postprocess.SegFix(
         "t2w_core_totalseg",
-        fix_dir_option="t2w_core_totalseg_fix",
+        fix_dir=T2W_FIX_DIR,
         segs={
             "liver.nii.gz": {
                 "glob": "%s/*liver_fix*.nii.gz",
@@ -423,8 +441,3 @@ MODULES = [
         },
     ),
 ]
-
-def add_options(parser):
-    parser.add_argument(
-        "--t2w-core-totalseg-fix", help="Directory containing manual fixed t2w core liver masks"
-    )

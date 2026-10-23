@@ -10,6 +10,30 @@ LOG = logging.getLogger(__name__)
 __version__ = "0.0.1"
 
 NAME = "nexpo"
+STUDYDIR = "/gpfs01/spmstore/project/RenalMRI/nexpo"
+OUTNAME = NAME
+
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+    ],
+    "time": "01:00:00",
+    "mem_per_cpu": "32g",
+    "subjects": 200,
+    "input" : os.path.join(STUDYDIR, "data"),
+    "output_subfolder" : "",
+    "input_subfolder" : "",
+}
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "radiomics": [
+        "radiomics_shape/radiomics.csv",
+    ],
+}
 
 
 class RoiData(Module):

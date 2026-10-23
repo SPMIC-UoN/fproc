@@ -11,7 +11,6 @@ from fproc.modules import segmentations, seg_postprocess, statistics, maps, regr
 
 LOG = logging.getLogger(__name__)
 
-
 class T1Molli(Module):
     def __init__(self):
         Module.__init__(self, "t1_molli")

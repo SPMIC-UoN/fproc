@@ -17,6 +17,59 @@ from fproc.modules import segmentations, seg_postprocess, statistics, maps, regr
 
 LOG = logging.getLogger(__name__)
 
+__version__ = "0.0.1"
+
+# Configuration
+NAME = "resus"
+STUDYDIR = "/gpfs01/spmstore/project/RenalMRI/resus"
+OUTNAME = NAME
+
+MODELDIR = "/software/imaging/body_pipelines/trained_models/"
+
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "nnunetv2-img",
+        "ukbbseg-img",
+        "totalseg-img",
+    ],
+    "time": "24:00:00",
+    "mem_per_cpu": "32g",
+    "subjects": 50,
+    "input_subfolder": "",
+    "extra_fproc_args" : [
+        "--add-niftis",
+        os.path.join(STUDYDIR, "add_maps"),
+        "--pancreas-masks",
+        os.path.join(STUDYDIR, "pancreas_masks"),
+        "--liver-masks",
+        os.path.join(STUDYDIR, "liver_masks"),
+        "--kidney-t2w-model",
+        os.path.join(MODELDIR, "t2w_seg.h5"),
+    ]
+}
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "": [
+        "fproc/stats/stats.csv",
+        "fproc/kidney_radiomics/radiomics.csv",
+        "fproc/liver_radiomics/radiomics.csv",
+        "fproc/spleen_radiomics/radiomics.csv",
+        "fproc/pancreas_radiomics/radiomics.csv",
+        "fproc/kidney_stats/stats.csv",
+        "fproc/lung_radiomics/radiomics.csv",
+    ],
+    "totalseg": [
+        "fproc/totalseg/volumes.csv",
+        "fproc/totalseg/volumes_dilated.csv",
+        "fproc/shape_metrics_totalseg/radiomics.csv",
+    ],
+}
 
 class PancreasSegRestricted(Module):
     def __init__(self):
@@ -520,34 +573,6 @@ class MRERemoveConf(Module):
                 clean, self.outfile(img.fname.replace(".nii.gz", "_noconf.nii.gz"))
             )
 
-
-__version__ = "0.0.1"
-
-# Configuration
-NAME = "resus"
-STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
-OUTNAME = NAME
-
-COHORTS = [
-    ("full cohort", "", None),
-]
-
-OUTFILES = {
-    "": [
-        "fproc/stats/stats.csv",
-        "fproc/kidney_radiomics/radiomics.csv",
-        "fproc/liver_radiomics/radiomics.csv",
-        "fproc/spleen_radiomics/radiomics.csv",
-        "fproc/pancreas_radiomics/radiomics.csv",
-        "fproc/kidney_stats/stats.csv",
-        "fproc/lung_radiomics/radiomics.csv",
-    ],
-    "totalseg": [
-        "fproc/totalseg/volumes.csv",
-        "fproc/totalseg/volumes_dilated.csv",
-        "fproc/shape_metrics_totalseg/radiomics.csv",
-    ],
-}
 
 MODULES = [
     maps.DixonClassify(dixon_src="../raw_dixon"),

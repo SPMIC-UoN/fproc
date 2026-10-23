@@ -18,6 +18,29 @@ NAME = "bariatric"
 STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
 OUTNAME = NAME
 
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "conda-img",
+        "nnunetv2-img",
+        "totalseg-img",
+    ],
+    "subjects": 100,
+    "time": "06:00:00",
+    "mem_per_cpu": "64g",
+    "extra_fproc_args": [
+        "--kidney-t1-model=/software/imaging/body_pipelines/trained_models//kidney_t1_molli_min_max.pt",
+        "--pancreas-masks", os.path.join(STUDYDIR, "pancreas_masks"),
+        "--kidney-masks", os.path.join(STUDYDIR, "kidney_masks"),
+        "--spleen-masks", os.path.join(STUDYDIR, "spleen_masks"),
+        "--liver-masks", os.path.join(STUDYDIR, "liver_masks"),
+        "--sat-masks", os.path.join(STUDYDIR, "sat_masks"),
+        "--se-t1-maps", os.path.join(STUDYDIR, "se_t1_maps_renamed"),
+        "--adc-maps", os.path.join(STUDYDIR, "adc_maps_renamed"),
+    ],
+}
+
 COHORTS = [
     ("full cohort", "", None),
 ]

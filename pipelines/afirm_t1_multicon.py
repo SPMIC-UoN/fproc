@@ -1,16 +1,28 @@
 import logging
 
-import numpy as np
-import scipy
-
-from fproc.options import ArgumentParser
-from fproc.pipeline import Pipeline
 from fproc.module import Module
 
 __version__ = "0.0.1"
 
 LOG = logging.getLogger(__name__)
 
+NAME = "afirm_t1_multicon"
+STUDYDIR = "/spmstore/project/RenalMRI/afirm_t1_multicon"
+OUTNAME = NAME
+
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+    ],
+    "subjects": 500,
+    "time": "04:00:00",
+    "mem_per_cpu": "16g",
+    "output_subfolder" : "seg",
+    "extra_fproc_args" : [
+        "--t1-model=/software/imaging/body_pipelines/trained_models//kidney_t1_multicon_min_max.pt",
+    ],
+}
 
 class T1MulticonSeg(Module):
     def __init__(self):
@@ -49,23 +61,9 @@ MODULES = [
     T1MulticonSeg(),
 ]
 
-
-class T1MulticonArgumentParser(ArgumentParser):
-    def __init__(self):
-        ArgumentParser.__init__(self, "t1_multicon", __version__)
-        self.add_argument(
-            "--t1-model",
-            help="Filename or URL for T1 segmentation model weights",
-            default="",
-        )
-
-
-class T1Multicon(Pipeline):
-    def __init__(self):
-        Pipeline.__init__(
-            self, "t1_multicon", __version__, T1MulticonArgumentParser(), MODULES
-        )
-
-
-if __name__ == "__main__":
-    T1Multicon().run()
+def add_options(parser):
+    parser.add_argument(
+        "--t1-model",
+        help="Filename or URL for T1 segmentation model weights",
+        default="",
+    )

@@ -21,8 +21,58 @@ __version__ = "0.0.1"
 
 LOG = logging.getLogger(__name__)
 
-NAME = "afirm"
+NAME = "airecon"
+STUDYDIR = os.path.join("/gpfs01/spmstore/project/RenalMRI", NAME)
+OUTNAME = NAME
 
+BATCH = {
+    "modules": [
+        "renal-preproc-img",
+        "fsl-img/6.0.6.3",
+        "nnunetv2-img",
+    ],
+    "subjects": 300,
+    "time": "48:00:00",
+    "mem_per_cpu": "80g",
+    "extra_fproc_args": [
+        "--kidney-t1-model=/software/imaging/body_pipelines/trained_models//kidney_t1_molli_min_max.pt",
+        "--kidney-t2w-model=/software/imaging/body_pipelines/trained_models//t2w_seg.h5",
+    ],
+}
+
+COHORTS = [
+    ("full cohort", "", None),
+]
+
+OUTFILES = {
+    "kidney": [
+        "fproc/stats/stats.csv",
+        "fproc/t1_molli_md/t1_molli_md.csv",
+    ],
+    "t1_radiomics_left" : [
+        "fproc/t1_radiomics_left/radiomics.csv",
+    ],
+    "t1_radiomics_right" : [
+        "fproc/t1_radiomics_right/radiomics.csv",
+    ],
+    "organs" : [
+        "fproc/stats_dixon/stats.csv",
+        "fproc/kidney_dixon_shape_metrics_ax/shape_metrics.csv",
+        "fproc/kidney_dixon_shape_metrics_cor/shape_metrics.csv",
+        "fproc/kidney_dixon_radiomics_ax/radiomics.csv",
+        "fproc/kidney_dixon_radiomics_cor/radiomics.csv",
+    ],
+    "shape" : [
+        "fproc/seg_kidney_t2w_vols/volumes.csv",
+        "fproc/tkv_shape_metrics/shape_metrics.csv",
+        "fproc/tkv_radiomics/radiomics.csv",
+	    "fproc/seg_kidney_cyst_t2w_clean/kidney_cyst.csv",
+    ],
+    "fixed_shape" : [
+        "fproc/fixed_masks_vols/stats.csv",
+        "fproc/fixed_masks_shape_metrics/shape_metrics.csv",
+    ],
+}
 
 # FIXME add fat fraction from axial + coronal dixon
 class Stats(statistics.SegStats):

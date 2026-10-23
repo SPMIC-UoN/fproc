@@ -1088,50 +1088,36 @@ MODULES = [
 ]
 
 
-class RenalPreprocArgumentParser(ArgumentParser):
-    def __init__(self):
-        ArgumentParser.__init__(self, "renal_preproc", __version__)
-        self.add_argument(
-            "--t2w-fixed-masks", help="Directory containing fixed T2w masks"
-        )
-        self.add_argument(
-            "--t2star-method",
-            help="Method to use when doing T2* processing",
-            choices=["loglin", "2p_exp", "all"],
-            default="all",
-        )
-        self.add_argument(
-            "--t2star-resample",
-            help="Planar resolution to resample T2* to (mm)",
-            type=float,
-            default=0,
-        )
-        self.add_argument(
-            "--t2w-model",
-            "--segmentation-weights",
-            help="Filename or URL for T2w segmentation CNN weights",
-            default="whole_kidney_cnn.model",
-        )
-        self.add_argument(
-            "--t1-model",
-            help="Filename or URL for T1 segmentation model weights",
-            default="/spmstore/project/RenalMRI/trained_models/kidney_t1_molli_min_max.pt",
-        )
-        self.add_argument(
-            "--t1-no-realign",
-            help="Don't try to realign T1 segmentations to T2*",
-            action="store_true",
-            default=False,
-        )
-
-
-class RenalPreproc(Pipeline):
-    def __init__(self):
-        Pipeline.__init__(
-            self, "renal preproc", __version__, RenalPreprocArgumentParser(), MODULES
-        )
-
-
-if __name__ == "__main__":
-    renal_preproc = RenalPreproc()
-    renal_preproc.run()
+def add_options(parser):
+    parser.add_argument(
+        "--t2w-fixed-masks", help="Directory containing fixed T2w masks"
+    )
+    parser.add_argument(
+        "--t2star-method",
+        help="Method to use when doing T2* processing",
+        choices=["loglin", "2p_exp", "all"],
+        default="all",
+    )
+    parser.add_argument(
+        "--t2star-resample",
+        help="Planar resolution to resample T2* to (mm)",
+        type=float,
+        default=0,
+    )
+    parser.add_argument(
+        "--t2w-model",
+        "--segmentation-weights",
+        help="Filename or URL for T2w segmentation CNN weights",
+        default="whole_kidney_cnn.model",
+    )
+    parser.add_argument(
+        "--t1-model",
+        help="Filename or URL for T1 segmentation model weights",
+        default="/spmstore/project/RenalMRI/trained_models/kidney_t1_molli_min_max.pt",
+    )
+    parser.add_argument(
+        "--t1-no-realign",
+        help="Don't try to realign T1 segmentations to T2*",
+        action="store_true",
+        default=False,
+    )

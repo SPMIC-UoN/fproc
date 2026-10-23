@@ -8,6 +8,20 @@ __version__ = "1.0.0"
 
 NAME = "airecon_fixed_masks"
 
+BATCH = {
+    "job_name": "airecon_fproc",
+    "time": "02:00:00",
+    "partition": "defq",
+    "mem_per_cpu": "64g",
+    "array": "0-200",
+    "input": "/spmstore/project/RenalMRI/airecon//fixed_masks",
+    "output": "/spmstore/project/RenalMRI/airecon//output_20260324",
+    "input_subfolder": "",
+    "output_subfolder": "fproc",
+    "modules": ["conda-img"],
+    "extra_fproc_args": ["--force", "fixed_masks_shape_metrics"],
+}
+
 MODULES = [
     seg_postprocess.SplitLR("", "*.nii.gz", src="INPUT", name="fixed_masks"),
     statistics.ShapeMetrics(
