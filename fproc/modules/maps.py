@@ -2,17 +2,14 @@
 FPROC: Modules for generating parameter maps from raw data
 """
 
-from ast import Dict
-import copy
 import logging
 import os
 import glob
 import csv
 
 import numpy as np
-from numpy.fft import fftn, ifftn
 import scipy
-#from unwrap import unwrap
+import nibabel as nib
 
 from fproc.module import Module
 from fsort.image_file import ImageFile
@@ -605,33 +602,112 @@ class DixonClassify(Module):
         if not glob.glob(os.path.join(input_dir, dixon_glob)):
             self.no_data(f"No Dixon data found in {input_dir} matching {dixon_glob}")
         classifier.classify(input_dir, dixon_glob, self.outfile(""))
-        if fixes_fpath:
-            try:
-                fixes = csv.DictReader(open(fixes_fpath))
-            except Exception as e:
-                LOG.warning(f" - Error reading fixes file {fixes_fpath}: {e} - no fixes will be applied")
-                return
-            for fix in fixes:
-                if (
-                    fix["subjid"] == self.pipeline.options.subjid
-                    and fix["module"] == self.name
-                ):
-                    fix_src = os.path.join(input_dir, fix["fname"])
-                    fix_dest = fix["dest"]
-                    fix_vol = int(fix.get("vol", 0))
-                    LOG.info(
-                        f" - Using {fix['fname']}, volume {fix_vol} for  {fix_dest}"
-                    )
-                    fix_img = ImageFile(fix_src, warn_json=False)
-                    fix_data = fix_img.data
-                    if fix_data.ndim == 4:
-                        fix_data = fix_data[..., fix_vol]
-                    elif fix_data.ndim == 3 and fix_vol > 0:
-                        LOG.warning(
-                            f" - Fix image {fix['fname']} is 3D but fix specifies volume {fix_vol} - ignoring volume and using 3D data"
-                        )
+        self.apply_fixes(fixes_fpath, input_dir)
 
-                    fix_img.save_derived(fix_data, self.outfile(fix_dest + ".nii.gz"))
+    def apply_fixes(self, fixes_fpath, input_dir):
+        """
+        Override the classifier output for this subject using a fixes CSV file
+
+        The file has columns module, subjid, fname, vol, dest. For rows matching this module and
+        subject, volume 'vol' of input file 'fname' is saved as '<dest>.nii.gz'
+        """
+        if not fixes_fpath:
+            return
+        try:
+            fixes = list(csv.DictReader(open(fixes_fpath)))
+        except Exception as e:
+            LOG.warning(f" - Error reading fixes file {fixes_fpath}: {e} - no fixes will be applied")
+            return
+        for fix in fixes:
+            if (
+                fix["subjid"] == self.pipeline.options.subjid
+                and fix["module"] == self.name
+            ):
+                fix_src = os.path.join(input_dir, fix["fname"])
+                fix_dest = fix["dest"]
+                fix_vol = int(fix.get("vol") or 0)
+                LOG.info(
+                    f" - Using {fix['fname']}, volume {fix_vol} for  {fix_dest}"
+                )
+                fix_img = ImageFile(fix_src, warn_json=False)
+                fix_data = fix_img.data
+                if fix_data.ndim == 4:
+                    fix_data = fix_data[..., fix_vol]
+                elif fix_data.ndim == 3 and fix_vol > 0:
+                    LOG.warning(
+                        f" - Fix image {fix['fname']} is 3D but fix specifies volume {fix_vol} - ignoring volume and using 3D data"
+                    )
+
+                fix_img.save_derived(fix_data, self.outfile(fix_dest + ".nii.gz"))
+
+
+class DixonClassifyNew(DixonClassify):
+    """
+    Identify Dixon images using the patch-based classifiers from dixon_classify
+
+    If the input contains 4 or fewer volumes, the 4-class model (fat, water, fat_fraction,
+    t2star) is used. Otherwise the 6-class model, which also identifies in-phase (ip) and
+    opposed-phase (op) images, is used. Setting match_ip_op=True always uses the 6-class model.
+
+    Each label is assigned to at most one volume and each volume to at most one label, in order
+    of decreasing probability. Outputs are saved as <label>.nii.gz, and a fixes file can override
+    the assignment for individual subjects as for DixonClassify.
+
+    Options:
+        model: 4-class model directory
+        model_ip_op: 6-class model directory
+        match_ip_op: Always use the 6-class model (default False)
+        labels: Restrict assignment to these labels, e.g. ["fat", "water"] (default: all labels
+                of the selected model)
+        min_probability: Leave a label unassigned if its best match is below this (default 0)
+        physics_check: Check fat fraction / IP / OP assignments against F/(F+W), W+F and |W-F|
+                       computed from the assigned fat and water images, correcting them where the
+                       evidence is clear (default False)
+        fixes: CSV file of fixes (see DixonClassify.apply_fixes)
+    """
+
+    def process(self):
+        model_dir = self.kwargs.get(
+            "model", "/spmstore/project/RenalMRI/dixon_classifier/models/final_v5"
+        )
+        model_dir_ip_op = self.kwargs.get(
+            "model_ip_op", "/spmstore/project/RenalMRI/dixon_classifier/models/final_6c"
+        )
+        match_ip_op = self.kwargs.get("match_ip_op", False)
+        fixes_fpath = self.kwargs.get("fixes", None)
+
+        dixon_glob = self.kwargs.get("dixon_glob", "raw_dixon*.nii.gz")
+        input_dir = os.path.join(self.pipeline.options.output, self._dixon_src)
+        fnames = sorted(glob.glob(os.path.join(input_dir, dixon_glob)))
+        if not fnames:
+            self.no_data(f"No Dixon data found in {input_dir} matching {dixon_glob}")
+
+        shapes = [nib.load(f).shape for f in fnames]
+        n_vols = sum(s[3] if len(s) == 4 else 1 for s in shapes)
+        if match_ip_op:
+            LOG.info(f" - {n_vols} input volumes, matching IP/OP as requested")
+            model_dir = model_dir_ip_op
+        elif n_vols > 4:
+            LOG.info(f" - {n_vols} input volumes - matching IP/OP")
+            model_dir = model_dir_ip_op
+        else:
+            LOG.info(f" - {n_vols} input volumes - not matching IP/OP")
+        LOG.info(f" - Using Dixon classifier model: {model_dir}")
+        if fixes_fpath:
+            LOG.info(f" - Applying fixes from: {fixes_fpath}")
+
+        from dixon_classify.patch_classifier import DixonPatchClassifier
+
+        classifier = DixonPatchClassifier(model_dir)
+        classifier.classify(
+            input_dir,
+            dixon_glob,
+            self.outfile(""),
+            min_probability=self.kwargs.get("min_probability", 0.0),
+            expected_labels=self.kwargs.get("labels", None),
+            physics_check=self.kwargs.get("physics_check", False),
+        )
+        self.apply_fixes(fixes_fpath, input_dir)
 
 
 class FatFractionDixon(Module):
